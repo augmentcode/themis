@@ -1,0 +1,366 @@
+{
+  "name": "@augmentcode/themis",
+  "version": "0.0.1",
+  "publishConfig": {
+    "access": "public"
+  },
+  "description": "Redux + Saga state management for Svelte apps — designed for AI agents. Includes runtime TypeScript source, AI skills, and reference documentation for robust, observable, high-performance state management.",
+  "keywords": [
+    "svelte",
+    "redux",
+    "saga",
+    "state-management",
+    "ai-agents"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "themis": "./scripts/cli.mjs"
+  },
+  "exports": {
+    "./svelte-store": {
+      "types": "./dist/svelte-store.d.ts",
+      "svelte": "./dist/svelte-store.js",
+      "import": "./dist/svelte-store.js",
+      "default": "./dist/svelte-store.js"
+    },
+    "./streaming-store": {
+      "types": "./dist/streaming-store.d.ts",
+      "svelte": "./dist/streaming-store.js",
+      "import": "./dist/streaming-store.js",
+      "default": "./dist/streaming-store.js"
+    },
+    "./react-store": {
+      "types": "./dist/react-store.d.ts",
+      "svelte": "./dist/react-store.js",
+      "import": "./dist/react-store.js",
+      "default": "./dist/react-store.js"
+    },
+    "./saga": {
+      "types": "./dist/saga.d.ts",
+      "svelte": "./dist/saga.js",
+      "import": "./dist/saga.js",
+      "default": "./dist/saga.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "svelte": "./dist/types.js",
+      "import": "./dist/types.js",
+      "default": "./dist/types.js"
+    },
+    "./components-svelte/use-init-store": {
+      "types": "./dist/components-svelte/use-init-store.d.ts",
+      "svelte": "./dist/components-svelte/use-init-store.js",
+      "import": "./dist/components-svelte/use-init-store.js",
+      "default": "./dist/components-svelte/use-init-store.js"
+    },
+    "./components-svelte/use-run-saga": {
+      "types": "./dist/components-svelte/use-run-saga.d.ts",
+      "svelte": "./dist/components-svelte/use-run-saga.js",
+      "import": "./dist/components-svelte/use-run-saga.js",
+      "default": "./dist/components-svelte/use-run-saga.js"
+    },
+    "./utils/collections/collection-utils": {
+      "types": "./dist/utils/collections/collection-utils.d.ts",
+      "svelte": "./dist/utils/collections/collection-utils.js",
+      "import": "./dist/utils/collections/collection-utils.js",
+      "default": "./dist/utils/collections/collection-utils.js"
+    },
+    "./utils/store/create-action": {
+      "types": "./dist/utils/store/create-action.d.ts",
+      "svelte": "./dist/utils/store/create-action.js",
+      "import": "./dist/utils/store/create-action.js",
+      "default": "./dist/utils/store/create-action.js"
+    },
+    "./utils/store/create-reducer": {
+      "types": "./dist/utils/store/create-reducer.d.ts",
+      "svelte": "./dist/utils/store/create-reducer.js",
+      "import": "./dist/utils/store/create-reducer.js",
+      "default": "./dist/utils/store/create-reducer.js"
+    },
+    "./utils/store/boolean-preference": {
+      "types": "./dist/utils/store/boolean-preference.d.ts",
+      "svelte": "./dist/utils/store/boolean-preference.js",
+      "import": "./dist/utils/store/boolean-preference.js",
+      "default": "./dist/utils/store/boolean-preference.js"
+    },
+    "./utils/store/domain-scoped": {
+      "types": "./dist/utils/store/domain-scoped.d.ts",
+      "svelte": "./dist/utils/store/domain-scoped.js",
+      "import": "./dist/utils/store/domain-scoped.js",
+      "default": "./dist/utils/store/domain-scoped.js"
+    },
+    "./utils/sagas/debounce-saga": {
+      "types": "./dist/utils/sagas/debounce-saga.d.ts",
+      "svelte": "./dist/utils/sagas/debounce-saga.js",
+      "import": "./dist/utils/sagas/debounce-saga.js",
+      "default": "./dist/utils/sagas/debounce-saga.js"
+    },
+    "./utils/sagas/retry-with-timeout": {
+      "types": "./dist/utils/sagas/retry-with-timeout.d.ts",
+      "svelte": "./dist/utils/sagas/retry-with-timeout.js",
+      "import": "./dist/utils/sagas/retry-with-timeout.js",
+      "default": "./dist/utils/sagas/retry-with-timeout.js"
+    },
+    "./utils/sagas/wrap-async-generator": {
+      "types": "./dist/utils/sagas/wrap-async-generator.d.ts",
+      "svelte": "./dist/utils/sagas/wrap-async-generator.js",
+      "import": "./dist/utils/sagas/wrap-async-generator.js",
+      "default": "./dist/utils/sagas/wrap-async-generator.js"
+    },
+    "./utils/sagas/selector-channel-effects": {
+      "types": "./dist/utils/sagas/selector-channel-effects.d.ts",
+      "svelte": "./dist/utils/sagas/selector-channel-effects.js",
+      "import": "./dist/utils/sagas/selector-channel-effects.js",
+      "default": "./dist/utils/sagas/selector-channel-effects.js"
+    },
+    "./eslint-plugins": {
+      "import": "./eslint-plugins/index.mjs",
+      "default": "./eslint-plugins/index.mjs"
+    },
+    "./eslint-plugins/plugins": {
+      "import": "./eslint-plugins/plugins/index.mjs",
+      "default": "./eslint-plugins/plugins/index.mjs"
+    },
+    "./eslint-plugins/plugins/async-reducer-handler": {
+      "import": "./eslint-plugins/store/async-reducer-handler/plugin.mjs",
+      "default": "./eslint-plugins/store/async-reducer-handler/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/auto-forking-channel-helper": {
+      "import": "./eslint-plugins/store/auto-forking-channel-helper/plugin.mjs",
+      "default": "./eslint-plugins/store/auto-forking-channel-helper/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/action-type-shape": {
+      "import": "./eslint-plugins/store/action-type-shape/plugin.mjs",
+      "default": "./eslint-plugins/store/action-type-shape/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/collection-internal-mutation": {
+      "import": "./eslint-plugins/store/collection-internal-mutation/plugin.mjs",
+      "default": "./eslint-plugins/store/collection-internal-mutation/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/collection-state-shape": {
+      "import": "./eslint-plugins/store/collection-state-shape/plugin.mjs",
+      "default": "./eslint-plugins/store/collection-state-shape/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/component-lifecycle-boundary": {
+      "import": "./eslint-plugins/svelte/component-lifecycle-boundary/plugin.mjs",
+      "default": "./eslint-plugins/svelte/component-lifecycle-boundary/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/create-action-owner": {
+      "import": "./eslint-plugins/store/create-action-owner/plugin.mjs",
+      "default": "./eslint-plugins/store/create-action-owner/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/direct-local-storage-usage": {
+      "import": "./eslint-plugins/store/direct-local-storage-usage/plugin.mjs",
+      "default": "./eslint-plugins/store/direct-local-storage-usage/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/direct-selector-call-mode": {
+      "import": "./eslint-plugins/store/direct-selector-call-mode/plugin.mjs",
+      "default": "./eslint-plugins/store/direct-selector-call-mode/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/duplicate-action-type": {
+      "import": "./eslint-plugins/store/duplicate-action-type/plugin.mjs",
+      "default": "./eslint-plugins/store/duplicate-action-type/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/duplicate-saga-name": {
+      "import": "./eslint-plugins/store/duplicate-saga-name/plugin.mjs",
+      "default": "./eslint-plugins/store/duplicate-saga-name/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/duplicate-saga-registration": {
+      "import": "./eslint-plugins/store/duplicate-saga-registration/plugin.mjs",
+      "default": "./eslint-plugins/store/duplicate-saga-registration/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/duplicate-selector-export": {
+      "import": "./eslint-plugins/store/duplicate-selector-export/plugin.mjs",
+      "default": "./eslint-plugins/store/duplicate-selector-export/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/duplicate-selector-implementation": {
+      "import": "./eslint-plugins/store/duplicate-selector-implementation/plugin.mjs",
+      "default": "./eslint-plugins/store/duplicate-selector-implementation/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/duplicate-state-field": {
+      "import": "./eslint-plugins/store/duplicate-state-field/plugin.mjs",
+      "default": "./eslint-plugins/store/duplicate-state-field/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/forbidden-component-import": {
+      "import": "./eslint-plugins/svelte/forbidden-component-import/plugin.mjs",
+      "default": "./eslint-plugins/svelte/forbidden-component-import/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/forbidden-redux-api": {
+      "import": "./eslint-plugins/core/forbidden-redux-api/plugin.mjs",
+      "default": "./eslint-plugins/core/forbidden-redux-api/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/inline-saga-selector": {
+      "import": "./eslint-plugins/store/inline-saga-selector/plugin.mjs",
+      "default": "./eslint-plugins/store/inline-saga-selector/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/non-serializable-initial-state": {
+      "import": "./eslint-plugins/store/non-serializable-initial-state/plugin.mjs",
+      "default": "./eslint-plugins/store/non-serializable-initial-state/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/non-serializable-state-type": {
+      "import": "./eslint-plugins/store/non-serializable-state-type/plugin.mjs",
+      "default": "./eslint-plugins/store/non-serializable-state-type/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/nondeterministic-reducer-state": {
+      "import": "./eslint-plugins/store/nondeterministic-reducer-state/plugin.mjs",
+      "default": "./eslint-plugins/store/nondeterministic-reducer-state/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/pass-through-wrapper": {
+      "import": "./eslint-plugins/core/pass-through-wrapper/plugin.mjs",
+      "default": "./eslint-plugins/core/pass-through-wrapper/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/raw-channel-cleanup": {
+      "import": "./eslint-plugins/store/raw-channel-cleanup/plugin.mjs",
+      "default": "./eslint-plugins/store/raw-channel-cleanup/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/react-component-lifecycle-boundary": {
+      "import": "./eslint-plugins/react/react-component-lifecycle-boundary/plugin.mjs",
+      "default": "./eslint-plugins/react/react-component-lifecycle-boundary/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/react-forbidden-component-import": {
+      "import": "./eslint-plugins/react/react-forbidden-component-import/plugin.mjs",
+      "default": "./eslint-plugins/react/react-forbidden-component-import/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/react-prefer-direct-selector": {
+      "import": "./eslint-plugins/react/react-prefer-direct-selector/plugin.mjs",
+      "default": "./eslint-plugins/react/react-prefer-direct-selector/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/reducer-side-effect": {
+      "import": "./eslint-plugins/store/reducer-side-effect/plugin.mjs",
+      "default": "./eslint-plugins/store/reducer-side-effect/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/removed-middleware-source": {
+      "import": "./eslint-plugins/core/removed-middleware-source/plugin.mjs",
+      "default": "./eslint-plugins/core/removed-middleware-source/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/saga-watcher-action-type": {
+      "import": "./eslint-plugins/store/saga-watcher-action-type/plugin.mjs",
+      "default": "./eslint-plugins/store/saga-watcher-action-type/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/selector-export-name": {
+      "import": "./eslint-plugins/store/selector-export-name/plugin.mjs",
+      "default": "./eslint-plugins/store/selector-export-name/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/selector-file-name": {
+      "import": "./eslint-plugins/store/selector-file-name/plugin.mjs",
+      "default": "./eslint-plugins/store/selector-file-name/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/shared-react-store-boundary": {
+      "import": "./eslint-plugins/react/shared-react-store-boundary/plugin.mjs",
+      "default": "./eslint-plugins/react/shared-react-store-boundary/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/shared-svelte-store-boundary": {
+      "import": "./eslint-plugins/svelte/shared-svelte-store-boundary/plugin.mjs",
+      "default": "./eslint-plugins/svelte/shared-svelte-store-boundary/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/source-shaped-package-import": {
+      "import": "./eslint-plugins/core/source-shaped-package-import/plugin.mjs",
+      "default": "./eslint-plugins/core/source-shaped-package-import/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/state-type-name": {
+      "import": "./eslint-plugins/store/state-type-name/plugin.mjs",
+      "default": "./eslint-plugins/store/state-type-name/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/store-constructor-saga-map": {
+      "import": "./eslint-plugins/store/store-constructor-saga-map/plugin.mjs",
+      "default": "./eslint-plugins/store/store-constructor-saga-map/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/suspicious-state-field": {
+      "import": "./eslint-plugins/store/suspicious-state-field/plugin.mjs",
+      "default": "./eslint-plugins/store/suspicious-state-field/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/test-selector-select": {
+      "import": "./eslint-plugins/store/test-selector-select/plugin.mjs",
+      "default": "./eslint-plugins/store/test-selector-select/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/typed-saga-call-mock-guard": {
+      "import": "./eslint-plugins/store/typed-saga-call-mock-guard/plugin.mjs",
+      "default": "./eslint-plugins/store/typed-saga-call-mock-guard/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/typed-saga-yield-star": {
+      "import": "./eslint-plugins/store/typed-saga-yield-star/plugin.mjs",
+      "default": "./eslint-plugins/store/typed-saga-yield-star/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/unnamespaced-action-type": {
+      "import": "./eslint-plugins/store/unnamespaced-action-type/plugin.mjs",
+      "default": "./eslint-plugins/store/unnamespaced-action-type/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/wait-for-named-selector": {
+      "import": "./eslint-plugins/store/wait-for-named-selector/plugin.mjs",
+      "default": "./eslint-plugins/store/wait-for-named-selector/plugin.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "svelte": "./dist/index.js",
+  "peerDependencies": {
+    "@preact/signals-react": "^3.10.1",
+    "kefir": "^3.8.8",
+    "react": "^18.0.0 || ^19.0.0",
+    "svelte": "^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@preact/signals-react": {
+      "optional": true
+    },
+    "kefir": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "svelte": {
+      "optional": true
+    }
+  },
+  "scripts": {
+    "build": "vite build",
+    "prepack": "npm run build",
+    "test": "npx --no-install vitest run",
+    "validate:architecture": "node scripts/validate-architecture.mjs",
+    "validate:release": "node scripts/validate-release.mjs",
+    "cleanup:skills": "node scripts/cleanup-skills.mjs",
+    "install:skills": "node scripts/cli.mjs install-skills"
+  },
+  "devDependencies": {
+    "@babel/parser": "^7.29.7",
+    "@preact/signals-react": "^3.10.1",
+    "@types/kefir": "^3.8.11",
+    "eslint": "^10.4.1",
+    "react": "^19.0.0",
+    "redux-saga-test-plan": "^4.0.6",
+    "svelte": "^5.55.1",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.3",
+    "vite-plugin-dts": "^4.5.4",
+    "vitest": "^4.1.5"
+  },
+  "files": [
+    "dist/",
+    "docs/",
+    "skills/",
+    "scripts/",
+    "eslint-plugins/",
+    "!scripts/*.test.mjs",
+    "!scripts/**/*.test.mjs",
+    "!scripts/validate-release.mjs",
+    "!scripts/validate-architecture.mjs",
+    "!eslint-plugins/*.test.mjs",
+    "!eslint-plugins/**/*.test.mjs",
+    "!eslint-plugins/README.md",
+    "!eslint-plugins/fixtures/",
+    "!eslint-plugins/**/fixtures/",
+    "README.md",
+    "CONTRIBUTING.md",
+    "!skills/_artifacts"
+  ],
+  "dependencies": {
+    "fast-equals": "^6.0.0",
+    "redux": "^5.0.1",
+    "redux-saga": "^1.4.2",
+    "typed-redux-saga": "^1.5.0"
+  }
+}

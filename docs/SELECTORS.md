@@ -1,0 +1,297 @@
+# Selectors Guide
+
+> **How to create and use selectors with proxy-based memoization.**
+
+---
+
+## Table of Contents
+
+1. [What are Selectors?](#what-are-selectors)
+2. [Creating Selectors](#creating-selectors)
+3. [Using Selectors](#using-selectors)
+4. [Proxy-Based Memoization](#proxy-based-memoization)
+5. [Collection Selectors](#collection-selectors)
+6. [Selector Lifecycle Rules](#selector-lifecycle-rules)
+7. [Best Practices](#best-practices)
+8. [Anti-Patterns](#anti-patterns)
+
+---
+
+## What are Selectors?
+
+Selectors are pure functions that extract and derive data from the Redux store. In production app code, create app-local selectors from the configured `Store` instance with `store.createSelector(...)`. The Store-bound helper delegates to the lower-level selector utility while typing the callback `state` as `StoreInstanceState<typeof store>` (`StoreState<typeof store>` remains supported). That concrete state resolves reducer domains to app state types (for example, `counter: CounterState` and `todos: TodosState`) instead of exposing reducer call signatures or helper members. Selectors provide:
+
+- **Automatic memoization** — Proxy-based tracking of accessed state paths; only recomputes when those paths change.
+- **Multiple usage modes** — Svelte reactive stores, React signals/component reads, Kefir streams, saga effects, and direct state reads.
+- **Type safety** — Full TypeScript inference for arguments and return types.
+- **Composability** — Selectors can call other selectors via `.select()`.
+
+---
+
+## Creating Selectors
+
+Use the configured app Store as the public selector creation API for production app-local selectors. `Store` is the canonical Svelte-readable class available from `@augmentcode/themis/svelte-store`, `ReactStore` from `@augmentcode/themis/react-store` returns Preact React signals from selector calls and adds React `.useValue(...)`, and `StreamingStore` from `@augmentcode/themis/streaming-store` returns Kefir streams from selector calls. If shared code needs reusable selector logic, pass a configured Store into that helper and call `store.createSelector(...)` at the app integration boundary.
+
+```typescript
+import { Store } from "@augmentcode/themis/svelte-store";
+import type { StoreInstanceState } from "@augmentcode/themis/types";
+import { todosReducer } from "./todos-slice";
+
+export const store = new Store({ todos: todosReducer });
+export type AppState = StoreInstanceState<typeof store>;
+```
+
+`StoreInstanceState<typeof store>` is the same shape available inside `store.createSelector` callbacks: each reducer domain is inferred as its state object, not as the reducer function or reducer helper object used to configure the Store.
+
+Svelte-readable, React signal, and StreamingStore selector emissions default to `64` FPS. To tune coalescing, pass Store options as the final constructor argument. The value must be finite and within the inclusive `1..256` FPS range; fractional values such as `48.5` are accepted, and invalid values throw instead of clamping.
+
+```typescript
+export const store = new Store(
+  { todos: todosReducer },
+  undefined,
+  { throttledSelectorFrequency: 48.5 }
+);
+```
+
+### Simple Selector (No Arguments)
+
+```typescript
+import { store } from "$lib/store";
+
+export const selectItemCount = store.createSelector((state) => {
+  return state.todos.collection.ids.length;
+});
+```
+
+### Selector with Arguments
+
+```typescript
+export const selectTodoById = store.createSelector((state, todoId: string) => {
+  return state.todos.collection.map[todoId];
+});
+```
+
+### Composing Selectors
+
+Call `.select()` on other selectors to reuse computations:
+
+```typescript
+export const selectCompletedTodos = store.createSelector((state) => {
+  const todos = selectAllTodos.select(state);
+  return todos.filter((t) => t.completed);
+});
+
+export const selectCompletedCount = store.createSelector((state) => {
+  return selectCompletedTodos.select(state).length;
+});
+```
+
+---
+
+## Using Selectors
+
+Selectors provide multiple methods for different contexts. `Store.createSelector` uses the package's Svelte-readable selector model; `ReactStore.createSelector` uses the React signal selector model and returns Preact React signals from direct calls; `StreamingStore.createSelector` uses the streaming selector model and returns Kefir streams from direct calls. Choose the Store class instead of constructor injection for selector behavior.
+
+### 1. In Svelte Components (Reactive)
+
+The default call returns a Svelte readable store:
+
+```typescript
+// At component init (top-level <script>)
+const count = selectItemCount();
+const todo = selectTodoById(todoId);
+
+// Use with $store syntax in template
+// {$count} items, editing {$todo?.title}
+```
+
+### 2. In React components and signal-aware code
+
+`ReactStore` direct selector calls return `ReadonlySignal<R>` values and are the preferred React consumer integration path when components, custom hooks, or helper APIs can accept signals. Use `.useValue(...args)` only when a hook/plain value is required and adapting the consumer to accept signals is impractical.
+
+```tsx
+import { ReactStore } from "@augmentcode/themis/react-store";
+
+export const reactStore = new ReactStore({ todos: todosReducer });
+export const selectTodoById = reactStore.createSelector((state, todoId: string) => {
+  return state.todos.collection.map[todoId];
+});
+
+const todoSignal = selectTodoById("todo-1");
+console.log(todoSignal.value);
+
+function TodoTitle({ id }: { id: string }) {
+  const todo = selectTodoById(id);
+  return <span>{todo.value?.title}</span>;
+}
+```
+
+Direct signal calls and `.useValue(...args)` are throttled by the owning `ReactStore`'s `throttledSelectorFrequency`. Selector arguments may be plain values or `ReadonlySignal` values; signal arguments are read reactively by the computed selector. Keep `.useValue(...args)` for third-party components, legacy hook boundaries, or other places that must receive plain `R`.
+
+### 3. In Sagas (`.effect()`)
+
+```typescript
+function* mySaga() {
+  const count = yield* selectItemCount.effect();
+  const todo = yield* selectTodoById.effect(todoId);
+}
+```
+
+`.effect(...args)` is saga-only for every Store variant. It creates a typed-redux-saga select effect over the selector callback; it is not a React hook, Svelte readable, Kefir observable, signal subscription, or throttled render path.
+
+### 4. Direct State Access (`.select()`)
+
+For tests, event handlers, or composing selectors:
+
+```typescript
+import { store as appStore } from "$lib/store";
+
+// In tests
+const state = appStore.state;
+const count = selectItemCount.select(state);
+
+// In event handlers (where getContext is unavailable), use an initialized
+// Store instance captured from module/component context.
+function handleClick() {
+  const value = selectItemCount.select(appStore.state);
+}
+```
+
+### 5. Bound to a Store (`.withStore()`)
+
+```typescript
+const boundSelector = selectTodoById.withStore(store);
+const todo = boundSelector(todoId); // Returns the direct-call type for that Store family
+```
+
+For `Store`, the bound result is a Svelte `Readable<R>`. For `ReactStore`, the bound result is a `ReadonlySignal<R>` and may bind either a `ReactStore`/signal-state source or a state signal. For `StreamingStore`, the bound result is a Kefir `Observable<R, any>`.
+
+### 6. Streaming Store selectors
+
+```typescript
+import { StreamingStore } from "@augmentcode/themis/streaming-store";
+
+export const streamStore = new StreamingStore({ todos: todosReducer });
+export const selectTodoCountStream = streamStore.createSelector((state) => state.todos.collection.ids.length);
+
+const todoCount$ = selectTodoCountStream(); // Returns Kefir Observable<number, any>
+```
+
+Streaming selectors emit their first available value promptly. Subsequent rapid Store state updates or observable selector argument updates are coalesced at the Store's configured `throttledSelectorFrequency`, and only the latest pending selector result emits at the scheduled moment.
+
+---
+
+## Proxy-Based Memoization
+
+`store.createSelector` uses **proxy-based state tracking** for intelligent caching through package internals:
+
+1. **Tracks accessed paths** — When a selector runs, a Proxy records which state fields were accessed.
+2. **Selective re-execution** — On subsequent calls, only re-runs if an accessed path's reference changed.
+3. **Argument tracking** — Also re-runs when arguments change (shallow equality).
+4. **Collection optimization** — Stops proxying at Collection boundaries since Collections are immutable and always change reference when modified.
+
+```typescript
+// This selector only re-runs when:
+// - state.todos.collection changes (reference equality)
+// - OR the todoId argument changes (shallow equality)
+export const selectTodoById = store.createSelector((state, todoId: string) => {
+  return state.todos.collection.map[todoId];
+});
+```
+
+### Store-Owned Update Scheduling
+
+Selector emissions are scheduled and coalesced by the Store/selector internals so rapid Redux writes do not force unnecessary UI or stream consumer work. Svelte-readable `Store` selectors, React signal `ReactStore` selectors, and Kefir-based `StreamingStore` selectors use the configured `throttledSelectorFrequency` from the Store constructor options, defaulting to `64` FPS. Selector trace output is a separate default-off diagnostic; pass `{ traceSelectors: true }` in the same final Store options object only while diagnosing selector scheduling, and omit it or pass `false` for normal silent behavior. There is no public lock/unlock action API; model batching through ordinary action design, saga orchestration, and selectors that derive the final UI value.
+
+---
+
+## Collection Selectors
+
+For working with Collections, keep collection access behind Store-bound selectors and use the public collection utilities inside those selector callbacks:
+
+```typescript
+import { getItem, getItems, type Collection } from "@augmentcode/themis/utils/collections/collection-utils";
+import { store } from "$lib/store";
+
+// Get the collection itself
+export const selectTodosCollection = store.createSelector(
+  (state): Collection<Todo, "id"> => state.todos.collection
+);
+
+// Get a single item by ID (optimized O(1) lookup)
+export const selectTodo = store.createSelector((state, id: string) => {
+  return getItem(selectTodosCollection.select(state), id);
+});
+
+// Get all items as an ordered array
+export const selectAllTodos = store.createSelector((state) => {
+  return getItems(selectTodosCollection.select(state));
+});
+```
+
+---
+
+## Selector Lifecycle Rules
+
+| Context | Correct Usage | Why |
+|---------|---------------|-----|
+| Component init (top-level `<script>`) | `const val = selectFoo()` | Returns Svelte readable. Uses `getContext()` — only valid at init. |
+| React component/custom hook | `const valueSignal = selectFoo(...args)` | Preferred path; returns `ReadonlySignal<R>` for direct signal `.value` or signal-aware rendering. |
+| Hook/plain-value fallback | `const value = selectFoo.useValue(...args)` | Use only when a React component/custom hook must receive plain `R` and accepting a signal is impractical. |
+| Event handlers, callbacks | `selectFoo.select(appStore.state)` | Direct read from an initialized `Store` instance captured outside the handler. No Svelte context needed. |
+| Sagas | `yield* selectFoo.effect()` | Uses redux-saga's `select` effect. |
+| Composing selectors | `selectFoo.select(state)` | Direct read within another selector. |
+
+**⚠️ CRITICAL for Svelte `Store`:** Never call `selectFoo()` (the readable form) inside event handlers, callbacks, or async functions — it calls `getContext()` which only works during component initialization. For React `ReactStore`, prefer direct selector signals in components/custom hooks and reserve `.useValue(...args)` for necessary plain-value fallbacks; non-component one-shot code should use `.select(state, ...args)`.
+
+---
+
+## Best Practices
+
+1. **Always create named selectors** — Define selectors in `*-selectors.ts` files, never inline.
+2. **Compose selectors** — Reuse existing selectors via `.select()` instead of re-reading state paths.
+3. **Use descriptive names** — `selectCurrentConversationId`, not `getCurrentId`.
+4. **Return same reference when possible** — If no filtering/mapping is needed, return the state value directly.
+5. **Never mutate in selectors** — Use `[...array].sort()` instead of `array.sort()`.
+6. **No side effects** — No console.log, no analytics, no mutations.
+
+---
+
+## Anti-Patterns
+
+### ❌ Inline Selectors in Sagas
+
+```typescript
+// BAD
+const value = yield* select((state) => state.todos.items);
+
+// GOOD
+const value = yield* selectAllTodos.effect();
+```
+
+### ❌ Creating Selectors Inside Components
+
+```typescript
+// BAD — creates new selector on every render
+const selector = store.createSelector((state) => state.todos.count);
+
+// GOOD — defined at module level
+export const selectTodoCount = store.createSelector((state) => state.todos.count);
+```
+
+### ❌ Calling Readable Form Outside Component Init
+
+```typescript
+import { store as appStore } from "$lib/store";
+
+// BAD — crashes with lifecycle_outside_component
+function handleClick() {
+  const val = get(selectFoo());
+}
+
+// GOOD — use .select() with an initialized Store instance captured outside the handler
+function handleClick() {
+  const val = selectFoo.select(appStore.state);
+}
+```
+
