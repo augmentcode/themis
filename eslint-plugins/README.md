@@ -472,6 +472,24 @@ const ready = yield* selectReady.effect();
 
 Remediate by moving state reads into named `select*` selectors and calling their `.effect()` helper from sagas.
 
+### `themis/no-wildcard-saga-take`
+
+Invalid:
+
+```ts
+yield* take("*");
+yield* takeEvery(["*"], anyWorker);
+```
+
+Valid:
+
+```ts
+yield* take(loadTodos);
+yield* takeEvery([loadTodos, refreshTodos], loadTodosWorker);
+```
+
+Remediate by passing concrete action creators (or a selector channel) to `take`, `takeEvery`, `takeLatest`, or `takeLeading`; wildcard `'*'` wakes the watcher for every dispatched action and devastates saga throughput during streaming bursts. Detection covers the direct `take`/`takeEvery`/`takeLatest`/`takeLeading` callee shape; aliased typed-redux-saga imports are out of scope.
+
 ### `themis/saga-local-selector`
 
 Invalid:
