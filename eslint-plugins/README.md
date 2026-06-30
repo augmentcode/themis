@@ -477,18 +477,31 @@ Remediate by moving state reads into named `select*` selectors and calling their
 Invalid:
 
 ```ts
-yield* take("*");
+function* watchAnything() {
+  while (true) {
+    const action = yield* take("*");
+    yield* call(audit, action);
+  }
+}
+
 yield* takeEvery(["*"], anyWorker);
 ```
 
 Valid:
 
 ```ts
-yield* take(loadTodos);
-yield* takeEvery([loadTodos, refreshTodos], loadTodosWorker);
+function* watchUserEvents() {
+  yield* takeEvery([userLoggedIn, userLoggedOut], auditUserEventWorker);
+}
+
+function* watchReady() {
+  yield* takeLatestFromSelector(selectIsReady, function* ({ payload }) {
+    if (payload) yield* call(syncReadyState);
+  });
+}
 ```
 
-Remediate by passing concrete action creators (or a selector channel) to `take`, `takeEvery`, `takeLatest`, or `takeLeading`; wildcard `'*'` wakes the watcher for every dispatched action and devastates saga throughput during streaming bursts. Detection covers the direct `take`/`takeEvery`/`takeLatest`/`takeLeading` callee shape; aliased typed-redux-saga imports are out of scope.
+Remediate by passing concrete action creators (or arrays of action creators) to `take`/`takeEvery`/`takeLatest`/`takeLeading`, or by reacting to a selector value change with a selector-channel helper. Wildcard `'*'` wakes the watcher for every dispatched action and devastates saga throughput during streaming bursts, and is especially harmful during streaming flows where chunk actions fire continuously. Detection covers the direct `take`/`takeEvery`/`takeLatest`/`takeLeading` callee shape; aliased typed-redux-saga imports are out of scope. This rule is distinct from `themis/saga-watcher-action-type`, which enforces passing action creators rather than `.type` strings to watcher effects.
 
 ### `themis/saga-local-selector`
 
@@ -518,35 +531,6 @@ function* watchVisibleTodosGood() {
 ```
 
 Remediate by moving `select*` function or factory declarations out of saga modules and into the owning slice's `[slice]-selectors.ts`, then importing them into the saga file. Saga-local `select*` declarations are invalid even when they are not exported, because they put state-shape knowledge in the wrong layer and bypass selector ownership rules. This rule complements `themis/inline-saga-selector`, which rejects `yield* select((state) => ...)` call expressions.
-
-### `themis/no-wildcard-saga-take`
-
-Invalid:
-
-```ts
-function* watchAnything() {
-  while (true) {
-    const action = yield* take("*");
-    yield* call(audit, action);
-  }
-}
-```
-
-Valid:
-
-```ts
-function* watchUserEvents() {
-  yield* takeEvery([userLoggedIn, userLoggedOut], auditUserEventWorker);
-}
-
-function* watchReady() {
-  yield* takeLatestFromSelector(selectIsReady, function* ({ payload }) {
-    if (payload) yield* call(syncReadyState);
-  });
-}
-```
-
-Remediate by passing concrete action creators (or arrays of action creators) to `take`/`takeEvery`/`takeLatest`/`takeLeading`, or by reacting to a selector value change with a selector-channel helper. Wildcard takes subscribe to every dispatched action and are especially harmful during streaming flows where chunk actions fire continuously. This rule is distinct from `themis/saga-watcher-action-type`, which enforces passing action creators rather than `.type` strings to watcher effects.
 
 ### `themis/direct-selector-call-mode`
 
