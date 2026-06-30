@@ -461,6 +461,50 @@ function* watchChannel() {
 4. **Use **`takeLatest`** for user-triggered actions and debounce** — Add `delay(ms)` inside the worker when input should settle before side effects run.
 5. **Use **`call()`** for testability** — Wrap function calls in `yield* call(fn, args)` so they can be mocked in tests.
 6. **Start sagas explicitly by function** — `store.init()` does not auto-start app sagas. Call `store.runSaga(sagaFn)` from the configured Store instance. In layouts/components, call it from `onMount` and return the cancel function for mount-scoped cleanup.
+7. **Selectors live in `[slice]-selectors.ts`** — Saga modules import named `select*` selectors from the owning slice's selectors file. Declaring `select*` functions or factories locally inside a saga module is invalid even when they are not exported, because it puts state-shape knowledge in the wrong layer and bypasses the architecture rules that gate selector ownership.
+
+   ```typescript
+   // ❌ BAD — selector logic lives in the saga file
+   const selectVisibleTodos = (state: AppState) => state.todos.visible;
+   const selectTodoById = (todoId: string) => (state: AppState) => state.todos.map[todoId];
+
+   function* watchVisibleTodos() {
+     const visible = yield* select(selectVisibleTodos);
+     const todo = yield* select(selectTodoById("first"));
+   }
+
+   // ✅ GOOD — import named selectors from the slice's selectors file and use .effect(...)
+   import { selectVisibleTodos, selectTodoById } from "./todos-selectors";
+
+   function* watchVisibleTodosGood() {
+     const visible = yield* selectVisibleTodos.effect();
+     const todo = yield* selectTodoById.effect("first");
+   }
+   ```
+
+8. **Never `take('*')` or other wildcard takes** — Wildcard takes subscribe to every dispatched action and wake the saga on each one. They are especially harmful during streaming flows where chunk actions fire continuously, because the wildcard worker competes with the intended work and amplifies scheduler load. Use concrete action creators (or arrays of action creators), or a selector-channel helper when the trigger is a state change.
+
+   ```typescript
+   // ❌ BAD — wakes the saga on every action, including streaming chunks
+   function* watchAnything() {
+     while (true) {
+       const action = yield* take("*");
+       yield* call(audit, action);
+     }
+   }
+
+   // ✅ GOOD — take the concrete trigger actions
+   function* watchUserEvents() {
+     yield* takeEvery([userLoggedIn, userLoggedOut], auditUserEventWorker);
+   }
+
+   // ✅ GOOD — react to a selector value change instead of every action
+   function* watchReady() {
+     yield* takeLatestFromSelector(selectIsReady, function* ({ payload }) {
+       if (payload) yield* call(syncReadyState);
+     });
+   }
+   ```
 
 ```svelte
 <script lang="ts">

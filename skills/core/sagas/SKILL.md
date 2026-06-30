@@ -42,6 +42,8 @@ Use this skill when editing saga code or writing instructions for saga changes. 
 - Use `typed-redux-saga` effects with `yield*` for every effect.
 - Pass action creators directly to `take`, `takeEvery`, `takeLatest`, and `takeLeading`; do not pass `.type`.
 - Read state through named selectors with `.effect(...)` inside sagas.
+- Import the named selectors from the owning slice's `[slice]-selectors.ts` file; saga modules must not declare local `select*` functions/factories, even when they are not exported.
+- Subscribe with concrete action creators, action-creator arrays, or selector-channel helpers; never use `take('*')` or other wildcard takes.
 - Search before adding watchers: trigger action, worker name, registration name, and operation terms must have one canonical owner unless fan-out is intentional and documented.
 - Start app-owned sagas explicitly with `store.runSaga(sagaFn)` after `store.init()`.
 - Close manually-created channels in `finally`.
@@ -54,6 +56,8 @@ Use this skill when editing saga code or writing instructions for saga changes. 
 
 - Do not put side effects in reducers or selector predicates.
 - Do not call `selector.select(store.state, ...)` from saga-reachable code; convert the helper path to generators or pass values in.
+- Do not declare or factory-construct `select*` selectors inside saga modules, even as module-private locals; move them to the owning `[slice]-selectors.ts` and import them.
+- Do not subscribe to every action with `take('*')`, `takeEvery('*', ...)`, or other wildcard patterns; it wakes the saga on every dispatch and is especially harmful during streaming flows where chunk actions fire continuously.
 - Do not add a parallel watcher for an action already owned by another saga.
 - Do not manually add or start `@internal_sagaManager`; it is package-owned and started by Store initialization.
 - Do not import package-internal saga-manager files/actions such as `addCrash` or `clearCrashes` from app code; route crash-storage/restart questions to `core/saga-manager`.
@@ -171,6 +175,52 @@ function* watchTodosOnce() {
 }
 ```
 
+### 7. ❌ Bad: local selector declarations in a saga module
+
+```ts
+// BAD: selector logic lives in the saga file, even when it is not exported.
+const selectVisibleTodos = (state: AppState) => state.todos.visible;
+const selectTodoById = (todoId: string) => (state: AppState) => state.todos.map[todoId];
+
+function* watchVisibleTodos() {
+  const visible = yield* select(selectVisibleTodos);
+  const todo = yield* select(selectTodoById("first"));
+  // ...
+}
+
+// GOOD: import named selectors from the slice's selectors file and use .effect(...).
+import { selectVisibleTodos, selectTodoById } from "./todos-selectors";
+
+function* watchVisibleTodosGood() {
+  const visible = yield* selectVisibleTodos.effect();
+  const todo = yield* selectTodoById.effect("first");
+}
+```
+
+### 8. ❌ Bad: wildcard `take('*')` that wakes the saga on every dispatch
+
+```ts
+// BAD: subscribes to every action; especially harmful during streaming flows
+// because each chunk action wakes the worker and starves intended work.
+function* watchAnything() {
+  while (true) {
+    const action = yield* take("*");
+    yield* call(audit, action);
+  }
+}
+
+// GOOD: take the concrete trigger actions, or react to a selector value.
+function* watchUserEvents() {
+  yield* takeEvery([userLoggedIn, userLoggedOut], auditUserEventWorker);
+}
+
+function* watchReady() {
+  yield* takeLatestFromSelector(selectIsReady, function* ({ payload }) {
+    if (payload) yield* call(syncReadyState);
+  });
+}
+```
+
 ## Verification cues
 
 - Add or update saga tests with the package testing patterns; see `core/testing`.
@@ -186,6 +236,8 @@ function* watchTodosOnce() {
 - Forgetting `finally` for `channel.close()`.
 - Treating saga-manager internals as app-owned sagas.
 - Using `spawn` or wrapper-action debounce helpers for new saga work.
+- Declaring `select*` selectors locally inside a saga module instead of importing them from `[slice]-selectors.ts`.
+- Using `take('*')`, `takeEvery('*', ...)`, or similar wildcard patterns instead of concrete action creators or selector-channel helpers.
 
 ## See also
 

@@ -472,6 +472,64 @@ const ready = yield* selectReady.effect();
 
 Remediate by moving state reads into named `select*` selectors and calling their `.effect()` helper from sagas.
 
+### `themis/saga-local-selector`
+
+Invalid:
+
+```ts
+// src/todos/todos-sagas.ts
+const selectVisibleTodos = (state: AppState) => state.todos.visible;
+const selectTodoById = (todoId: string) => (state: AppState) => state.todos.map[todoId];
+
+function* watchVisibleTodos() {
+  const visible = yield* select(selectVisibleTodos);
+  const todo = yield* select(selectTodoById("first"));
+}
+```
+
+Valid:
+
+```ts
+// src/todos/todos-sagas.ts
+import { selectVisibleTodos, selectTodoById } from "./todos-selectors";
+
+function* watchVisibleTodosGood() {
+  const visible = yield* selectVisibleTodos.effect();
+  const todo = yield* selectTodoById.effect("first");
+}
+```
+
+Remediate by moving `select*` function or factory declarations out of saga modules and into the owning slice's `[slice]-selectors.ts`, then importing them into the saga file. Saga-local `select*` declarations are invalid even when they are not exported, because they put state-shape knowledge in the wrong layer and bypass selector ownership rules. This rule complements `themis/inline-saga-selector`, which rejects `yield* select((state) => ...)` call expressions.
+
+### `themis/no-wildcard-saga-take`
+
+Invalid:
+
+```ts
+function* watchAnything() {
+  while (true) {
+    const action = yield* take("*");
+    yield* call(audit, action);
+  }
+}
+```
+
+Valid:
+
+```ts
+function* watchUserEvents() {
+  yield* takeEvery([userLoggedIn, userLoggedOut], auditUserEventWorker);
+}
+
+function* watchReady() {
+  yield* takeLatestFromSelector(selectIsReady, function* ({ payload }) {
+    if (payload) yield* call(syncReadyState);
+  });
+}
+```
+
+Remediate by passing concrete action creators (or arrays of action creators) to `take`/`takeEvery`/`takeLatest`/`takeLeading`, or by reacting to a selector value change with a selector-channel helper. Wildcard takes subscribe to every dispatched action and are especially harmful during streaming flows where chunk actions fire continuously. This rule is distinct from `themis/saga-watcher-action-type`, which enforces passing action creators rather than `.type` strings to watcher effects.
+
 ### `themis/direct-selector-call-mode`
 
 Invalid:

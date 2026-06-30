@@ -269,6 +269,35 @@ const value = yield* select((state) => state.todos.items);
 const value = yield* selectAllTodos.effect();
 ```
 
+### ❌ Declaring Selectors Inside Saga Modules
+
+Selector ownership belongs in the slice's `[slice]-selectors.ts` file. Declaring `select*` functions or factories directly inside a saga module is invalid even when they are not exported: it scatters state-shape knowledge into the saga layer, prevents reuse from components/tests, and bypasses the architecture rules that gate selector placement.
+
+```typescript
+// BAD — selector logic lives in the saga file (even though it is module-private)
+// src/todos/todos-sagas.ts
+const selectVisibleTodos = (state: AppState) => state.todos.visible;
+const selectTodoById = (todoId: string) => (state: AppState) => state.todos.map[todoId];
+
+function* watchVisibleTodos() {
+  const visible = yield* select(selectVisibleTodos);
+  const todo = yield* select(selectTodoById("first"));
+}
+
+// GOOD — selectors live in [slice]-selectors.ts; sagas import them and use .effect(...)
+// src/todos/todos-selectors.ts
+export const selectVisibleTodos = store.createSelector((state) => state.todos.visible);
+export const selectTodoById = store.createSelector((state, todoId: string) => state.todos.map[todoId]);
+
+// src/todos/todos-sagas.ts
+import { selectVisibleTodos, selectTodoById } from "./todos-selectors";
+
+function* watchVisibleTodosGood() {
+  const visible = yield* selectVisibleTodos.effect();
+  const todo = yield* selectTodoById.effect("first");
+}
+```
+
 ### ❌ Creating Selectors Inside Components
 
 ```typescript
