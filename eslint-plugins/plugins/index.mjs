@@ -16,6 +16,7 @@ import { plugin as duplicateStateFieldPlugin } from "../store/duplicate-state-fi
 import { plugin as forbiddenComponentImportPlugin } from "../svelte/forbidden-component-import/plugin.mjs";
 import { plugin as forbiddenReduxApiPlugin } from "../core/forbidden-redux-api/plugin.mjs";
 import { plugin as inlineSagaSelectorPlugin } from "../store/inline-saga-selector/plugin.mjs";
+import { plugin as noWildcardSagaTakePlugin } from "../store/no-wildcard-saga-take/plugin.mjs";
 import { plugin as nonSerializableInitialStatePlugin } from "../store/non-serializable-initial-state/plugin.mjs";
 import { plugin as nonSerializableStateTypePlugin } from "../store/non-serializable-state-type/plugin.mjs";
 import { plugin as nondeterministicReducerStatePlugin } from "../store/nondeterministic-reducer-state/plugin.mjs";
@@ -26,6 +27,7 @@ import { plugin as reactForbiddenComponentImportPlugin } from "../react/react-fo
 import { plugin as reactPreferDirectSelectorPlugin } from "../react/react-prefer-direct-selector/plugin.mjs";
 import { plugin as reducerSideEffectPlugin } from "../store/reducer-side-effect/plugin.mjs";
 import { plugin as removedMiddlewareSourcePlugin } from "../core/removed-middleware-source/plugin.mjs";
+import { plugin as sagaLocalSelectorPlugin } from "../store/saga-local-selector/plugin.mjs";
 import { plugin as sagaWatcherActionTypePlugin } from "../store/saga-watcher-action-type/plugin.mjs";
 import { plugin as selectorExportNamePlugin } from "../store/selector-export-name/plugin.mjs";
 import { plugin as selectorFileNamePlugin } from "../store/selector-file-name/plugin.mjs";
@@ -60,6 +62,7 @@ export {
   forbiddenComponentImportPlugin,
   forbiddenReduxApiPlugin,
   inlineSagaSelectorPlugin,
+  noWildcardSagaTakePlugin,
   nonSerializableInitialStatePlugin,
   nonSerializableStateTypePlugin,
   nondeterministicReducerStatePlugin,
@@ -70,6 +73,7 @@ export {
   reactPreferDirectSelectorPlugin,
   reducerSideEffectPlugin,
   removedMiddlewareSourcePlugin,
+  sagaLocalSelectorPlugin,
   sagaWatcherActionTypePlugin,
   selectorExportNamePlugin,
   selectorFileNamePlugin,
@@ -135,6 +139,8 @@ export const stateCollectionReducerRulePlugins = {
 export const sagaSelectorChannelRulePlugins = {
   "saga-watcher-action-type": sagaWatcherActionTypePlugin,
   "inline-saga-selector": inlineSagaSelectorPlugin,
+  "saga-local-selector": sagaLocalSelectorPlugin,
+  "no-wildcard-saga-take": noWildcardSagaTakePlugin,
   "direct-selector-call-mode": directSelectorCallModePlugin,
   "wait-for-named-selector": waitForNamedSelectorPlugin,
   "typed-saga-yield-star": typedSagaYieldStarPlugin,
@@ -180,6 +186,8 @@ export const storeRulePlugins = {
   "duplicate-saga-registration": duplicateSagaRegistrationPlugin,
   "saga-watcher-action-type": sagaWatcherActionTypePlugin,
   "inline-saga-selector": inlineSagaSelectorPlugin,
+  "saga-local-selector": sagaLocalSelectorPlugin,
+  "no-wildcard-saga-take": noWildcardSagaTakePlugin,
   "wait-for-named-selector": waitForNamedSelectorPlugin,
   "typed-saga-yield-star": typedSagaYieldStarPlugin,
   "auto-forking-channel-helper": autoForkingChannelHelperPlugin,

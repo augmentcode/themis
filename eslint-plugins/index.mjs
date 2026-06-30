@@ -45,6 +45,8 @@ const ruleDefinitions = {
   "async-reducer-handler": { files: sourceFiles },
   "saga-watcher-action-type": { files: sourceFiles },
   "inline-saga-selector": { files: sourceFiles },
+  "saga-local-selector": { files: sourceFiles },
+  "no-wildcard-saga-take": { files: sourceFiles },
   "direct-selector-call-mode": { files: sourceFiles },
   "wait-for-named-selector": { files: sourceFiles },
   "typed-saga-yield-star": { files: sourceFiles },

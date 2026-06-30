@@ -197,6 +197,10 @@
       "import": "./eslint-plugins/store/inline-saga-selector/plugin.mjs",
       "default": "./eslint-plugins/store/inline-saga-selector/plugin.mjs"
     },
+    "./eslint-plugins/plugins/no-wildcard-saga-take": {
+      "import": "./eslint-plugins/store/no-wildcard-saga-take/plugin.mjs",
+      "default": "./eslint-plugins/store/no-wildcard-saga-take/plugin.mjs"
+    },
     "./eslint-plugins/plugins/non-serializable-initial-state": {
       "import": "./eslint-plugins/store/non-serializable-initial-state/plugin.mjs",
       "default": "./eslint-plugins/store/non-serializable-initial-state/plugin.mjs"
@@ -236,6 +240,10 @@
     "./eslint-plugins/plugins/removed-middleware-source": {
       "import": "./eslint-plugins/core/removed-middleware-source/plugin.mjs",
       "default": "./eslint-plugins/core/removed-middleware-source/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/saga-local-selector": {
+      "import": "./eslint-plugins/store/saga-local-selector/plugin.mjs",
+      "default": "./eslint-plugins/store/saga-local-selector/plugin.mjs"
     },
     "./eslint-plugins/plugins/saga-watcher-action-type": {
       "import": "./eslint-plugins/store/saga-watcher-action-type/plugin.mjs",

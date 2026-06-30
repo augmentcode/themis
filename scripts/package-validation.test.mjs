@@ -280,7 +280,7 @@ describe("package metadata", () => {
       react: [...storeRootRuleIds, ...architectureRuleDomains.react],
       streaming: storeRootRuleIds,
     };
-    const expectedRootRuleCounts = { core: 4, store: 35, svelte: 38, react: 39, streaming: 35 };
+    const expectedRootRuleCounts = { core: 4, store: 37, svelte: 40, react: 41, streaming: 37 };
 
     expect(Object.keys(architectureRootModule).sort()).toEqual(["core", "plugins", "react", "store", "streaming", "svelte"]);
     expect(architectureRootModule.full).toBeUndefined();
@@ -704,6 +704,126 @@ describe("package metadata", () => {
       namespacedRuleId("test-selector-select"),
       namespacedRuleId("test-selector-select"),
     ]);
+  });
+
+  it("flags saga-local selector declarations while ignoring imported selectors", () => {
+    const invalidMessages = lintArchitectureRule(
+      "saga-local-selector",
+      architectureRulePlugins["saga-local-selector"],
+      `
+        import { createSelector } from "../utils/selector-core/create-cached-selector";
+
+        const selectReady = (state) => state.todos.ready;
+        function selectDone(state) { return state.todos.done; }
+        export const selectCount = createSelector(
+          [(state) => state.todos.items],
+          (items) => items.length
+        );
+        const aggregatedSelector = createSelector([(state) => state.todos], (todos) => todos);
+
+        export function* todosSaga() {
+          return selectReady;
+        }
+      `,
+      "src/todos/todos-saga.ts"
+    );
+
+    expect(invalidMessages.map(({ ruleId }) => ruleId)).toEqual([
+      namespacedRuleId("saga-local-selector"),
+      namespacedRuleId("saga-local-selector"),
+      namespacedRuleId("saga-local-selector"),
+      namespacedRuleId("saga-local-selector"),
+    ]);
+    expect(invalidMessages[0].message).toContain("[slice]-selectors");
+
+    const validMessages = lintArchitectureRule(
+      "saga-local-selector",
+      architectureRulePlugins["saga-local-selector"],
+      `
+        import { selectReady, selectDone } from "../todos/todos-selectors";
+
+        export function* todosSaga() {
+          const ready = yield* selectReady.effect();
+          const done = yield* selectDone.effect();
+          return { ready, done };
+        }
+      `,
+      "src/todos/todos-saga.ts"
+    );
+
+    expect(validMessages).toEqual([]);
+
+    const nonSagaMessages = lintArchitectureRule(
+      "saga-local-selector",
+      architectureRulePlugins["saga-local-selector"],
+      `
+        const selectReady = (state) => state.todos.ready;
+        export function selectDone(state) { return state.todos.done; }
+      `,
+      "src/todos/todos-selectors.ts"
+    );
+
+    expect(nonSagaMessages).toEqual([]);
+  });
+
+  it("flags wildcard saga takes while allowing concrete actions, channels, and pattern arrays", () => {
+    const invalidMessages = lintArchitectureRule(
+      "no-wildcard-saga-take",
+      architectureRulePlugins["no-wildcard-saga-take"],
+      `
+        import { take, takeEvery, takeLatest, takeLeading } from "typed-redux-saga";
+
+        function* anyWorker() {}
+
+        export function* todosSaga() {
+          yield* take("*");
+          yield* takeEvery("*", anyWorker);
+          yield* takeLatest(["*"], anyWorker);
+          yield* takeLeading(\`*\`, anyWorker);
+        }
+      `,
+      "src/todos/todos-saga.ts"
+    );
+
+    expect(invalidMessages.map(({ ruleId }) => ruleId)).toEqual([
+      namespacedRuleId("no-wildcard-saga-take"),
+      namespacedRuleId("no-wildcard-saga-take"),
+      namespacedRuleId("no-wildcard-saga-take"),
+      namespacedRuleId("no-wildcard-saga-take"),
+    ]);
+    expect(invalidMessages[0].message).toContain("should not subscribe to '*'");
+
+    const validMessages = lintArchitectureRule(
+      "no-wildcard-saga-take",
+      architectureRulePlugins["no-wildcard-saga-take"],
+      `
+        import { take, takeEvery } from "typed-redux-saga";
+        import { loadTodos, refreshTodos } from "./todos-slice";
+
+        function* loadTodosWorker() {}
+
+        export function* todosSaga(channel) {
+          yield* take(channel);
+          yield* take(loadTodos);
+          yield* takeEvery([loadTodos, refreshTodos], loadTodosWorker);
+        }
+      `,
+      "src/todos/todos-saga.ts"
+    );
+
+    expect(validMessages).toEqual([]);
+
+    const nonSagaMessages = lintArchitectureRule(
+      "no-wildcard-saga-take",
+      architectureRulePlugins["no-wildcard-saga-take"],
+      `
+        function take(pattern: string) { return pattern; }
+        take("*");
+      `,
+      "src/todos/todos-helpers.ts"
+    );
+
+    expect(nonSagaMessages).toEqual([]);
   });
 
   it("keeps custom ESLint rule messages concise while preserving detailed metadata", () => {
