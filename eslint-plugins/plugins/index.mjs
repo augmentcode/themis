@@ -16,6 +16,7 @@ import { plugin as duplicateStateFieldPlugin } from "../store/duplicate-state-fi
 import { plugin as forbiddenComponentImportPlugin } from "../svelte/forbidden-component-import/plugin.mjs";
 import { plugin as forbiddenReduxApiPlugin } from "../core/forbidden-redux-api/plugin.mjs";
 import { plugin as inlineSagaSelectorPlugin } from "../store/inline-saga-selector/plugin.mjs";
+import { plugin as noExtraSelectorCachingPlugin } from "../store/no-extra-selector-caching/plugin.mjs";
 import { plugin as noWildcardSagaTakePlugin } from "../store/no-wildcard-saga-take/plugin.mjs";
 import { plugin as nonSerializableInitialStatePlugin } from "../store/non-serializable-initial-state/plugin.mjs";
 import { plugin as nonSerializableStateTypePlugin } from "../store/non-serializable-state-type/plugin.mjs";
@@ -33,6 +34,8 @@ import { plugin as selectorExportNamePlugin } from "../store/selector-export-nam
 import { plugin as selectorFileNamePlugin } from "../store/selector-file-name/plugin.mjs";
 import { plugin as sharedReactStoreBoundaryPlugin } from "../react/shared-react-store-boundary/plugin.mjs";
 import { plugin as sharedSvelteStoreBoundaryPlugin } from "../svelte/shared-svelte-store-boundary/plugin.mjs";
+import { plugin as sliceIdentityCamelCasePlugin } from "../store/camelcase-slice-identity/plugin.mjs";
+import { plugin as singleSliceSelectorsModulePlugin } from "../store/single-slice-selectors-module/plugin.mjs";
 import { plugin as sourceShapedPackageImportPlugin } from "../core/source-shaped-package-import/plugin.mjs";
 import { plugin as stateTypeNamePlugin } from "../store/state-type-name/plugin.mjs";
 import { plugin as storeConstructorSagaMapPlugin } from "../store/store-constructor-saga-map/plugin.mjs";
@@ -62,6 +65,7 @@ export {
   forbiddenComponentImportPlugin,
   forbiddenReduxApiPlugin,
   inlineSagaSelectorPlugin,
+  noExtraSelectorCachingPlugin,
   noWildcardSagaTakePlugin,
   nonSerializableInitialStatePlugin,
   nonSerializableStateTypePlugin,
@@ -79,6 +83,8 @@ export {
   selectorFileNamePlugin,
   sharedReactStoreBoundaryPlugin,
   sharedSvelteStoreBoundaryPlugin,
+  sliceIdentityCamelCasePlugin,
+  singleSliceSelectorsModulePlugin,
   sourceShapedPackageImportPlugin,
   stateTypeNamePlugin,
   storeConstructorSagaMapPlugin,
@@ -108,6 +114,7 @@ export const nativeReplacementRulePlugins = {
   "state-type-name": stateTypeNamePlugin,
   "unnamespaced-action-type": unnamespacedActionTypePlugin,
   "action-type-shape": actionTypeShapePlugin,
+  "camelcase-slice-identity": sliceIdentityCamelCasePlugin,
   "create-action-owner": createActionOwnerPlugin,
   "direct-local-storage-usage": directLocalStorageUsagePlugin,
   "selector-file-name": selectorFileNamePlugin,
@@ -120,6 +127,7 @@ export const aggregateCheckRulePlugins = {
   "duplicate-action-type": duplicateActionTypePlugin,
   "duplicate-selector-export": duplicateSelectorExportPlugin,
   "duplicate-selector-implementation": duplicateSelectorImplementationPlugin,
+  "single-slice-selectors-module": singleSliceSelectorsModulePlugin,
   "duplicate-saga-name": duplicateSagaNamePlugin,
   "duplicate-saga-registration": duplicateSagaRegistrationPlugin,
   "suspicious-state-field": suspiciousStateFieldPlugin,
@@ -140,6 +148,7 @@ export const sagaSelectorChannelRulePlugins = {
   "saga-watcher-action-type": sagaWatcherActionTypePlugin,
   "inline-saga-selector": inlineSagaSelectorPlugin,
   "saga-local-selector": sagaLocalSelectorPlugin,
+  "no-extra-selector-caching": noExtraSelectorCachingPlugin,
   "no-wildcard-saga-take": noWildcardSagaTakePlugin,
   "direct-selector-call-mode": directSelectorCallModePlugin,
   "wait-for-named-selector": waitForNamedSelectorPlugin,
@@ -177,9 +186,11 @@ export const storeRulePlugins = {
   "state-type-name": stateTypeNamePlugin,
   "unnamespaced-action-type": unnamespacedActionTypePlugin,
   "action-type-shape": actionTypeShapePlugin,
+  "camelcase-slice-identity": sliceIdentityCamelCasePlugin,
   "create-action-owner": createActionOwnerPlugin,
   "selector-file-name": selectorFileNamePlugin,
   "selector-export-name": selectorExportNamePlugin,
+  "single-slice-selectors-module": singleSliceSelectorsModulePlugin,
   "direct-selector-call-mode": directSelectorCallModePlugin,
   "test-selector-select": testSelectorSelectPlugin,
   "duplicate-saga-name": duplicateSagaNamePlugin,
@@ -187,6 +198,7 @@ export const storeRulePlugins = {
   "saga-watcher-action-type": sagaWatcherActionTypePlugin,
   "inline-saga-selector": inlineSagaSelectorPlugin,
   "saga-local-selector": sagaLocalSelectorPlugin,
+  "no-extra-selector-caching": noExtraSelectorCachingPlugin,
   "no-wildcard-saga-take": noWildcardSagaTakePlugin,
   "wait-for-named-selector": waitForNamedSelectorPlugin,
   "typed-saga-yield-star": typedSagaYieldStarPlugin,

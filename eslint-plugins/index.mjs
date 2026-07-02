@@ -15,7 +15,7 @@ const architectureLanguageOptions = {
   parserOptions: { ecmaFeatures: { jsx: true } },
 };
 
-const sourceFiles = ["src/**/*.{js,jsx,mjs,ts,tsx}"];
+const sourceFiles = ["src/**/*.{cjs,cts,js,jsx,mjs,mts,ts,tsx}"];
 const reactComponentFiles = ["src/**/*.{jsx,tsx}"];
 const svelteStoreIgnores = [
   "src/**/components/**",
@@ -30,6 +30,7 @@ const ruleDefinitions = {
   "duplicate-action-type": { files: sourceFiles },
   "duplicate-selector-export": { files: sourceFiles },
   "duplicate-selector-implementation": { files: sourceFiles },
+  "single-slice-selectors-module": { files: sourceFiles },
   "duplicate-saga-name": { files: sourceFiles },
   "duplicate-saga-registration": { files: sourceFiles },
   "suspicious-state-field": { files: sourceFiles },
@@ -46,6 +47,7 @@ const ruleDefinitions = {
   "saga-watcher-action-type": { files: sourceFiles },
   "inline-saga-selector": { files: sourceFiles },
   "saga-local-selector": { files: sourceFiles },
+  "no-extra-selector-caching": { files: sourceFiles },
   "no-wildcard-saga-take": { files: sourceFiles },
   "direct-selector-call-mode": { files: sourceFiles },
   "wait-for-named-selector": { files: sourceFiles },
@@ -59,6 +61,7 @@ const ruleDefinitions = {
   "state-type-name": { files: sourceFiles },
   "unnamespaced-action-type": { files: sourceFiles },
   "action-type-shape": { files: sourceFiles },
+  "camelcase-slice-identity": { files: sourceFiles },
   "create-action-owner": { files: sourceFiles },
   "direct-local-storage-usage": {
     files: sourceFiles,
@@ -70,10 +73,10 @@ const ruleDefinitions = {
   },
   "selector-file-name": {
     files: sourceFiles,
-    ignores: ["src/**/*-selector.{js,jsx,mjs,ts,tsx}", "src/**/*-selectors.{js,jsx,mjs,ts,tsx}"],
+    ignores: ["src/**/*-selector.{cjs,cts,js,jsx,mjs,mts,ts,tsx}", "src/**/*-selectors.{cjs,cts,js,jsx,mjs,mts,ts,tsx}"],
   },
   "selector-export-name": {
-    files: ["src/**/*-selector.{js,jsx,mjs,ts,tsx}", "src/**/*-selectors.{js,jsx,mjs,ts,tsx}"],
+    files: ["src/**/*-selector.{cjs,cts,js,jsx,mjs,mts,ts,tsx}", "src/**/*-selectors.{cjs,cts,js,jsx,mjs,mts,ts,tsx}"],
   },
   "removed-middleware-source": {
     files: ["src/middleware.ts", "src/middlewares/**/*.{js,jsx,mjs,ts,tsx}"],

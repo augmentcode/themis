@@ -137,6 +137,10 @@
       "import": "./eslint-plugins/store/action-type-shape/plugin.mjs",
       "default": "./eslint-plugins/store/action-type-shape/plugin.mjs"
     },
+    "./eslint-plugins/plugins/camelcase-slice-identity": {
+      "import": "./eslint-plugins/store/camelcase-slice-identity/plugin.mjs",
+      "default": "./eslint-plugins/store/camelcase-slice-identity/plugin.mjs"
+    },
     "./eslint-plugins/plugins/collection-internal-mutation": {
       "import": "./eslint-plugins/store/collection-internal-mutation/plugin.mjs",
       "default": "./eslint-plugins/store/collection-internal-mutation/plugin.mjs"
@@ -197,6 +201,10 @@
       "import": "./eslint-plugins/store/inline-saga-selector/plugin.mjs",
       "default": "./eslint-plugins/store/inline-saga-selector/plugin.mjs"
     },
+    "./eslint-plugins/plugins/no-extra-selector-caching": {
+      "import": "./eslint-plugins/store/no-extra-selector-caching/plugin.mjs",
+      "default": "./eslint-plugins/store/no-extra-selector-caching/plugin.mjs"
+    },
     "./eslint-plugins/plugins/no-wildcard-saga-take": {
       "import": "./eslint-plugins/store/no-wildcard-saga-take/plugin.mjs",
       "default": "./eslint-plugins/store/no-wildcard-saga-take/plugin.mjs"
@@ -256,6 +264,10 @@
     "./eslint-plugins/plugins/selector-file-name": {
       "import": "./eslint-plugins/store/selector-file-name/plugin.mjs",
       "default": "./eslint-plugins/store/selector-file-name/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/single-slice-selectors-module": {
+      "import": "./eslint-plugins/store/single-slice-selectors-module/plugin.mjs",
+      "default": "./eslint-plugins/store/single-slice-selectors-module/plugin.mjs"
     },
     "./eslint-plugins/plugins/shared-react-store-boundary": {
       "import": "./eslint-plugins/react/shared-react-store-boundary/plugin.mjs",
