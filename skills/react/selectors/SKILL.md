@@ -35,6 +35,7 @@ adapting the consumer to accept a signal is impractical.
 - Create selectors through the configured `ReactStore` instance.
 - Keep selector callbacks pure and derived-only; reducers must not store selectoroutputs.
 - Compose selectors with `.select(state, ...args)` inside another selector.
+- Trust Store-owned selector caching and signal scheduling; do not wrap Store-created selectors in extra `memoize`, `cache`, debounce/throttle, manual cache maps, or scheduler helpers.
 - Do not import from `themis` React selector internal deep paths.
 
 ```tsx
@@ -89,6 +90,7 @@ Selector-channel helpers that consume `.effect(...)`-compatible selectors run in
   observable selector arguments in the same React app.
 - Do not call another selector's direct signal form inside a selector callback; use
   `.select(state)` to keep composition pure and synchronous.
+- Do not add manual memoization or throttling wrappers around selector calls, direct signals, or `.useValue(...)`; configure selector coalescing through the owning `ReactStore` options instead.
 - Do not use standalone React selector utilities as public package imports.
 
 ## Verification cues

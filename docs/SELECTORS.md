@@ -32,6 +32,8 @@ Selectors are pure functions that extract and derive data from the Redux store. 
 
 Use the configured app Store as the public selector creation API for production app-local selectors. `Store` is the canonical Svelte-readable class available from `@augmentcode/themis/svelte-store`, `ReactStore` from `@augmentcode/themis/react-store` returns Preact React signals from selector calls and adds React `.useValue(...)`, and `StreamingStore` from `@augmentcode/themis/streaming-store` returns Kefir streams from selector calls. If shared code needs reusable selector logic, pass a configured Store into that helper and call `store.createSelector(...)` at the app integration boundary.
 
+In application slices, define selectors in the owning slice directory's single `*-selectors.ts` module. A slice directory should have exactly one selectors owner next to exactly one `*-slice.ts`; if a feature grows multiple logical slices, split it into multiple slice directories instead of adding extra selectors files beside one slice owner.
+
 ```typescript
 import { Store } from "@augmentcode/themis/svelte-store";
 import type { StoreInstanceState } from "@augmentcode/themis/types";
@@ -203,6 +205,8 @@ export const selectTodoById = store.createSelector((state, todoId: string) => {
 
 Selector emissions are scheduled and coalesced by the Store/selector internals so rapid Redux writes do not force unnecessary UI or stream consumer work. Svelte-readable `Store` selectors, React signal `ReactStore` selectors, and Kefir-based `StreamingStore` selectors use the configured `throttledSelectorFrequency` from the Store constructor options, defaulting to `64` FPS. Selector trace output is a separate default-off diagnostic; pass `{ traceSelectors: true }` in the same final Store options object only while diagnosing selector scheduling, and omit it or pass `false` for normal silent behavior. There is no public lock/unlock action API; model batching through ordinary action design, saga orchestration, and selectors that derive the final UI value.
 
+Because Store-created selectors already cache accessed state paths, track arguments, and coalesce emissions, do not add extra memoization, manual cache maps, debounce/throttle wrappers, `requestAnimationFrame` schedulers, or writable/signal proxies around selector calls. Use normal selector composition with `.select(state, ...args)` inside another selector, or tune the public Store constructor options when UI/stream coalescing needs an explicit FPS.
+
 ---
 
 ## Collection Selectors
@@ -249,11 +253,13 @@ export const selectAllTodos = store.createSelector((state) => {
 ## Best Practices
 
 1. **Always create named selectors** — Define selectors in `*-selectors.ts` files, never inline.
-2. **Compose selectors** — Reuse existing selectors via `.select()` instead of re-reading state paths.
-3. **Use descriptive names** — `selectCurrentConversationId`, not `getCurrentId`.
-4. **Return same reference when possible** — If no filtering/mapping is needed, return the state value directly.
-5. **Never mutate in selectors** — Use `[...array].sort()` instead of `array.sort()`.
-6. **No side effects** — No console.log, no analytics, no mutations.
+2. **Keep one selector owner per slice directory** — Pair one `*-selectors.ts` with one `*-slice.ts`; split multiple logical slices into separate directories.
+3. **Compose selectors** — Reuse existing selectors via `.select()` instead of re-reading state paths.
+4. **Use descriptive names** — `selectCurrentConversationId`, not `getCurrentId`.
+5. **Trust Store caching** — Do not wrap Store-created selectors in extra `memoize`, manual caches, debounce/throttle, or scheduler utilities.
+6. **Return same reference when possible** — If no filtering/mapping is needed, return the state value directly.
+7. **Never mutate in selectors** — Use `[...array].sort()` instead of `array.sort()`.
+8. **No side effects** — No console.log, no analytics, no mutations.
 
 ---
 
@@ -307,6 +313,20 @@ const selector = store.createSelector((state) => state.todos.count);
 // GOOD — defined at module level
 export const selectTodoCount = store.createSelector((state) => state.todos.count);
 ```
+
+### ❌ Adding Extra Selector Caches or Schedulers
+
+```typescript
+// BAD — Store-created selectors already cache and coalesce internally
+const cachedSelectTodos = memoize(() => selectTodos());
+const throttledTodos = debounce(() => selectTodos.select(appStore.state), 100);
+
+// GOOD — call the selector through the mode appropriate for the context
+const todos = selectTodos();
+const snapshot = selectTodos.select(appStore.state);
+```
+
+If selector output is too chatty for UI or stream consumers, tune `throttledSelectorFrequency` on the owning Store instead of layering custom caches, timers, or scheduler wrappers around the selector.
 
 ### ❌ Calling Readable Form Outside Component Init
 
