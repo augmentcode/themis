@@ -14,6 +14,50 @@ const createState = (overrides: Partial<State> = {}): State => ({
   ...overrides,
 });
 
+const getGarbageCollector = (): (() => void) | undefined =>
+  (globalThis as typeof globalThis & { gc?: () => void }).gc;
+
+const itWithGarbageCollector =
+  typeof WeakRef === "function" && getGarbageCollector() ? it : it.skip;
+
+const waitForGarbageCollection = async (ref: WeakRef<object>): Promise<void> => {
+  const gc = getGarbageCollector();
+  if (!gc) return;
+
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    gc();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    if (ref.deref() === undefined) {
+      return;
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  }
+};
+
+const createStaleBaselineRetentionProbe = () => {
+  const user = { name: "Ada", age: 36 };
+  let selectorCalls = 0;
+  const selector = (state: State) => {
+    selectorCalls += 1;
+    return state.user.name;
+  };
+  const cached = createCachedSelector<State, [], string>(selector);
+
+  let staleState: State | undefined = createState({ user });
+  const staleStateRef = new WeakRef<object>(staleState);
+
+  expect(cached(staleState)).toBe("Ada");
+  staleState = undefined;
+  expect(cached(createState({ user, unrelated: 1 }))).toBe("Ada");
+
+  return {
+    cached,
+    getSelectorCalls: () => selectorCalls,
+    staleStateRef,
+    user,
+  };
+};
+
 describe("createCachedSelector", () => {
   it("does not rerun when accessed state paths and args are unchanged", () => {
     const user = { name: "Ada", age: 36 };
@@ -25,6 +69,22 @@ describe("createCachedSelector", () => {
 
     expect(selector).toHaveBeenCalledTimes(1);
   });
+
+  itWithGarbageCollector(
+    "releases stale root state snapshots after unchanged watched-path cache hits",
+    async () => {
+      const { cached, getSelectorCalls, staleStateRef, user } =
+        createStaleBaselineRetentionProbe();
+
+      expect(getSelectorCalls()).toBe(1);
+
+      await waitForGarbageCollection(staleStateRef);
+
+      expect(staleStateRef.deref()).toBeUndefined();
+      expect(cached(createState({ user, unrelated: 2 }))).toBe("Ada");
+      expect(getSelectorCalls()).toBe(1);
+    }
+  );
 
   it("reruns when args change", () => {
     const selector = vi.fn((state: State, suffix: string) => `${state.user.name}${suffix}`);
