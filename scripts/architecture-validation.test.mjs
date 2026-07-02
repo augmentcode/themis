@@ -126,6 +126,43 @@ describe("architecture validation gate", () => {
     expect(result.diagnostics).toEqual([]);
   });
 
+  it("reports multiple slice and selectors owner modules in one slice directory", async () => {
+    const root = await createFixture({
+      "src/slices/todos/archive-slice.mts": "export const archiveReducer = undefined;",
+      "src/slices/todos/archive-selectors.cts": "export const archiveSelectors = undefined;",
+      "src/slices/todos/todos-slice.ts": "export const todosReducer = undefined;",
+      "src/slices/todos/todos-selectors.ts": "export const todosSelectors = undefined;",
+    });
+
+    const result = await validateArchitecture({ root, paths: ["src"] });
+    const diagnostics = result.diagnostics.filter((diagnostic) => diagnostic.rule === architectureRules.singleSliceSelectorsModule);
+
+    expect(diagnostics).toHaveLength(2);
+    expect(diagnostics.map(({ message }) => message)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("contains 2 slice owner modules"),
+        expect.stringContaining("contains 2 selectors owner modules"),
+      ])
+    );
+    expect(diagnostics[0].message).toContain("split multiple slices into separate directories named after the slices");
+    expect(diagnostics.flatMap(({ locations }) => locations.map(({ label }) => label))).toEqual(
+      expect.arrayContaining(["archive-slice.mts", "todos-slice.ts", "archive-selectors.cts", "todos-selectors.ts"])
+    );
+  });
+
+  it("accepts sibling slice directories with one slice and selectors owner each", async () => {
+    const root = await createFixture({
+      "src/slices/archive/archive-slice.ts": "export const archiveReducer = undefined;",
+      "src/slices/archive/archive-selectors.ts": "export const archiveSelectors = undefined;",
+      "src/slices/todos/todos-slice.ts": "export const todosReducer = undefined;",
+      "src/slices/todos/todos-selectors.ts": "export const todosSelectors = undefined;",
+    });
+
+    const result = await validateArchitecture({ root, paths: ["src"] });
+
+    expect(result.diagnostics.filter((diagnostic) => diagnostic.rule === architectureRules.singleSliceSelectorsModule)).toEqual([]);
+  });
+
   it("reports intentional architecture violations with actionable rule names", async () => {
     const root = await createFixture({
       "src/actions-a.ts": `
@@ -1027,6 +1064,38 @@ describe("architecture validation gate", () => {
         architectureRules.typedSagaCallMockGuard,
       ])
     );
+  });
+
+  it("reports non-camelCase logical slice identities without policing physical paths", async () => {
+    const [validFixture, invalidFixture] = await Promise.all([
+      readRuleFixture(architectureRules.camelcaseSliceIdentity, "valid"),
+      readRuleFixture(architectureRules.camelcaseSliceIdentity, "invalid"),
+    ]);
+    const [validRoot, invalidRoot] = await Promise.all([
+      createFixture({
+        "src/todo-items-slice.ts": validFixture,
+      }),
+      createFixture({
+        "src/todo-items-slice.ts": invalidFixture,
+      }),
+    ]);
+
+    const [validResult, invalidResult] = await Promise.all([
+      validateArchitecture({ root: validRoot, paths: ["src"] }),
+      validateArchitecture({ root: invalidRoot, paths: ["src"] }),
+    ]);
+    const validDiagnostics = validResult.diagnostics.filter((diagnostic) => diagnostic.rule === architectureRules.camelcaseSliceIdentity);
+    const invalidDiagnostics = invalidResult.diagnostics.filter((diagnostic) => diagnostic.rule === architectureRules.camelcaseSliceIdentity);
+    const invalidMessages = invalidDiagnostics.map((diagnostic) => diagnostic.message).join("\n");
+
+    expect(validDiagnostics).toEqual([]);
+    expect(invalidDiagnostics).toHaveLength(7);
+    expect(invalidMessages).toContain('Action type namespace "todo-items" should be lowerCamelCase');
+    expect(invalidMessages).toContain('Action type namespace "TodoItems" should be lowerCamelCase');
+    expect(invalidMessages).toContain('Action type namespace "todo_items" should be lowerCamelCase');
+    expect(invalidMessages).toContain('Store reducer-map key "todo-items" should be lowerCamelCase');
+    expect(invalidMessages).toContain('Store reducer-map key "TodoItems" should be lowerCamelCase');
+    expect(invalidMessages).toContain('Store reducer-map key "todo_items" should be lowerCamelCase');
   });
 
   it("supports rule-specific ignores for Wave 3 file-structure and test-pattern gates", async () => {

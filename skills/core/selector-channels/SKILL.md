@@ -38,6 +38,7 @@ Use this skill when a saga should react to selector value changes instead of act
 ## Do
 
 - Use named selectors created by the package selector utilities.
+- Import the selectors from the owning slice's `[slice]-selectors.ts` file; do not declare local `select*` functions/factories inside saga modules.
 - Pass selector arguments as the args tuple in the second position, e.g. `[itemId]`.
 - Expect worker payloads to include `{ payload, prevPayload }`.
 - Prefer the `take*FromSelector` helpers because they create and clean up channels for you.
@@ -48,6 +49,8 @@ Use this skill when a saga should react to selector value changes instead of act
 
 - Do not wrap selector channels in generic `channel-effects`; selector helpers already own the lifecycle.
 - Do not use closures or inline selector lambdas to smuggle arguments.
+- Do not declare module-local `select*` selectors inside the saga file to feed selector-channel helpers; move them to `[slice]-selectors.ts` and import them.
+- Do not fall back to `take('*')` or other wildcard takes when a selector-channel helper or concrete action creator would model the intent.
 - Do not choose a raw channel for simple load-on-change behavior.
 - Do not leave manual channel loops without cancellation and cleanup.
 - Do not confuse selector channels with action watchers; use core saga effects for actions.
@@ -158,6 +161,8 @@ function* watchTodoGood(todoId: string) {
 - Missing `channel.close()` in `finally`.
 - Passing selector args through closures instead of an args tuple.
 - Using generic `takeLatest(channel, worker)` on a channel created from a selector instead of `takeLatestFromSelector`.
+- Declaring `select*` selectors locally in the saga module instead of importing them from `[slice]-selectors.ts`.
+- Reaching for `take('*')` instead of a selector-channel helper or a concrete action creator.
 
 ## See also
 

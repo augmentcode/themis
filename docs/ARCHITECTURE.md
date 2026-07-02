@@ -33,14 +33,14 @@ Maintainer review notes for those changes should record:
 - rule-specific ESLint disable comments and their migration, compatibility, or external-data reasons;
 - final validation evidence: focused architecture tests when gate logic changes, `npm run validate:architecture`, `npm test`, `npm run build`, `npm run validate:release`, `git diff --check`, `git diff --cached --check` when staged changes exist, and `git status --short`.
 
-The modular gate reinforces these hard rules: Redux state stores canonical, serializable facts only (no derived fields, duplicated entity copies, parallel arrays/maps, reducer-maintained selector outputs, object arrays where `Collection<T, K>` belongs, runtime `Date`/`Map`/`Set`/`Error` values, or nondeterministic reducer-created state); action type strings must be namespaced and uniquely owned; RTK APIs and new shared `*.store.svelte.ts` stores are blocked; selector exports/bodies, saga function names, and saga registration names must not be duplicated; components must not import saga/reducer internals or acquire Redux dispatch/store from lifecycle callbacks; collection internals must be mutated only by collection utilities; direct localStorage access must stay in the safe helper layer; reducer handlers must remain synchronous and side-effect free; saga watchers pass action creators rather than `.type`; sagas read state through named `selectFoo.effect()` selectors rather than inline lambdas; selectors are called through the appropriate `.select()`/readable mode; typed-redux-saga effects use `yield*`; raw channels have detectable cleanup; selector/state/action files follow low-noise naming conventions; high-signal saga test mocks include tuple-call guards; and pass-through wrappers/re-exports require documented compatibility and sunset/removal reasons.
+The modular gate reinforces these hard rules: Redux state stores canonical, serializable facts only (no derived fields, duplicated entity copies, parallel arrays/maps, reducer-maintained selector outputs, object arrays where `Collection<T, K>` belongs, runtime `Date`/`Map`/`Set`/`Error` values, or nondeterministic reducer-created state); action type strings must be namespaced and uniquely owned; RTK APIs and new shared `*.store.svelte.ts` stores are blocked; selector exports/bodies, saga function names, and saga registration names must not be duplicated; each slice directory owns exactly one `*-slice.ts` and one `*-selectors.ts` module; logical slice identity names in reducer-map keys and action namespaces are camelCase; components must not import saga/reducer internals or acquire Redux dispatch/store from lifecycle callbacks; collection internals must be mutated only by collection utilities; direct localStorage access must stay in the safe helper layer; reducer handlers must remain synchronous and side-effect free; saga watchers pass action creators rather than `.type`; sagas read state through named `selectFoo.effect()` selectors rather than inline lambdas; selectors are called through the appropriate `.select()`/readable mode without extra memoization, manual caches, debounce/throttle, or scheduler wrappers; typed-redux-saga effects use `yield*`; raw channels have detectable cleanup; selector/state/action files follow low-noise naming conventions; high-signal saga test mocks include tuple-call guards; and pass-through wrappers/re-exports require documented compatibility and sunset/removal reasons.
 
 Current ESLint fixture coverage intentionally stops at conservative, mechanically verifiable checks:
 
 - **G9 selector call modes** — flag direct selector calls in unsafe contexts and inline `waitFor((state) => ...)` selectors; named selectors and explicit `.select(state)` evidence are acceptable.
 - **G10 typed-redux-saga effect style** — flag bare `yield` for typed saga effects where `yield*` is required.
 - **G11 channel lifecycle** — flag `fork()` wrapping of auto-forking channel helpers and raw channel creation without detectable cleanup.
-- **G14 file structure/naming** — flag mechanically clear state type, selector export/file, and nested action type naming violations.
+- **G14 file structure/naming** — flag mechanically clear state type, selector export/file, one slice/selectors owner per directory, camelCase logical slice identity, redundant selector caching, and nested action type naming violations.
 - **G15 high-signal test patterns** — flag selector tests that bypass `.select` and typed-redux-saga `call` mocks missing the `Array.isArray` tuple guard.
 
 Do not turn broad migration completeness, semantic test adequacy, or lifecycle intent judgments into CI-only rules without explicit approval. Those remain maintainer-led review checks that cite searches, diffs, and reviewer reasoning.
@@ -151,13 +151,15 @@ Maintainer refactor checklist: enumerate the old paths from the diff, search for
 
 ```
 src/slices/<domain>/
-├── <domain>-slice.ts          # State type, actions, reducer
-├── <domain>-selectors.ts      # Selectors
+├── <domain>-slice.ts          # The only action/reducer owner module for this slice
+├── <domain>-selectors.ts      # The only selector owner module for this slice
 ├── <domain>-slice.test.ts     # Reducer tests
 └── sagas/
     ├── <domain>-saga.ts       # Saga logic
     └── <domain>-saga.test.ts  # Saga tests
 ```
+
+Each slice directory owns exactly one `*-slice.ts` module and exactly one `*-selectors.ts` module. Split multiple logical slices into multiple directories named after their owners instead of placing several slice or selectors files side by side. Directory and file names may remain kebab-case, but logical slice identity names are camelCase: reducer maps use keys such as `userPreferences`, and action type namespaces use `"userPreferences/updateTheme"` rather than `"user-preferences/updateTheme"` or `"user_preferences/updateTheme"`.
 
 ## Middleware Pipeline
 
@@ -238,7 +240,7 @@ Pure functions that handle actions and produce new state. Created with `createRe
 
 ### Selectors
 
-Pure functions that extract and derive data from state. Production app-local selectors are created with the configured Store instance via `store.createSelector(...)`, which preserves `StoreState<typeof store>` inference and provides proxy-based memoization plus the selector return model of that Store class: Svelte readables for `Store`, Preact React signals plus `.useValue(...args)` for `ReactStore`, or Kefir streams for `StreamingStore`. Shared selector helpers should accept a configured Store instead of importing standalone selector creation utilities.
+Pure functions that extract and derive data from state. Production app-local selectors are created with the configured Store instance via `store.createSelector(...)`, which preserves `StoreState<typeof store>` inference and provides proxy-based memoization plus the selector return model of that Store class: Svelte readables for `Store`, Preact React signals plus `.useValue(...args)` for `ReactStore`, or Kefir streams for `StreamingStore`. Shared selector helpers should accept a configured Store instead of importing standalone selector creation utilities. Store-created selectors are already cached, optimized, and scheduled by Store internals; do not wrap them in additional `memoize`, manual cache maps, debounce/throttle, or scheduler layers.
 
 → See [SELECTORS.md](./SELECTORS.md)
 
