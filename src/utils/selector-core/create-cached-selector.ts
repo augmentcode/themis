@@ -196,6 +196,7 @@ export const createCachedSelector = <STATE, ARGS extends unknown[] = [], R = und
         : true;
 
     if (!argsChanged && !stateChanged && previousSelectResult !== undefined) {
+      previousState = rawValue;
       return previousSelectResult;
     }
 
