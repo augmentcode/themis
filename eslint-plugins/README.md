@@ -357,36 +357,6 @@ export const store = new Store({ userPreferences: userPreferencesReducer });
 
 Remediate by keeping physical directories/files in kebab-case when desired, but using camelCase logical slice identity names for reducer-map keys and action type namespaces.
 
-### `themis/single-slice-selectors-module`
-
-Invalid:
-
-```ts
-// src/slices/settings/profile-slice.ts
-export const profileReducer = createReducer(profileInitialState).build();
-
-// src/slices/settings/theme-slice.ts
-export const themeReducer = createReducer(themeInitialState).build();
-
-// src/slices/settings/theme-selectors.ts
-export const selectTheme = store.createSelector((state) => state.theme.current);
-```
-
-Valid:
-
-```ts
-// src/slices/profile/profile-slice.ts
-export const profileReducer = createReducer(profileInitialState).build();
-
-// src/slices/theme/theme-slice.ts
-export const themeReducer = createReducer(themeInitialState).build();
-
-// src/slices/theme/theme-selectors.ts
-export const selectTheme = store.createSelector((state) => state.theme.current);
-```
-
-Remediate by keeping exactly one `*-slice.ts` owner and one `*-selectors.ts` owner in each slice directory. Split multiple logical slices into separate directories named after their slice owners instead of adding several slice or selectors modules side by side.
-
 ## Converted state, collection, and reducer rules
 
 The root static config includes the converted Wave 3 state, collection, and reducer rules. `npm run validate:architecture` now reports ESLint-backed diagnostics while the fixtures prove rule coverage.
