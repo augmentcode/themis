@@ -46,10 +46,10 @@ Each root composes the lower layers (core, then store, then its domain rules); r
 | Root | Composition | Enabled rules | Use for |
 | --- | --- | --- | --- |
 | `core` | core only | 4 | Any JS/TS package (package/source hygiene only) |
-| `store` | core + store | 35 | Packages that define state/sagas but no UI |
-| `svelte` | core + store + svelte | 38 | Svelte consumer projects |
-| `react` | core + store + react | 39 | React consumer projects |
-| `streaming` | core + store | 35 | Node/server/worker consumers; gains streaming rules when they exist |
+| `store` | core + store | 40 | Packages that define state/sagas but no UI |
+| `svelte` | core + store + svelte | 43 | Svelte consumer projects |
+| `react` | core + store + react | 44 | React consumer projects |
+| `streaming` | core + store | 40 | Node/server/worker consumers; gains streaming rules when they exist |
 
 `plugins` is not a raw ESLint plugin object. It is a named map of per-rule flat-config entries for selected composition.
 
@@ -300,6 +300,28 @@ export const selectTodos = createSelector((state) => state.todos.items);
 
 Remediate by moving exported `select*` selectors to a selectors file.
 
+### `themis/single-slice-selectors-module`
+
+Invalid:
+
+```ts
+// src/slices/todos/todos-slice.ts
+// src/slices/todos/archive-slice.ts
+// src/slices/todos/todos-selectors.ts
+// src/slices/todos/archive-selectors.ts
+```
+
+Valid:
+
+```ts
+// src/slices/todos/todos-slice.ts
+// src/slices/todos/todos-selectors.ts
+// src/slices/archive/archive-slice.ts
+// src/slices/archive/archive-selectors.ts
+```
+
+Remediate by keeping one `*-slice` module and one `*-selectors` module per slice directory. Split multiple slices into separate directories named after the slices instead of co-owning one directory.
+
 ### `themis/action-type-shape`
 
 Invalid:
@@ -315,6 +337,55 @@ createAction("todos/add");
 ```
 
 Remediate by using exactly `sliceName/actionName` without empty or nested segments.
+
+### `themis/camelcase-slice-identity`
+
+Invalid:
+
+```ts
+createAction("user-preferences/updateTheme");
+createAction("user_preferences/updateTheme");
+export const store = new Store({ "user-preferences": userPreferencesReducer });
+```
+
+Valid:
+
+```ts
+createAction("userPreferences/updateTheme");
+export const store = new Store({ userPreferences: userPreferencesReducer });
+```
+
+Remediate by keeping physical directories/files in kebab-case when desired, but using camelCase logical slice identity names for reducer-map keys and action type namespaces.
+
+### `themis/single-slice-selectors-module`
+
+Invalid:
+
+```ts
+// src/slices/settings/profile-slice.ts
+export const profileReducer = createReducer(profileInitialState).build();
+
+// src/slices/settings/theme-slice.ts
+export const themeReducer = createReducer(themeInitialState).build();
+
+// src/slices/settings/theme-selectors.ts
+export const selectTheme = store.createSelector((state) => state.theme.current);
+```
+
+Valid:
+
+```ts
+// src/slices/profile/profile-slice.ts
+export const profileReducer = createReducer(profileInitialState).build();
+
+// src/slices/theme/theme-slice.ts
+export const themeReducer = createReducer(themeInitialState).build();
+
+// src/slices/theme/theme-selectors.ts
+export const selectTheme = store.createSelector((state) => state.theme.current);
+```
+
+Remediate by keeping exactly one `*-slice.ts` owner and one `*-selectors.ts` owner in each slice directory. Split multiple logical slices into separate directories named after their slice owners instead of adding several slice or selectors modules side by side.
 
 ## Converted state, collection, and reducer rules
 
@@ -531,6 +602,30 @@ function* watchVisibleTodosGood() {
 ```
 
 Remediate by moving `select*` function or factory declarations out of saga modules and into the owning slice's `[slice]-selectors.ts`, then importing them into the saga file. Saga-local `select*` declarations are invalid even when they are not exported, because they put state-shape knowledge in the wrong layer and bypass selector ownership rules. This rule complements `themis/inline-saga-selector`, which rejects `yield* select((state) => ...)` call expressions.
+
+### `themis/no-extra-selector-caching`
+
+Invalid:
+
+```ts
+const cachedSelectTodos = memoize(() => selectTodos());
+const throttledReady = throttle(() => selectReady.select(store.state), 100);
+const readableTodos = readable([], (set) => selectTodos().subscribe(set));
+```
+
+Valid:
+
+```ts
+const ready = selectReady.select(store.state);
+
+export const selectVisibleTodos = store.createSelector((state) => {
+  return selectTodos.select(state).filter((todo) => todo.visible);
+});
+
+export const store = new Store(reducers, undefined, { throttledSelectorFrequency: 64 });
+```
+
+Remediate by removing obvious memoization and scheduling wrappers such as `memoize`, `useMemo`, `derived`/manual `readable`, `debounce`, and `throttle` around Store-created selectors or selector calls. Store selector machinery already caches accessed state paths, tracks arguments, and coalesces Store-family emissions; use normal direct selector calls, `.select(state, ...args)` composition, or public Store constructor options such as `throttledSelectorFrequency` instead.
 
 ### `themis/direct-selector-call-mode`
 

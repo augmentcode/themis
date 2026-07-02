@@ -70,7 +70,7 @@ const lintArchitectureRule = (ruleId, plugin, code, filename) => {
     code,
     [
       {
-        files: ["**/*.{js,jsx,mjs,ts,tsx,svelte}"],
+        files: ["**/*.{cjs,cts,js,jsx,mjs,mts,ts,tsx,svelte}"],
         languageOptions: architectureValidationLanguageOptions,
         plugins: { [pluginNamespace]: plugin },
         rules: { [namespacedRuleId(ruleId)]: "error" },
@@ -280,7 +280,7 @@ describe("package metadata", () => {
       react: [...storeRootRuleIds, ...architectureRuleDomains.react],
       streaming: storeRootRuleIds,
     };
-    const expectedRootRuleCounts = { core: 4, store: 37, svelte: 40, react: 41, streaming: 37 };
+    const expectedRootRuleCounts = { core: 4, store: 40, svelte: 43, react: 44, streaming: 40 };
 
     expect(Object.keys(architectureRootModule).sort()).toEqual(["core", "plugins", "react", "store", "streaming", "svelte"]);
     expect(architectureRootModule.full).toBeUndefined();
@@ -542,7 +542,7 @@ describe("package metadata", () => {
       'export { newFeature } from "./new-feature";',
       [
         {
-          files: ["**/*.{js,jsx,mjs,ts,tsx,svelte}"],
+          files: ["**/*.{cjs,cts,js,jsx,mjs,mts,ts,tsx,svelte}"],
           languageOptions: architectureLanguageOptions,
           plugins: { "themis": passThroughWrapperModule.plugin },
           rules: { "themis/pass-through-wrapper": "error" },
@@ -562,7 +562,7 @@ describe("package metadata", () => {
       'import { selectTodos } from "../todos/todos-selectors";\nfunction handleClick() { selectTodos(); }\nconst add = createAction("todos/add");\nconst addAgain = createAction("todos/add");',
       [
         {
-          files: ["**/*.{js,jsx,mjs,ts,tsx,svelte}"],
+          files: ["**/*.{cjs,cts,js,jsx,mjs,mts,ts,tsx,svelte}"],
           languageOptions: architectureLanguageOptions,
           plugins: { "themis": selectedPlugin },
           rules: {
@@ -824,6 +824,76 @@ describe("package metadata", () => {
     );
 
     expect(nonSagaMessages).toEqual([]);
+  });
+
+  it("flags extra selector caching wrappers while allowing Store selector composition and options", () => {
+    const invalidMessages = lintArchitectureRule(
+      "no-extra-selector-caching",
+      architectureRulePlugins["no-extra-selector-caching"],
+      `
+        import { memoize, debounce, throttle } from "lodash";
+        import { useMemo } from "react";
+        import { derived, readable } from "svelte/store";
+        import { selectReady, selectTodoById, selectTodos } from "../todos/todos-selectors";
+
+        export const selectLegacyTodos = memoize((state) => state.todos.items);
+        export const selectWrappedTodos = memoize(store.createSelector((state) => state.todos.items));
+        export const selectLodashMemoizedTodos = _.memoize(selectTodos);
+
+        export function TodoView({ id }) {
+          const todos = useMemo(() => selectTodos(), []);
+          const debouncedTodo = debounce(() => selectTodoById(id), 100);
+          const throttledReady = throttle(() => selectReady.select(store.state), 100);
+          const derivedTodos = derived(selectTodos(), ($todos) => $todos.length);
+          const readableTodos = readable([], (set) => selectTodos().subscribe(set));
+          return { todos, debouncedTodo, throttledReady, derivedTodos, readableTodos };
+        }
+      `,
+      "src/ui/todos-view.ts"
+    );
+
+    expect(invalidMessages.map(({ ruleId }) => ruleId)).toEqual([
+      namespacedRuleId("no-extra-selector-caching"),
+      namespacedRuleId("no-extra-selector-caching"),
+      namespacedRuleId("no-extra-selector-caching"),
+      namespacedRuleId("no-extra-selector-caching"),
+      namespacedRuleId("no-extra-selector-caching"),
+      namespacedRuleId("no-extra-selector-caching"),
+      namespacedRuleId("no-extra-selector-caching"),
+      namespacedRuleId("no-extra-selector-caching"),
+    ]);
+    expect(invalidMessages[0].message).toContain("Store-created selectors already provide");
+
+    const validMessages = lintArchitectureRule(
+      "no-extra-selector-caching",
+      architectureRulePlugins["no-extra-selector-caching"],
+      `
+        import { derived } from "svelte/store";
+        import { Store } from "@augmentcode/themis/svelte-store";
+        import { selectTodos } from "../todos/todos-selectors";
+
+        export const store = new Store({ todos: todosReducer }, undefined, { throttledSelectorFrequency: 120 });
+
+        export const selectVisibleTodos = store.createSelector((state) => {
+          return selectTodos.select(state).filter((todo) => todo.visible);
+        });
+
+        const todosReadable = selectTodos();
+        const todos = selectTodos.select(store.state);
+        const derivedOther = derived(otherReadable, ($other) => $other.length);
+      `,
+      "src/todos/todos-selectors.ts"
+    );
+
+    expect(validMessages).toEqual([]);
+    expect(selectedRuleIdsFromConfig(store)).toContain("no-extra-selector-caching");
+    expect(selectedRuleIdsFromConfig(svelte)).toContain("no-extra-selector-caching");
+    expect(selectedRuleIdsFromConfig(react)).toContain("no-extra-selector-caching");
+    expect(selectedRuleIdsFromConfig(streaming)).toContain("no-extra-selector-caching");
+    expect(architectureRulePlugins["no-extra-selector-caching"].rules["no-extra-selector-caching"].meta.architecture).toMatchObject({
+      ruleId: "no-extra-selector-caching",
+      summary: "Store-created selector is wrapped in redundant caching or optimization.",
+    });
   });
 
   it("keeps custom ESLint rule messages concise while preserving detailed metadata", () => {
