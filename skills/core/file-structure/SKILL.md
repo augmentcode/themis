@@ -7,8 +7,10 @@ description: >-
   wires the Redux store and package saga manager but does NOT auto-start
   app sagas — start each one explicitly via store.runSaga(sagaFn).
   Do not manually register package @internal_ sagas.
-  Naming: {Feature}State, {feature}Reducer, verb-phrase actions, select*
-  prefix, "sliceName/actionName" action types.
+  Ownership: exactly one {name}-slice.ts and one {name}-selectors.ts module per
+  slice directory; split multiple slices into separate directories. Naming:
+  {Feature}State, {feature}Reducer, camelCase slice identity keys/namespaces,
+  verb-phrase actions, select* prefix, "sliceName/actionName" action types.
 type: sub-skill
 requires:
   - core
@@ -27,13 +29,15 @@ triggers:
 ```
 src/slices/{slice-name}/
   {slice-name}-types.ts          # Types, interfaces, enums (safe to import from any process)
-  {slice-name}-slice.ts          # Actions + reducer (imports types from -types.ts)
-  {slice-name}-selectors.ts      # Selectors
+  {slice-name}-slice.ts          # The only action/reducer owner module for this slice
+  {slice-name}-selectors.ts      # The only selector owner module for this slice
   {slice-name}-slice.test.ts     # Reducer tests
   sagas/
     {slice-name}-saga.ts         # Saga logic
     {slice-name}-saga.test.ts    # Saga tests
 ```
+
+Each slice directory owns exactly one `*-slice.ts` module and exactly one `*-selectors.ts` module. If a feature needs multiple logical slices, split them into sibling directories named after the slice owners instead of adding multiple slice or selectors files to one directory. Physical paths stay kebab-case, while the logical slice identity used in reducer-map keys and action namespaces is always camelCase (for example `src/slices/user-preferences/user-preferences-slice.ts` registers as `userPreferences` and emits `"userPreferences/updateTheme"`).
 
 The top-level store lives at `src/store.ts` (or wherever you export your `Store` instance) and registers all slices. `docs/ARCHITECTURE.md` shows the short form: `src/slices/<domain>/` with the same filenames.
 
@@ -106,7 +110,8 @@ export const store = new Store({}); // no reducer map entry; start with store.ru
 - **Reducer:** `{feature}Reducer` (e.g., `notificationsReducer`)
 - **Actions:** verb phrases (e.g., `addNotification`, `fetchItems`)
 - **Selectors:** `select` prefix (e.g., `selectNotifications`, `selectIsLoading`)
-- **Action types:** `"sliceName/actionName"` (e.g., `"notifications/addNotification"`)
+- **Logical slice identity:** camelCase reducer-map keys and action namespaces (e.g., `userPreferences`)
+- **Action types:** `"sliceName/actionName"` with camelCase `sliceName` (e.g., `"userPreferences/updateTheme"`)
 
 ## Common Mistakes
 
@@ -126,6 +131,46 @@ export const store = new Store({});
 ```
 
 Source: `../SKILL.md` §9 (Saga-only slices) · **Priority: MEDIUM**
+
+### ❌ Adding multiple slice or selectors owner files to one directory
+
+One directory means one logical slice owner. Multiple owners make reducer keys, action namespaces, and selector ownership ambiguous.
+
+```text
+// WRONG — two logical slices in one directory
+src/slices/settings/profile-slice.ts
+src/slices/settings/profile-selectors.ts
+src/slices/settings/theme-slice.ts
+src/slices/settings/theme-selectors.ts
+```
+
+```text
+// CORRECT — split by slice owner
+src/slices/profile/profile-slice.ts
+src/slices/profile/profile-selectors.ts
+src/slices/theme/theme-slice.ts
+src/slices/theme/theme-selectors.ts
+```
+
+Source: `../SKILL.md` §9 (File structure) · **Priority: HIGH**
+
+### ❌ Using kebab-case or snake_case as the logical slice identity
+
+File and directory names may be kebab-case, but reducer-map keys and action namespaces must be camelCase.
+
+```typescript
+// WRONG
+export const updateTheme = createAction("user-preferences/updateTheme");
+export const store = new Store({ "user-preferences": userPreferencesReducer });
+```
+
+```typescript
+// CORRECT
+export const updateTheme = createAction("userPreferences/updateTheme");
+export const store = new Store({ userPreferences: userPreferencesReducer });
+```
+
+Source: `../SKILL.md` §9 (Naming) · **Priority: HIGH**
 
 ### ❌ Naming selectors without the `select` prefix
 
