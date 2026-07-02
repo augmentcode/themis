@@ -31,6 +31,7 @@ export const architectureRules = {
   duplicateSelectorImplementation: "duplicate-selector-implementation",
   duplicateSagaName: "duplicate-saga-name",
   duplicateSagaRegistration: "duplicate-saga-registration",
+  singleSliceSelectorsModule: "single-slice-selectors-module",
   suspiciousStateField: "suspicious-state-field",
   duplicateStateField: "duplicate-state-field",
   forbiddenComponentImport: "forbidden-component-import",
@@ -51,6 +52,7 @@ export const architectureRules = {
   componentLifecycleBoundary: "component-lifecycle-boundary",
   passThroughWrapper: "pass-through-wrapper",
   directSelectorCallMode: "direct-selector-call-mode",
+  noExtraSelectorCaching: "no-extra-selector-caching",
   waitForNamedSelector: "wait-for-named-selector",
   typedSagaYieldStar: "typed-saga-yield-star",
   autoForkingChannelHelper: "auto-forking-channel-helper",
@@ -60,6 +62,7 @@ export const architectureRules = {
   selectorExportName: "selector-export-name",
   selectorFileName: "selector-file-name",
   actionTypeShape: "action-type-shape",
+  camelcaseSliceIdentity: "camelcase-slice-identity",
   createActionOwner: "create-action-owner",
   testSelectorSelect: "test-selector-select",
   typedSagaCallMockGuard: "typed-saga-call-mock-guard",
@@ -75,11 +78,15 @@ const sourceRuleConfig = {
 const testRuleConfig = architectureErrorRules(testPatternRulePlugins);
 
 const defaultPaths = ["src"];
-const sourceExtensions = new Set([".js", ".jsx", ".mjs", ".svelte", ".ts", ".tsx"]);
+const sourceExtensions = new Set([".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".svelte", ".ts", ".tsx"]);
 const ignoredDirectories = new Set([".git", "coverage", "dist", "node_modules"]);
 const testFilePattern = /(^|[\\/])[^\\/]+\.(test|spec)\.[^\\/]+$/;
 const selectorFactories = new Set(["createSelector", "createCollectionItemSelector", "createCollectionItemsListSelector"]);
 const actionFactories = new Set(["createAction", "createAsyncAction"]);
+const ownerModuleKinds = [
+  { kind: "slice", pattern: /-slice\.[cm]?[jt]sx?$/, noun: "slice owner", suffix: "*-slice" },
+  { kind: "selectors", pattern: /-selectors\.[cm]?[jt]sx?$/, noun: "selectors owner", suffix: "*-selectors" },
+];
 const createActionOwnerUtilityExceptionFiles = new Set([
   "src/utils/store/boolean-preference.ts",
   "src/utils/store/create-action.ts",
@@ -93,6 +100,21 @@ function locationFor(source, index) {
 
 function normalizePath(path) {
   return path.replace(/\\/g, "/");
+}
+
+function basename(path) {
+  return normalizePath(path).split("/").pop() ?? path;
+}
+
+function directoryName(path) {
+  const normalized = normalizePath(path);
+  const slash = normalized.lastIndexOf("/");
+  return slash === -1 ? "." : normalized.slice(0, slash);
+}
+
+function ownerModuleKind(file) {
+  const name = basename(file);
+  return ownerModuleKinds.find(({ pattern }) => pattern.test(name));
 }
 
 function normalizeEslintRuleId(ruleId) {
@@ -140,7 +162,7 @@ function createEslintDisableChecker(linter, file, source) {
       sourceForEslint(file, source),
       [
         {
-          files: ["**/*.{js,jsx,mjs,ts,tsx,svelte}"],
+          files: ["**/*.{cjs,cts,js,jsx,mjs,mts,ts,tsx,svelte}"],
           linterOptions: { reportUnusedDisableDirectives: "off" },
           languageOptions: architectureLanguageOptions,
           plugins: { architecture: { rules: { [rule]: probeRule } } },
@@ -171,7 +193,7 @@ function lintSource(linter, file, source, rules, { root } = {}) {
       sourceForEslint(file, source),
       [
         {
-          files: ["**/*.{js,jsx,mjs,ts,tsx,svelte}"],
+          files: ["**/*.{cjs,cts,js,jsx,mjs,mts,ts,tsx,svelte}"],
           linterOptions: { reportUnusedDisableDirectives: "off" },
           languageOptions: architectureLanguageOptions,
           plugins: { architecture: architecturePlugin },
@@ -497,8 +519,25 @@ function analyzeSource(linter, file, source) {
     [architectureRules.duplicateSelectorImplementation]: [],
     [architectureRules.duplicateSagaName]: [],
     [architectureRules.duplicateSagaRegistration]: [],
+    [architectureRules.singleSliceSelectorsModule]: [],
     isDisabled: createEslintDisableChecker(linter, file, source),
   };
+
+  const ownerKind = ownerModuleKind(file);
+  if (ownerKind && !records.isDisabled(architectureRules.singleSliceSelectorsModule, 1, 1)) {
+    const directory = directoryName(file);
+    records[architectureRules.singleSliceSelectorsModule].push({
+      key: `${ownerKind.kind}:${directory}`,
+      kind: ownerKind.kind,
+      noun: ownerKind.noun,
+      suffix: ownerKind.suffix,
+      directory,
+      file,
+      line: 1,
+      column: 1,
+      label: basename(file),
+    });
+  }
 
   for (const call of findCalls(source, actionFactories)) {
     const args = splitTopLevelArguments(call.args);
@@ -622,6 +661,29 @@ function duplicateDiagnostics(rule, records, noun, guidance) {
     }));
 }
 
+function ownerModuleDiagnostics(records) {
+  const grouped = new Map();
+  for (const record of records) {
+    const group = grouped.get(record.key) ?? [];
+    group.push(record);
+    grouped.set(record.key, group);
+  }
+  return [...grouped.values()]
+    .filter((group) => group.length > 1)
+    .map((group) => {
+      const first = group[0];
+      const modules = group.map(({ label }) => label).join(", ");
+      return {
+        rule: architectureRules.singleSliceSelectorsModule,
+        file: first.file,
+        line: first.line,
+        column: first.column,
+        message: `Slice directory "${first.directory}" contains ${group.length} ${first.noun} modules (${modules}). Keep one ${first.suffix} module per slice directory and split multiple slices into separate directories named after the slices.`,
+        locations: group.map(({ file, line, column, label }) => ({ file, line, column, label })),
+      };
+    });
+}
+
 export async function validateArchitecture(options = {}) {
   const root = resolve(options.root ?? process.cwd());
   const paths = options.paths ?? defaultPaths;
@@ -637,6 +699,7 @@ export async function validateArchitecture(options = {}) {
     [architectureRules.duplicateSelectorImplementation]: [],
     [architectureRules.duplicateSagaName]: [],
     [architectureRules.duplicateSagaRegistration]: [],
+    [architectureRules.singleSliceSelectorsModule]: [],
   };
 
   for (const file of files) {
@@ -661,7 +724,8 @@ export async function validateArchitecture(options = {}) {
     ...duplicateDiagnostics(architectureRules.duplicateSelectorExport, aggregate[architectureRules.duplicateSelectorExport], "selector export", "Give each selector a unique exported name."),
     ...duplicateDiagnostics(architectureRules.duplicateSelectorImplementation, aggregate[architectureRules.duplicateSelectorImplementation], "selector implementation", "Reuse the existing selector or make the derivation distinct."),
     ...duplicateDiagnostics(architectureRules.duplicateSagaName, aggregate[architectureRules.duplicateSagaName], "saga function name", "Rename one saga or reuse the existing implementation."),
-    ...duplicateDiagnostics(architectureRules.duplicateSagaRegistration, aggregate[architectureRules.duplicateSagaRegistration], "saga registration", "Each saga registry key/name must be unique within the validation scope.")
+    ...duplicateDiagnostics(architectureRules.duplicateSagaRegistration, aggregate[architectureRules.duplicateSagaRegistration], "saga registration", "Each saga registry key/name must be unique within the validation scope."),
+    ...ownerModuleDiagnostics(aggregate[architectureRules.singleSliceSelectorsModule])
   );
 
   aggregate.diagnostics.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.rule.localeCompare(b.rule));
