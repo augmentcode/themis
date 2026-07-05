@@ -615,7 +615,7 @@ function handleClick(store) {
 }
 ```
 
-Remediate by using `.select(state, args)` in callbacks, handlers, and tests, or `.effect(args)` in sagas. Reserve bare `selectFoo()` for component initialization where a Svelte readable can access component context.
+Remediate by using `.select(state, args)` in callbacks, handlers, and tests, or `.effect(args)` in sagas. Reserve bare `selectFoo()` for component initialization where a Svelte readable can access component context. React `.tsx`/`.jsx` component files are handled by `themis/react-prefer-direct-selector` because `ReactStore` direct calls return Preact `ReadonlySignal` values instead of Svelte readables.
 
 ### `themis/wait-for-named-selector`
 
@@ -775,8 +775,9 @@ Invalid:
 
 ```tsx
 // src/components/TodosPanel.tsx
-const todos = selectTodos.useValue();
-const first = selectTodoById.useValue("first");
+const todos = selectTodos();
+const fallbackTodos = selectTodos.useValue();
+return <p>{todos.length} {fallbackTodos.length}</p>;
 ```
 
 Valid:
@@ -784,10 +785,10 @@ Valid:
 ```tsx
 // src/components/TodosPanel.tsx
 const todos = selectTodos();
-return <p>{todos.value.length}</p>;
+return <TodoList todosSignal={todos}>{todos.value.length}</TodoList>;
 ```
 
-Remediate by calling the selector directly so the component consumes the `ReadonlySignal` it returns; `.useValue(...)` reads a throttled plain value and is only a fallback for consumers that cannot accept signals. Keep reviewed fallbacks behind a narrow `eslint-disable-next-line themis/react-prefer-direct-selector` comment with a reason. Non-selector `.useValue(...)` calls (objects not named `select<PascalCase>`) and non-component `.ts` files are not reported.
+Remediate by calling the selector directly so the component consumes the `ReadonlySignal` it returns. Read `.value` before treating the selector result as an array/object/plain value, pass the signal to signal-aware props or JSX intentionally, and rely on the repository's configured Signals React tracking (`@preact/signals-react` Babel transform or `useSignals()` where needed) for `.value` reads. `.useValue(...)` reads a throttled plain value and is only a fallback for consumers that cannot accept signals; keep reviewed fallbacks behind a narrow `eslint-disable-next-line themis/react-prefer-direct-selector` comment with a reason. Non-selector `.useValue(...)` calls (objects not named `select<PascalCase>`) and non-component `.ts` files are not reported.
 
 ### `themis/shared-react-store-boundary`
 

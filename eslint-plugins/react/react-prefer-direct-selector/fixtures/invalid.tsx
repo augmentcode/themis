@@ -1,12 +1,14 @@
 import { selectTodoById, selectTodos } from "../todos/todos-selectors";
 
 export function TodosPanel() {
-  const todos = selectTodos.useValue();
-  const first = selectTodoById.useValue("first");
+  const fallbackTodos = selectTodos.useValue();
+  const todos = selectTodos();
+  const first = selectTodoById("first");
+  const { length } = selectTodos();
 
   return (
     <p>
-      {todos.length} {first?.label}
+      {fallbackTodos.length} {todos.length} {first?.label} {length}
     </p>
   );
 }

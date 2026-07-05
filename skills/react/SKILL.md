@@ -2,9 +2,9 @@
 name: react
 description: >-
   ReactStore routing index for React UI work in themis. Use for
-  @augmentcode/themis/react-store, Preact React signal selector results, direct
-  signal reads, selector .useValue(...args) only when hook/plain-value fallbacks are
-  necessary, and
+  @augmentcode/themis/react-store, Preact React signals, Babel transform or
+  useSignals() tracking, signal selector results, direct signal reads, selector
+  .useValue(...args) only when hook/plain-value fallbacks are necessary, and
   React-specific component/lifecycle/scheduling/migration routing. Route shared
   Redux/redux-saga concepts to core, Svelte readable work to svelte, and
   Node/server/observable work to streaming. Never mix this concrete React Store
@@ -13,6 +13,9 @@ type: core
 requires:
   - core
 sources:
+  - ./signals/SKILL.md
+  - ./selectors/SKILL.md
+  - ./store/SKILL.md
   - ./component-integration/SKILL.md
   - ./selector-lifecycle/SKILL.md
   - ./selector-scheduling/SKILL.md
@@ -24,6 +27,10 @@ triggers:
   - ReactStore
   - react-store import
   - React selector
+  - Preact signal
+  - React signal
+  - signal .value
+  - useSignals
   - selector .useValue
   - Preact signal selector
   - ReadonlySignal selector
@@ -53,6 +60,7 @@ selector consumption. Generic Redux/redux-saga guidance remains in `../core/`.
 
 | Route | Use when |
 | --- | --- |
+| `./signals/SKILL.md` | General Preact Signals guidance for ReactStore apps: `ReadonlySignal<T>`, `.value`, `computed`, Babel transform/`useSignals()` tracking, direct JSX signal rendering, component-local signal hooks, and avoiding module-level shared signal state. |
 | `./store/SKILL.md` | Choosing/importing `ReactStore`, initialization/disposal, `getSignalState()`, shared Store runtime behavior, or Store-family contrast. |
 | `./selectors/SKILL.md` | Authoring selectors whose direct calls return `ReadonlySignal<R>`, preferring direct signals in React consumers, using `.useValue(...args)` only for hook/plain-value fallback paths, plus `.withStore`, `.select`, and saga-only `.effect`. |
 | `./component-integration/SKILL.md` | Wiring `ReactStore` into JSX/TSX React apps, bootstrap/root init and disposal ownership, app saga startup through `reactStore.runSaga(sagaFn)`, React component reads through direct signals first, and Store-first dispatch. |
@@ -69,6 +77,10 @@ First-time app setup starts at the canonical root setup skill: `../setup/SKILL.m
   `ReactStore` instance: `reactStore.createSelector(...)`.
 - Direct selector calls return `ReadonlySignal<R>` values and are the preferred
   React component/custom-hook integration path when consumers can accept signals.
+- Components that read direct selector `.value` must rely on the Preact Signals
+  Babel transform or an explicit `useSignals()` runtime fallback; passing or
+  intentionally rendering signals in JSX is valid when the consumer is
+  signal-aware.
 - Use `.useValue(...args)` only when a React hook/plain value is necessary and adapting
   the consumer to accept a signal is impractical.
 - Direct signal outputs and `.useValue(...args)` are throttled by
@@ -103,5 +115,7 @@ references only and must not be applied directly to a React app path.
 - React guidance states that direct selector calls returning signals are preferred
   for React consumers, while `.useValue(...args)` returns plain `R` only as a necessary
   hook/plain-value fallback.
+- Signal examples mention `.value` tracking through the Babel transform or
+  explicit `useSignals()` and do not introduce module-level shared signal state.
 - The same app path does not mix `ReactStore` with Svelte readable or Kefir
   observable Store guidance.

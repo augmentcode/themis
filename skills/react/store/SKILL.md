@@ -21,13 +21,18 @@ triggers:
 ---
 # ReactStore import and lifecycle
 
-Use this skill when a task needs the React signal Store variant. For shared statepolicy, reducers, actions, sagas, and package import boundaries, also follow thematching `core/*` skills.
+Use this skill when a task needs the React signal Store variant. For shared state
+policy, reducers, actions, sagas, and package import boundaries, also follow the
+matching `core/*` skills.
 
 ## Correct import and class choice
 
 - Use `ReactStore` from `@augmentcode/themis/react-store`.
-- Use `Store` from `@augmentcode/themis/svelte-store` only for a separate Svelte appwhose direct selector calls should return Svelte readables.
-- Use `StreamingStore` from `@augmentcode/themis/streaming-store` only for a separatestream/Node path whose direct selector calls should return Kefir observables.
+- Use `Store` from `@augmentcode/themis/svelte-store` only for a separate Svelte
+  app whose direct selector calls should return Svelte readables.
+- Use `StreamingStore` from `@augmentcode/themis/streaming-store` only for a
+  separate stream/Node path whose direct selector calls should return Kefir
+  observables.
 - Do not import React selector internals from `src/*` or `utils/react-selectors/*`.
 
 ```ts
@@ -39,9 +44,16 @@ const dispose = reactStore.init();
 
 ## Lifecycle rules
 
-- Construct `ReactStore` with app-owned reducers and optional middleware, then call`reactStore.init(initialState?)` before invoking direct selector calls,`.useValue(...args)`, or `reactStore.getSignalState()`.
-- `getSignalState()` returns the Store state as a Preact React signal afterinitialization and throws before `init()` or after `dispose()`.
-- `reactStore.dispatch`, `reactStore.state`, `reactStore.runSaga(sagaFn)`, and`reactStore.dispose()` follow the shared Store runtime behavior documented incore Store guidance.
+- Construct `ReactStore` with app-owned reducers and optional middleware, then
+  call `reactStore.init(initialState?)` before invoking direct selector calls,
+  `.useValue(...args)`, or `reactStore.getSignalState()`.
+- `getSignalState()` returns the Store state as a Preact React signal after
+  initialization and throws before `init()` or after `dispose()`.
+- Keep app shared/domain state in reducers and ReactStore selectors rather than
+  module-level shared Preact signals.
+- `reactStore.dispatch`, `reactStore.state`, `reactStore.runSaga(sagaFn)`, and
+  `reactStore.dispose()` follow the shared Store runtime behavior documented in
+  core Store guidance.
 - Do not manually register package-owned `@internal_` reducers or internal sagas.
 
 ## Verification cues
