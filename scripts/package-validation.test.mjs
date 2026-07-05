@@ -671,6 +671,70 @@ describe("package metadata", () => {
     ]);
   });
 
+  it("leaves React component direct selector signals to the React selector rule", () => {
+    const messages = lintArchitectureRule(
+      "direct-selector-call-mode",
+      architectureRulePlugins["direct-selector-call-mode"],
+      `
+        import { selectTodos } from "../todos/todos-selectors";
+
+        export function TodosPanel() {
+          const todos = selectTodos();
+          return <p>{todos.value.length}</p>;
+        }
+      `,
+      "src/components/TodosPanel.tsx"
+    );
+
+    expect(messages).toEqual([]);
+  });
+
+  it("validates React selector signals without rejecting direct selector calls", () => {
+    const validMessages = lintArchitectureRule(
+      "react-prefer-direct-selector",
+      architectureRulePlugins["react-prefer-direct-selector"],
+      `
+        import { selectTodoById, selectTodos } from "../todos/todos-selectors";
+
+        function TodoSummary({ todosSignal }) {
+          return <span>{todosSignal.value.length}</span>;
+        }
+
+        export function TodosPanel() {
+          const todos = selectTodos();
+          const first = selectTodoById("first");
+          return <TodoSummary todosSignal={todos}>{first.value?.label}</TodoSummary>;
+        }
+      `,
+      "src/components/TodosPanel.tsx"
+    );
+    const invalidMessages = lintArchitectureRule(
+      "react-prefer-direct-selector",
+      architectureRulePlugins["react-prefer-direct-selector"],
+      `
+        import { selectTodoById, selectTodos } from "../todos/todos-selectors";
+
+        export function TodosPanel() {
+          const fallbackTodos = selectTodos.useValue();
+          const todos = selectTodos();
+          const first = selectTodoById("first");
+          const { length } = selectTodos();
+          return <p>{fallbackTodos.length} {todos.length} {first?.label} {length}</p>;
+        }
+      `,
+      "src/components/TodosPanel.tsx"
+    );
+
+    expect(validMessages).toEqual([]);
+    expect(invalidMessages.map(({ ruleId }) => ruleId)).toEqual([
+      namespacedRuleId("react-prefer-direct-selector"),
+      namespacedRuleId("react-prefer-direct-selector"),
+      namespacedRuleId("react-prefer-direct-selector"),
+      namespacedRuleId("react-prefer-direct-selector"),
+    ]);
+    expect(invalidMessages.map(({ message }) => message).join("\n")).toContain("ReadonlySignal");
+  });
+
   it("filters test selector readable calls to named imports from selector modules", () => {
     const messages = lintArchitectureRule(
       "test-selector-select",

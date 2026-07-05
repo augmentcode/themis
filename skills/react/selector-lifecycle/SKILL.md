@@ -3,7 +3,7 @@ name: react/selector-lifecycle
 description: >-
   React selector lifecycle and call-mode guidance. Maps direct calls that return
   Preact React signals as the preferred React consumer path, .useValue(...args) for
-  necessary hook/plain-value fallback paths,
+  necessary hook/plain-value fallback paths, Babel transform/useSignals tracking,
   .select(state, ...args) for handlers/tests/composition, .effect(...args) for
   sagas, and .withStore(...) for explicit binding without Svelte lifecycle rules.
 type: sub-skill
@@ -12,11 +12,13 @@ requires:
   - react/selectors
 sources:
   - "@augmentcode/themis/react-store"
+  - ../signals/SKILL.md
   - ../selectors/SKILL.md
 triggers:
   - React selector lifecycle
   - selector .useValue lifecycle
   - direct signal read
+  - useSignals selector
   - select in React handler
 ---
 # React selector lifecycle — call-mode guardrails
@@ -48,6 +50,8 @@ selector observation rules in the same app/package/code path.
 - Prefer direct selector calls in React components, custom hooks, and helper
   components that can pass/read `ReadonlySignal<R>` values through the Preact React
   signal integration.
+- Ensure React component `.value` reads are tracked by the Preact Signals Babel
+  transform or by an explicit `useSignals()` fallback in the reading component.
 - Use `.useValue(...args)` in React components or custom hooks only when a plain value
   or hook-shaped API is required and a signal-aware rewrite is impractical.
 - Use `.select(reactStore.state, ...args)` in handlers and tests when a plain
@@ -56,6 +60,18 @@ selector observation rules in the same app/package/code path.
 - Use `.effect(...args)` in sagas and selector-channel helpers.
 - Use `.withStore(...)` only when you intentionally need to bind the selector to an
   explicit `ReactStore` or compatible signal state source.
+
+## React signal consumption guardrails
+
+- Direct selector calls create `ReadonlySignal<R>` values; pass them to
+  signal-aware children or read `.value` in tracked React components.
+- Direct JSX signal rendering is valid when the JSX text position intentionally
+  accepts a signal. For props, conditions, arrays, and objects, read `.value` or
+  use a plain-value fallback boundary.
+- `.useValue(...args)` calls React signal runtime hooks and returns plain `R`; it
+  is not a replacement for `.select(state, ...args)` in handlers/tests/sagas.
+- `.select(state, ...args)` and `.effect(...args)` take plain selector arguments,
+  not signal wrappers.
 
 ## Don't
 
@@ -172,6 +188,8 @@ for `ReactStore`, that result is a Preact React `ReadonlySignal<R>`.
 - Direct calls return signal objects, not plain values. Passing a direct signal
   result into pure reducers/selectors or comparing it as a plain value creates
   wrong-shape bugs.
+- React components that read `signal.value` without the Babel transform or an
+  explicit `useSignals()` fallback may fail to re-render when the signal changes.
 - `.select(state, ...args)` is pure and synchronous but not reactive. Components
   that need updates should prefer direct selector signals, falling back to
   `.useValue(...args)` only for necessary plain-value boundaries.
@@ -187,6 +205,8 @@ for `ReactStore`, that result is a Preact React `ReadonlySignal<R>`.
 - Saga code uses `.effect(...args)`.
 - Explicit alternate-store examples use `.withStore(...)` and treat the result as a
   signal-producing binding.
+- Direct `.value` reads mention React signal tracking, and direct JSX signal
+  rendering is limited to intentional signal-aware JSX positions.
 
 ## See also
 
