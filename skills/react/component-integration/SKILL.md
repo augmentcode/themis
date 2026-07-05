@@ -4,7 +4,7 @@ description: >-
   ReactStore component integration guidance for React app/root wiring. Covers
   where to create/configure ReactStore, init/dispose ownership, app saga startup
   with reactStore.runSaga(sagaFn), direct selector signal reads in JSX/TSX,
-  selector .useValue(...args) fallbacks for hook/plain-value boundaries, and
+  Babel transform/useSignals tracking, selector .useValue(...args) fallbacks for hook/plain-value boundaries, and
   Store-first dispatch without Svelte or StreamingStore lifecycle rules.
 type: sub-skill
 requires:
@@ -13,12 +13,14 @@ requires:
   - react/selector-lifecycle
 sources:
   - "@augmentcode/themis/react-store"
+  - ../signals/SKILL.md
   - ../selector-lifecycle/SKILL.md
   - ../store/SKILL.md
 triggers:
   - React component integration
   - ReactStore component wiring
   - TSX Store dispatch
+  - React signal component
   - selector .useValue component
 ---
 # React component integration — ReactStore app wiring
@@ -52,7 +54,8 @@ export type AppState = StoreState<typeof reactStore>;
 
 Key rules:
 
-- Use `ReactStore` only from `@augmentcode/themis/react-store` for this React apppath.
+- Use `ReactStore` only from `@augmentcode/themis/react-store` for this React app
+  path.
 - Use `reactStore.createSelector(...)` for app-local selectors so state inferencefollows the configured store.
 - Do not add package-owned `@internal_` reducers or internal sagas.
 - Do not create a new `ReactStore` per component, route, hook call, or render.
@@ -88,7 +91,9 @@ if (import.meta.hot) {
 }
 ```
 
-Pass preloaded state to `reactStore.init(preloadedState)` when the app needshydration. Initialize before selector reads because `ReactStore.getSignalState()`throws before `init()` and after `dispose()`.
+Pass preloaded state to `reactStore.init(preloadedState)` when the app needs
+hydration. Initialize before selector reads because `ReactStore.getSignalState()`
+throws before `init()` and after `dispose()`.
 
 ## 3. Dispose at the same owner boundary
 
@@ -114,7 +119,9 @@ selectors or `.useValue(...args)` fallbacks that need the initialized store.
 
 ## 4. Start app sagas with `reactStore.runSaga(sagaFn)`
 
-`reactStore.init()` starts package-owned runtime work but does not auto-start appsagas. Start each app saga explicitly after initialization and keep the returnedcancel function when the saga has a shorter lifetime than the whole store.
+`reactStore.init()` starts package-owned runtime work but does not auto-start app
+sagas. Start each app saga explicitly after initialization and keep the returned
+cancel function when the saga has a shorter lifetime than the whole store.
 
 ```ts
 // src/main.tsx
@@ -140,6 +147,13 @@ supports it. Use `.useValue(...args)` only for third-party components, existing
 boundaries, or hook contracts that require a plain value and are impractical to
 adapt.
 
+When a component reads `signal.value`, make sure the file is covered by the
+`@preact/signals-react` Babel transform or call `useSignals()` from
+`@preact/signals-react/runtime` in the reading component/custom hook. Passing a
+`ReadonlySignal<T>` to a signal-aware child, or rendering a signal directly in a
+JSX text position, is valid when intentional; do not treat the signal object as a
+plain value for props, conditions, array operations, or serialization.
+
 ```tsx
 import { reactStore } from "../store/react-store";
 import { selectTodoById } from "../store/todos/todos-selectors";
@@ -161,10 +175,13 @@ export function TodoRow({ id }: { id: string }) {
 Component rules:
 
 - Prefer direct selector calls for signal-aware components and custom hooks.
+- Ensure `.value` reads are tracked by the Babel transform or `useSignals()`.
 - Use `.useValue(...args)` only in React components or custom hooks that truly need a
   plain value.
-- Import or otherwise receive the configured `ReactStore` instance and dispatchwith `reactStore.dispatch(action)` in event handlers.
-- Use `.select(reactStore.state, ...args)` for one-shot reads inside handlers,callbacks, tests, or pure composition.
+- Import or otherwise receive the configured `ReactStore` instance and dispatch
+  with `reactStore.dispatch(action)` in event handlers.
+- Use `.select(reactStore.state, ...args)` for one-shot reads inside handlers,
+  callbacks, tests, or pure composition.
 - Do not use `.useValue(...args)` as the default just to avoid adapting a consumer to
   accept a Preact React signal object.
 - Do not create `useEffect` or custom hooks that carry business logic or side effects
@@ -204,7 +221,8 @@ function AppRoot() {
 }
 ```
 
-Initialize at the bootstrap/root owner before rendering selector users, or renderno selector-using children until after explicit initialization has completed.
+Initialize at the bootstrap/root owner before rendering selector users, or render
+no selector-using children until after explicit initialization has completed.
 
 ### Creating stores in components or hooks
 
@@ -225,9 +243,25 @@ Do not use Svelte `$selector` syntax, Svelte readables, `+layout.svelte`, Svelte
 context/`onDestroy`, `Store` from `@augmentcode/themis/svelte-store`,
 `StreamingStore`, or Kefir observables in this React app path.
 
+### Treating direct selector signals as plain values
+
+```tsx
+// ❌ WRONG: todos is a ReadonlySignal<Todo[]>, not Todo[].
+function TodoCount() {
+  const todos = selectTodos();
+  return <span>{todos.length}</span>;
+}
+```
+
+Read `todos.value.length` in a tracked component, pass the signal to a
+signal-aware child, or use `.useValue(...args)` only at a documented plain-value
+fallback boundary.
+
 ## 8. See also
 
 - `react/store/SKILL.md` — `ReactStore` import, lifecycle, and `getSignalState()`.
+- `react/signals/SKILL.md` — Preact Signals `.value`, tracking, direct JSX signal
+  rendering, and component-local signal hooks.
 - `react/selector-lifecycle/SKILL.md` — selector call modes across components,handlers, tests, composition, explicit binding, and sagas.
 - `react/selectors/SKILL.md` — selector authoring for Preact React signals.
 - `../setup/SKILL.md` — first-time Store-family selection and setup.
