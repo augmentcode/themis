@@ -8,7 +8,7 @@ export const rule = createArchitectureRule({
   summary: "Selector readable form was called from an unsafe callback or function context.",
   why: "Bare `selectFoo()` creates a Svelte readable using component context and is only safe during component initialization.",
   fix: "Use `selectFoo.select(store.state, args)` in callbacks/tests or `yield* selectFoo.effect(args)` in sagas; reserve `selectFoo()` for component init.",
-  create(_context, { report }) {
+  create(_context, { classifyPath, report }) {
     const selectorImports = createImportedSelectorTracker();
     let functionDepth = 0;
 
@@ -29,6 +29,8 @@ export const rule = createArchitectureRule({
       ArrowFunctionExpression: enterFunction,
       "ArrowFunctionExpression:exit": exitFunction,
       CallExpression(node) {
+        if (classifyPath().isReactComponent) return;
+
         // Bare readable selectors are only safe while a component initializes.
         // Any nested function/callback may run later and must use an explicit mode.
         if (functionDepth === 0) return;
