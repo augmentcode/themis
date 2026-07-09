@@ -82,15 +82,16 @@ export const createSelectorFromReadableState = <TState = StoreState, ARGS extend
   const getSelectorFlushManager = () =>
     selectorFlushManager ?? resolveSelectorFlushManager(selectorFlushManagerOrFrequency);
   const getOutputCacheForStateSource = createStateSourceOutputCache();
-  const boundSelector: (
-    readableStoreState: Readable<TState>,
-    stateSourceCacheKey: object,
-    ...restArgs: ReadableArgs<ARGS>
-  ) => Readable<R> = (
-    readableStoreState: Readable<TState>,
-    stateSourceCacheKey: object,
-    ...restArgs: ReadableArgs<ARGS>
-  ): Readable<R> => {
+  const boundSelector = ({
+    readableStoreState,
+    stateSourceCacheKey = readableStoreState,
+    args,
+  }: {
+    readableStoreState: Readable<TState>;
+    stateSourceCacheKey?: object;
+    args: ReadableArgs<ARGS>;
+  }): Readable<R> => {
+    const restArgs = args;
     return getOutputCacheForStateSource(stateSourceCacheKey).getOrCreate(selectorFunc, restArgs, () => {
       // Cached selector here is lockable, means it will return prev value when store is locked for updates
       const cachedSelector = createCachedSelector<TState, ARGS, R>(selectorFunc, {
@@ -112,14 +113,14 @@ export const createSelectorFromReadableState = <TState = StoreState, ARGS extend
 
   const readableSelector = ((...restArgs: ReadableArgs<ARGS>) => {
     const readableState = getReadableState();
-    return boundSelector(readableState, readableState, ...restArgs);
+    return boundSelector({ readableStoreState: readableState, args: restArgs });
   }) as StoreSelector<R, ARGS, TState>;
 
   readableSelector.withStore =
     (store: StoreReadableStateSource<TState> | ReduxStore) =>
     (...args: ReadableArgs<ARGS>) => {
       const { cacheKey, readableState } = resolveReadableStateWithCacheKey(store);
-      return boundSelector(readableState, cacheKey, ...args);
+      return boundSelector({ readableStoreState: readableState, stateSourceCacheKey: cacheKey, args });
     };
 
   readableSelector.select = selectorFunc;

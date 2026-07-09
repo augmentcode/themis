@@ -19,6 +19,7 @@ import {
   createCollectionItemSelector,
   createCollectionItemsListSelector,
   createSelector,
+  createSelectorFromReadableState,
 } from "./create-selector";
 import { createStoreStateReadable } from "./create-readable-store-state";
 
@@ -128,6 +129,43 @@ describe("createSelector", () => {
     expect(values).toEqual([6, 8, 20]);
   });
 
+  it("reuses selector readable outputs for the same state source, selector, and arguments", () => {
+    const storeState = writable<CounterState>(withUtility({ counter: { count: 2 } }));
+    const selectorStore = createMockStoreBinding(storeState);
+    const selectScaledCount = createSelector(selectorStore, (state, factor: number) => {
+      return state.counter.count * factor;
+    });
+
+    expect(selectScaledCount(3)).toBe(selectScaledCount(3));
+    expect(selectScaledCount(3)).not.toBe(selectScaledCount(4));
+  });
+
+  it("reuses direct selector readables without a selector-argument cache key", () => {
+    const storeState = writable<CounterState>(withUtility({ counter: { count: 2 } }));
+    const getReadableState = vi.fn(() => storeState);
+    const selectCount = createSelectorFromReadableState(getReadableState, (state) => state.counter.count);
+
+    expect(selectCount()).toBe(selectCount());
+    expect(getReadableState).toHaveBeenCalledTimes(2);
+  });
+
+  it("keys cached selector readables by object identity and argument order", () => {
+    type LabelArg = { label: string };
+
+    const storeState = writable<CounterState>(withUtility({ counter: { count: 2 } }));
+    const selectorStore = createMockStoreBinding(storeState);
+    const objectArg = { label: "shared" };
+    const sameShapeObjectArg = { label: "shared" };
+    const selectOrderedArgs = createSelector(
+      selectorStore,
+      (_state, first: string | LabelArg, second: string | LabelArg) => [first, second]
+    );
+
+    expect(selectOrderedArgs(objectArg, "suffix")).toBe(selectOrderedArgs(objectArg, "suffix"));
+    expect(selectOrderedArgs(objectArg, "suffix")).not.toBe(selectOrderedArgs(sameShapeObjectArg, "suffix"));
+    expect(selectOrderedArgs(objectArg, "suffix")).not.toBe(selectOrderedArgs("suffix", objectArg));
+  });
+
   it("reads selector cache locks from the internal store utility domain", () => {
     const storeState = writable<CounterState>(withUtility({ counter: { count: 2 } }));
     const selectorStore = createMockStoreBinding(storeState);
@@ -179,6 +217,31 @@ describe("createSelector", () => {
 
     expect(store.subscribe).toHaveBeenCalledTimes(1);
     expect(values).toEqual([1, 7]);
+  });
+
+  it("does not share cached selector readables across explicit redux stores", () => {
+    const initialStateA = withUtility({ counter: { count: 1 } });
+    const initialStateB = withUtility({ counter: { count: 5 } });
+    const { store: storeA } = createMockStore(initialStateA);
+    const { store: storeB } = createMockStore(initialStateB);
+    const selectorStore = createMockStoreBinding(writable<CounterState>(initialStateA));
+    const selectCount = createSelector(selectorStore, (state) => state.counter.count);
+    const selectCountFromA = selectCount.withStore(storeA);
+    const selectCountFromB = selectCount.withStore(storeB);
+
+    expect(selectCountFromA()).toBe(selectCountFromA());
+    expect(selectCountFromA()).not.toBe(selectCountFromB());
+  });
+
+  it("does not share cached selector readables across explicit readable state sources", () => {
+    const sourceA = createMockStoreBinding(writable<CounterState>(withUtility({ counter: { count: 1 } })));
+    const sourceB = createMockStoreBinding(writable<CounterState>(withUtility({ counter: { count: 5 } })));
+    const selectCount = createSelector(sourceA, (state) => state.counter.count);
+    const selectCountFromA = selectCount.withStore(sourceA);
+    const selectCountFromB = selectCount.withStore(sourceB);
+
+    expect(selectCountFromA()).toBe(selectCountFromA());
+    expect(selectCountFromA()).not.toBe(selectCountFromB());
   });
 });
 
