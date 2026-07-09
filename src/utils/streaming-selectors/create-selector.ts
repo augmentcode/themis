@@ -6,6 +6,10 @@ import {
   createCachedSelector,
   type SelectorTraceReporter,
 } from "../selector-core/create-cached-selector";
+import {
+  createSelectorOutputCache,
+  type SelectorOutputCache,
+} from "../selector-core/selector-output-cache";
 import { areStoreUpdatesLocked } from "../selector-core/store-update-lock";
 import {
   DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
@@ -79,6 +83,21 @@ const resolveStreamState = <TState>(
   return store.getStreamState();
 };
 
+const createStateSourceOutputCache = () => {
+  const cachesByStateSource = new WeakMap<object, SelectorOutputCache>();
+
+  return (stateSource: object): SelectorOutputCache => {
+    const existing = cachesByStateSource.get(stateSource);
+    if (existing) {
+      return existing;
+    }
+
+    const cache = createSelectorOutputCache();
+    cachesByStateSource.set(stateSource, cache);
+    return cache;
+  };
+};
+
 export const createSelectorFromStreamState = <TState = StoreState, ARGS extends any[] = [], R = unknown>(
   getStreamState: () => Observable<TState, any>,
   selectorFunc: StoreSelectorCallback<R, ARGS, TState>,
@@ -90,24 +109,27 @@ export const createSelectorFromStreamState = <TState = StoreState, ARGS extends 
     : resolveSelectorFlushManager(selectorFlushManagerOrFrequency);
   const getSelectorFlushManager = () =>
     selectorFlushManager ?? resolveSelectorFlushManager(selectorFlushManagerOrFrequency);
+  const getOutputCacheForStateSource = createStateSourceOutputCache();
   const boundSelector = (
     streamStoreState: Observable<TState, any>,
     ...restArgs: StreamingArgs<ARGS>
   ): Observable<R, any> => {
-    const cachedSelector = createCachedSelector<TState, ARGS, R>(selectorFunc, {
-      lockUpdatesPredicate: areStoreUpdatesLocked,
-      traceReporter,
+    return getOutputCacheForStateSource(streamStoreState).getOrCreate(selectorFunc, restArgs, () => {
+      const cachedSelector = createCachedSelector<TState, ARGS, R>(selectorFunc, {
+        lockUpdatesPredicate: areStoreUpdatesLocked,
+        traceReporter,
+      });
+      const streamArgs = restArgs.map(toKefirObservable);
+      const combinedArgs = [streamStoreState, ...streamArgs] as Array<Observable<any, any>>;
+
+      const combined = Kefir.combine(combinedArgs as any) as Observable<any[], any>;
+
+      const selected = combined.map(([storeState, ...args]) => {
+        return cachedSelector(storeState as TState, ...(args as ARGS));
+      });
+
+      return createThrottledObservable(selected, getSelectorFlushManager()).toProperty();
     });
-    const streamArgs = restArgs.map(toKefirObservable);
-    const combinedArgs = [streamStoreState, ...streamArgs] as Array<Observable<any, any>>;
-
-    const combined = Kefir.combine(combinedArgs as any) as Observable<any[], any>;
-
-    const selected = combined.map(([storeState, ...args]) => {
-      return cachedSelector(storeState as TState, ...(args as ARGS));
-    });
-
-    return createThrottledObservable(selected, getSelectorFlushManager()).toProperty();
   };
 
   const streamSelector = ((...restArgs: StreamingArgs<ARGS>) => {
