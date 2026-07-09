@@ -7,6 +7,10 @@ import {
   createCachedSelector,
   type SelectorTraceReporter,
 } from "../selector-core/create-cached-selector";
+import {
+  createSelectorOutputCache,
+  type SelectorOutputCache,
+} from "../selector-core/selector-output-cache";
 import { areStoreUpdatesLocked } from "../selector-core/store-update-lock";
 import {
   DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
@@ -63,14 +67,41 @@ const isSignalStateSource = <TState = StoreState>(arg: unknown): arg is StoreSig
   return "getSignalState" in arg && typeof arg.getSignalState === "function";
 };
 
-const resolveSignalState = <TState>(
+type ResolvedSignalStateSource<TState> = {
+  cacheKey: object;
+  signalState: ReadonlySignal<TState>;
+};
+
+const resolveSignalStateSource = <TState>(
   store: StoreSignalStateSource<TState> | ReadonlySignal<TState>
-): ReadonlySignal<TState> => {
+): ResolvedSignalStateSource<TState> => {
   if (isSignal<TState>(store)) {
-    return store;
+    return { cacheKey: store, signalState: store };
   }
 
-  return store.getSignalState();
+  return { cacheKey: store, signalState: store.getSignalState() };
+};
+
+const createSignalStateSource = <TState>(
+  signalState: ReadonlySignal<TState>
+): ResolvedSignalStateSource<TState> => ({
+  cacheKey: signalState,
+  signalState,
+});
+
+const createStateSourceOutputCache = () => {
+  const cachesByStateSource = new WeakMap<object, SelectorOutputCache>();
+
+  return (stateSource: object): SelectorOutputCache => {
+    const existing = cachesByStateSource.get(stateSource);
+    if (existing) {
+      return existing;
+    }
+
+    const cache = createSelectorOutputCache();
+    cachesByStateSource.set(stateSource, cache);
+    return cache;
+  };
 };
 
 const readSignalArg = <T>(arg: T | ReadonlySignal<T>): T => {
@@ -92,24 +123,27 @@ export const createSelectorFromSignalState = <TState = StoreState, ARGS extends 
     : resolveSelectorFlushManager(selectorFlushManagerOrFrequency);
   const getSelectorFlushManager = () =>
     selectorFlushManager ?? resolveSelectorFlushManager(selectorFlushManagerOrFrequency);
+  const getOutputCacheForStateSource = createStateSourceOutputCache();
   const boundSelector = (
-    signalStoreState: ReadonlySignal<TState>,
+    stateSource: ResolvedSignalStateSource<TState>,
     ...restArgs: SignalArgs<ARGS>
   ): ReadonlySignal<R> => {
-    const cachedSelector = createCachedSelector<TState, ARGS, R>(selectorFunc, {
-      lockUpdatesPredicate: areStoreUpdatesLocked,
-      traceReporter,
-    });
-    const selected = computed(() => {
-      const args = restArgs.map(readSignalArg) as ARGS;
-      return cachedSelector(signalStoreState.value, ...args);
-    });
+    return getOutputCacheForStateSource(stateSource.cacheKey).getOrCreate(selectorFunc, restArgs, () => {
+      const cachedSelector = createCachedSelector<TState, ARGS, R>(selectorFunc, {
+        lockUpdatesPredicate: areStoreUpdatesLocked,
+        traceReporter,
+      });
+      const selected = computed(() => {
+        const args = restArgs.map(readSignalArg) as ARGS;
+        return cachedSelector(stateSource.signalState.value, ...args);
+      });
 
-    return createThrottledSignal(selected, getSelectorFlushManager());
+      return createThrottledSignal(selected, getSelectorFlushManager());
+    });
   };
 
   const signalSelector = ((...restArgs: SignalArgs<ARGS>) => {
-    return boundSelector(getSignalState(), ...restArgs);
+    return boundSelector(createSignalStateSource(getSignalState()), ...restArgs);
   }) as StoreReactSelector<R, ARGS, TState>;
 
   signalSelector.useValue = (...args: SignalArgs<ARGS>) => {
@@ -117,7 +151,7 @@ export const createSelectorFromSignalState = <TState = StoreState, ARGS extends 
     return signalSelector(...args).value;
   };
   signalSelector.withStore = (store: StoreSignalStateSource<TState> | ReadonlySignal<TState>) => {
-    return (...args: SignalArgs<ARGS>) => boundSelector(resolveSignalState(store), ...args);
+    return (...args: SignalArgs<ARGS>) => boundSelector(resolveSignalStateSource(store), ...args);
   };
   signalSelector.select = selectorFunc;
   signalSelector.effect = (...args: ARGS) => {
