@@ -135,6 +135,49 @@ describe("streaming createSelector", () => {
     expect(values).toEqual([6, 10]);
   });
 
+  it("reuses selector observable outputs for the same state source, selector, and arguments", () => {
+    const state = createMutableProperty<CounterState>(withUtility({ counter: { count: 2 } }));
+    const selectorStore = createMockStoreBinding(state.stream);
+    const selectScaledCount = createSelector(selectorStore, (state, factor: number) => {
+      return state.counter.count * factor;
+    });
+
+    expect(selectScaledCount(3)).toBe(selectScaledCount(3));
+    expect(selectScaledCount(3)).not.toBe(selectScaledCount(4));
+  });
+
+  it("keys cached selector observables by object identity and argument order", () => {
+    type LabelArg = { label: string };
+
+    const state = createMutableProperty<CounterState>(withUtility({ counter: { count: 2 } }));
+    const selectorStore = createMockStoreBinding(state.stream);
+    const objectArg = { label: "shared" };
+    const sameShapeObjectArg = { label: "shared" };
+    const selectOrderedArgs = createSelector(
+      selectorStore,
+      (_state, first: string | LabelArg, second: string | LabelArg) => [first, second]
+    );
+
+    expect(selectOrderedArgs(objectArg, "suffix")).toBe(selectOrderedArgs(objectArg, "suffix"));
+    expect(selectOrderedArgs(objectArg, "suffix")).not.toBe(selectOrderedArgs(sameShapeObjectArg, "suffix"));
+    expect(selectOrderedArgs(objectArg, "suffix")).not.toBe(selectOrderedArgs("suffix", objectArg));
+  });
+
+  it("does not share cached selector observables across explicit stream sources", () => {
+    const defaultState = createMutableProperty<CounterState>(withUtility({ counter: { count: 1 } }));
+    const overrideStateA = createMutableProperty<CounterState>(withUtility({ counter: { count: 5 } }));
+    const overrideStateB = createMutableProperty<CounterState>(withUtility({ counter: { count: 9 } }));
+    const selectorStore = createMockStoreBinding(defaultState.stream);
+    const overrideStoreA = createMockStoreBinding(overrideStateA.stream);
+    const overrideStoreB = createMockStoreBinding(overrideStateB.stream);
+    const selectCount = createSelector(selectorStore, (state) => state.counter.count);
+    const selectCountFromA = selectCount.withStore(overrideStoreA);
+    const selectCountFromB = selectCount.withStore(overrideStoreB);
+
+    expect(selectCountFromA()).toBe(selectCountFromA());
+    expect(selectCountFromA()).not.toBe(selectCountFromB());
+  });
+
   it("reads selector cache locks from the internal store utility domain", () => {
     const state = createMutableProperty<CounterState>(withUtility({ counter: { count: 2 } }));
     const selectorStore = createMockStoreBinding(state.stream);
