@@ -81,11 +81,10 @@ const resolveStreamState = <TState>(
 };
 
 export const createSelectorFromStreamState = <TState = StoreState, ARGS extends any[] = [], R = unknown>(
-  getStreamState: () => Observable<TState, any>,
+  stateObservable: Observable<TState, any>,
   selectorFunc: StoreSelectorCallback<R, ARGS, TState>,
   selectorFlushManagerOrFrequency: SelectorFlushManagerSource = DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
-  traceReporter?: SelectorTraceReporter<TState, R, ARGS>,
-  stateSource?: StoreStreamingStateSource<TState> | Observable<TState, any>
+  traceReporter?: SelectorTraceReporter<TState, R, ARGS>
 ): StoreStreamingSelector<R, ARGS, TState> => {
   const selectorFlushManager = typeof selectorFlushManagerOrFrequency === "function"
     ? undefined
@@ -93,12 +92,10 @@ export const createSelectorFromStreamState = <TState = StoreState, ARGS extends 
   const getSelectorFlushManager = () =>
     selectorFlushManager ?? resolveSelectorFlushManager(selectorFlushManagerOrFrequency);
   const boundSelector = (
-    source: StoreStreamingStateSource<TState> | Observable<TState, any>,
+    streamStoreState: Observable<TState, any>,
     ...restArgs: StreamingArgs<ARGS>
   ): Observable<R, any> => {
-    const streamStoreState = resolveStreamState(source);
-
-    return getOrCreate(source, selectorFunc, restArgs, () => {
+    return getOrCreate(streamStoreState, selectorFunc, restArgs, () => {
       const cachedSelector = createCachedSelector<TState, ARGS, R>(selectorFunc, {
         lockUpdatesPredicate: areStoreUpdatesLocked,
         traceReporter,
@@ -117,11 +114,12 @@ export const createSelectorFromStreamState = <TState = StoreState, ARGS extends 
   };
 
   const streamSelector = ((...restArgs: StreamingArgs<ARGS>) => {
-    return boundSelector(stateSource ?? getStreamState(), ...restArgs);
+    return boundSelector(stateObservable, ...restArgs);
   }) as StoreStreamingSelector<R, ARGS, TState>;
 
   streamSelector.withStore = (store: StoreStreamingStateSource<TState> | Observable<TState, any>) => {
-    return (...args: StreamingArgs<ARGS>) => boundSelector(store, ...args);
+    const storeObservable = resolveStreamState(store);
+    return (...args: StreamingArgs<ARGS>) => boundSelector(storeObservable, ...args);
   };
   streamSelector.select = selectorFunc;
   streamSelector.effect = (...args: ARGS) => {
@@ -144,11 +142,9 @@ const createSelectorImpl = <TStore extends StoreStreamingStateSource<any>, ARGS 
   }
 
   return createSelectorFromStreamState(
-    () => store.getStreamState(),
+    store.getStreamState(),
     selectorFunc,
-    DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
-    undefined,
-    store
+    DEFAULT_THROTTLED_SELECTOR_FREQUENCY
   );
 };
 

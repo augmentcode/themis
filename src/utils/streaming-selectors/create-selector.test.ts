@@ -163,19 +163,24 @@ describe("streaming createSelector", () => {
     expect(selectOrderedArgs(objectArg, "suffix")).not.toBe(selectOrderedArgs("suffix", objectArg));
   });
 
-  it("does not share cached selector observables across explicit stream sources", () => {
+  it("keys cached selector observables by the resolved explicit stream observable", () => {
     const defaultState = createMutableProperty<CounterState>(withUtility({ counter: { count: 1 } }));
     const sharedOverrideState = createMutableProperty<CounterState>(withUtility({ counter: { count: 5 } }));
+    const separateOverrideState = createMutableProperty<CounterState>(withUtility({ counter: { count: 5 } }));
     const selectorStore = createMockStoreBinding(defaultState.stream);
     const overrideStoreA = createMockStoreBinding(sharedOverrideState.stream);
     const overrideStoreB = createMockStoreBinding(sharedOverrideState.stream);
+    const overrideStoreC = createMockStoreBinding(separateOverrideState.stream);
     const selectCount = createSelector(selectorStore, (state) => state.counter.count);
     const selectCountFromA = selectCount.withStore(overrideStoreA);
     const selectCountFromB = selectCount.withStore(overrideStoreB);
+    const selectCountFromC = selectCount.withStore(overrideStoreC);
 
     expect(selectCountFromA()).toBe(selectCountFromA());
-    expect(selectCountFromA()).not.toBe(selectCountFromB());
-    expect(selectCountFromA()).not.toBe(selectCount.withStore(sharedOverrideState.stream)());
+    expect(selectCountFromA()).toBe(selectCountFromB());
+    expect(selectCountFromA()).toBe(selectCount.withStore(sharedOverrideState.stream)());
+    expect(selectCount()).not.toBe(selectCountFromA());
+    expect(selectCountFromA()).not.toBe(selectCountFromC());
   });
 
   it("reads selector cache locks from the internal store utility domain", () => {
@@ -210,7 +215,7 @@ describe("streaming createSelector", () => {
     vi.advanceTimersByTime(0);
     subscription.unsubscribe();
 
-    expect(overrideStore.getStreamState).toHaveBeenCalledTimes(2);
+    expect(overrideStore.getStreamState).toHaveBeenCalledTimes(1);
     expect(values).toEqual([5, 6]);
   });
 
