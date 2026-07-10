@@ -72,7 +72,8 @@ export class StreamingStore<
       () => this.getStreamState(),
       selectorFunc,
       () => this.getSelectorFlushManager(),
-      this.getSelectorTraceReporter<StoreBoundState<TStateMap>, R, ARGS>()
+      this.getSelectorTraceReporter<StoreBoundState<TStateMap>, R, ARGS>(),
+      this
     );
   }
 

@@ -6,10 +6,7 @@ import {
   createCachedSelector,
   type SelectorTraceReporter,
 } from "../selector-core/create-cached-selector";
-import {
-  createSelectorOutputCache,
-  type SelectorOutputCache,
-} from "../selector-core/selector-output-cache";
+import { getOrCreate } from "../selector-core/selector-output-cache";
 import { areStoreUpdatesLocked } from "../selector-core/store-update-lock";
 import {
   DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
@@ -83,38 +80,25 @@ const resolveStreamState = <TState>(
   return store.getStreamState();
 };
 
-const createStateSourceOutputCache = () => {
-  const cachesByStateSource = new WeakMap<object, SelectorOutputCache>();
-
-  return (stateSource: object): SelectorOutputCache => {
-    const existing = cachesByStateSource.get(stateSource);
-    if (existing) {
-      return existing;
-    }
-
-    const cache = createSelectorOutputCache();
-    cachesByStateSource.set(stateSource, cache);
-    return cache;
-  };
-};
-
 export const createSelectorFromStreamState = <TState = StoreState, ARGS extends any[] = [], R = unknown>(
   getStreamState: () => Observable<TState, any>,
   selectorFunc: StoreSelectorCallback<R, ARGS, TState>,
   selectorFlushManagerOrFrequency: SelectorFlushManagerSource = DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
-  traceReporter?: SelectorTraceReporter<TState, R, ARGS>
+  traceReporter?: SelectorTraceReporter<TState, R, ARGS>,
+  stateSource?: StoreStreamingStateSource<TState> | Observable<TState, any>
 ): StoreStreamingSelector<R, ARGS, TState> => {
   const selectorFlushManager = typeof selectorFlushManagerOrFrequency === "function"
     ? undefined
     : resolveSelectorFlushManager(selectorFlushManagerOrFrequency);
   const getSelectorFlushManager = () =>
     selectorFlushManager ?? resolveSelectorFlushManager(selectorFlushManagerOrFrequency);
-  const getOutputCacheForStateSource = createStateSourceOutputCache();
   const boundSelector = (
-    streamStoreState: Observable<TState, any>,
+    source: StoreStreamingStateSource<TState> | Observable<TState, any>,
     ...restArgs: StreamingArgs<ARGS>
   ): Observable<R, any> => {
-    return getOutputCacheForStateSource(streamStoreState).getOrCreate(selectorFunc, restArgs, () => {
+    const streamStoreState = resolveStreamState(source);
+
+    return getOrCreate(source, selectorFunc, restArgs, () => {
       const cachedSelector = createCachedSelector<TState, ARGS, R>(selectorFunc, {
         lockUpdatesPredicate: areStoreUpdatesLocked,
         traceReporter,
@@ -133,11 +117,11 @@ export const createSelectorFromStreamState = <TState = StoreState, ARGS extends 
   };
 
   const streamSelector = ((...restArgs: StreamingArgs<ARGS>) => {
-    return boundSelector(getStreamState(), ...restArgs);
+    return boundSelector(stateSource ?? getStreamState(), ...restArgs);
   }) as StoreStreamingSelector<R, ARGS, TState>;
 
   streamSelector.withStore = (store: StoreStreamingStateSource<TState> | Observable<TState, any>) => {
-    return (...args: StreamingArgs<ARGS>) => boundSelector(resolveStreamState(store), ...args);
+    return (...args: StreamingArgs<ARGS>) => boundSelector(store, ...args);
   };
   streamSelector.select = selectorFunc;
   streamSelector.effect = (...args: ARGS) => {
@@ -159,7 +143,13 @@ const createSelectorImpl = <TStore extends StoreStreamingStateSource<any>, ARGS 
     throw new TypeError("createSelector requires a selector function as the second argument.");
   }
 
-  return createSelectorFromStreamState(() => store.getStreamState(), selectorFunc);
+  return createSelectorFromStreamState(
+    () => store.getStreamState(),
+    selectorFunc,
+    DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
+    undefined,
+    store
+  );
 };
 
 export const createSelector = createSelectorImpl as CreateStreamingSelector;
