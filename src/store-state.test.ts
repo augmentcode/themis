@@ -75,11 +75,11 @@ type _StreamingStoreStateMatchesStore = Assert<IsEqual<StoreState<typeof streami
 type _ReactStoreStateMatchesStore = Assert<IsEqual<StoreState<typeof reactStoreWithCounter>, ExpectedStoreWithCounterState>>;
 type StoreWithCounterStateGetter = typeof storeWithCounter.state;
 type _StoreStateGetterPreservesCounterState = Assert<IsEqual<StoreWithCounterStateGetter, StoreWithCounterState>>;
-type StoreWithCounterReadableState = ReturnType<typeof storeWithCounter.getReadableState>;
+type StoreWithCounterReadableState = ReturnType<typeof storeWithCounter.getStateObservable>;
 type _StoreReadableStatePreservesCounterState = Assert<IsEqual<StoreWithCounterReadableState, Readable<StoreWithCounterState>>>;
-type StreamingStoreStreamState = ReturnType<typeof streamingStoreWithCounter.getStreamState>;
+type StreamingStoreStreamState = ReturnType<typeof streamingStoreWithCounter.getStateObservable>;
 type _StreamingStatePreservesCounterState = Assert<IsEqual<StreamingStoreStreamState, KefirObservable<ExpectedStoreWithCounterState, any>>>;
-type ReactStoreSignalState = ReturnType<typeof reactStoreWithCounter.getSignalState>;
+type ReactStoreSignalState = ReturnType<typeof reactStoreWithCounter.getStateObservable>;
 type _ReactSignalStatePreservesCounterState = Assert<IsEqual<ReactStoreSignalState, ReadonlySignal<ExpectedStoreWithCounterState>>>;
 type StoreWithCounterDispatchGetter = typeof storeWithCounter.dispatch;
 type _StoreDispatchGetterMatchesReduxDispatch = Assert<IsEqual<StoreWithCounterDispatchGetter, ReduxStore<StoreState, UnknownAction>['dispatch']>>;
@@ -124,7 +124,7 @@ const selectCounterValue = storeWithCounter.createSelector((state, multiplier: n
   return value * multiplier;
 });
 
-const selectStreamingCounterValue = streamingStoreWithCounter.createSelector((state, multiplier: number) => {
+const createStreamingCounterValueSelector = () => streamingStoreWithCounter.createSelector((state, multiplier: number) => {
   const value: number = state.counter.value;
   return value * multiplier;
 });
@@ -134,7 +134,8 @@ const selectReactCounterValue = reactStoreWithCounter.createSelector((state, mul
   return value * multiplier;
 });
 
-type _StreamingSelectorReturnsObservable = Assert<IsEqual<ReturnType<typeof selectStreamingCounterValue>, KefirObservable<number, any>>>;
+type StreamingCounterValueSelector = ReturnType<typeof createStreamingCounterValueSelector>;
+type _StreamingSelectorReturnsObservable = Assert<IsEqual<ReturnType<StreamingCounterValueSelector>, KefirObservable<number, any>>>;
 type _ReactSelectorReturnsSignal = Assert<IsEqual<ReturnType<typeof selectReactCounterValue>, ReadonlySignal<number>>>;
 type _ReactSelectorUseReturnsValue = Assert<IsEqual<ReturnType<typeof selectReactCounterValue.useValue>, number>>;
 
@@ -153,6 +154,7 @@ const standaloneReactSelectCounterValue = createReactSelector(reactStoreWithCoun
   state.todos;
   return value * multiplier;
 });
+const selectStreamingCounterValue = undefined as unknown as StreamingCounterValueSelector;
 
 const storeWithReducerObjects = new Store({
   counter: reducerObjectCounterReducer,

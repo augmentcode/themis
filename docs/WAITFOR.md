@@ -33,7 +33,7 @@ function* waitFor<ARGS extends any[], R>(
 | Parameter | Type | Description |
 | --- | --- | --- |
 | selector | StoreSelector<R, ARGS> | A named selector; for production app-local selectors, create it with `store.createSelector(...)` |
-| args | ARGS | Arguments to pass to the selector (use [] for no-arg selectors) |
+| args | ARGS | Stable arguments to pass to the selector (use [] for no-arg selectors) |
 | isExpectedValue | (value: R, prevVal: R | undefined | null) => boolean | Predicate that returns true when the condition is met |
 | timeoutMs | number (optional) | Maximum wait time in milliseconds |
 
@@ -103,6 +103,12 @@ function* processItem(itemId: string) {
 }
 ```
 
+Use the same selector argument stability policy as `.effect(...)` and selector
+channels: prefer primitive scalar args in the tuple, and avoid fresh object,
+array, or function literals. Object/function args are valid only when the
+selector intentionally keys by a stable reference, such as a memoized config or
+existing source object.
+
 ### Using Previous Value
 
 The predicate receives both the current and previous value, enabling change detection:
@@ -143,6 +149,7 @@ function* waitForCompletion(taskId: string) {
 3. **Add timeouts for production code** — Prevent indefinite waits.
 4. **Handle the timeout case** — When using `timeoutMs`, always check the return value.
 5. **Use empty array for no-arg selectors** — `waitFor(selectFoo, [], predicate)`.
+6. **Keep selector args stable** — Prefer scalar args; pass object/function args only when their identity is stable and intentional.
 
 ### ❌ DON'T
 

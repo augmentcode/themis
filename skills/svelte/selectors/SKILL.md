@@ -55,6 +55,34 @@ For React consumers in a separate React app/package/code path, route to
 app/package/code path, route to `streaming/selectors`. Do not mix those concrete
 Store families into the Svelte app using this skill.
 
+Selector-channel helpers can consume Svelte `Store` selectors through the same
+`.select`/`.effect`-compatible read shape used by `ReactStore` and
+`StreamingStore` selectors. Pass plain stable selector arguments as the helper
+args tuple in sagas; selector-channel effects read the Redux store from saga context
+and do not call or subscribe to direct Svelte readable, React signal, or Kefir
+observable selector outputs.
+
+## Selector caching
+
+- Store-created selectors have internal selector-result caching/memoization.
+- Direct readable outputs are cached per state source + selector + arguments; repeated `selectFoo(args)` calls for the same source reuse the same Svelte readable.
+- Do not wrap selector callbacks or selector calls in extra `memoize`, `cache`, manual cache maps, debounce, or throttle layers solely for performance.
+- Prefer the same Store-bound selector + same arguments over props drilling when the receiving consumer can reasonably call the selector in valid Svelte init context; otherwise use `.select`, `.effect`, or `.withStore` as the context requires.
+
+## Stable selector arguments
+
+- Prefer primitive scalar selector arguments: ids, booleans, enum strings,
+  numbers, `null`, or `undefined`.
+- Do not pass freshly constructed object, array, or function arguments to
+  `selectFoo(...)`, `.select(state, ...)`, `.effect(...)`, `.withStore(store)(...)`,
+  selector-channel args tuples, or `waitFor` args tuples.
+- Object/function args are valid only when the identity is stable and intentional,
+  such as a module constant, memoized config, existing source object, or other
+  stable reference supported by the selected Store family.
+- Prefer selector definitions like `(state, id, includeArchived)` over
+  `(state, { id, includeArchived })`; destructure an object arg only when the
+  selector contract documents that callers pass a stable object identity.
+
 ## Do
 
 - Search for an existing selector owner by name, entity, operation, and output shape before adding one.
@@ -62,6 +90,9 @@ Store families into the Svelte app using this skill.
 - Compose selectors with `.select(state)` so there is one canonical implementation.
 - Back entity lookup selectors with `Collection<T, K>` rather than repeated array scans.
 - Treat `@internal_` state domains as implementation details even when memoization behavior references them.
+- Prefer direct Store-bound selector reuse over drilling derived props when the consumer is in valid readable context and can call the same selector with the same args.
+- Split selector options objects into scalar selector parameters when possible so
+  repeated calls share stable cache keys.
 
 ## Don't
 
@@ -69,7 +100,10 @@ Store families into the Svelte app using this skill.
 - Do not duplicate selector bodies in multiple files.
 - Do not store selector outputs in reducer state.
 - Do not use inline saga selectors for values that should be named, cached, and testable.
+- Do not add manual memoization/cache/debounce/throttle wrappers inside selector callbacks or around selector calls just to improve selector performance.
 - Do not import or apply ReactStore/signal or StreamingStore/Kefir selector patterns in this Svelte app.
+- Do not hide fresh selector object/array/function args behind helper functions;
+  pass stable scalar args or a stable intentional reference instead.
 
 ## Examples
 
@@ -92,6 +126,10 @@ export const selectTodoById = store.createSelector((state, todoId: string) => {
 
 const selectedTodo = selectTodoById.select(store.state, activeTodoId);
 ```
+
+Prefer scalar parameters like `activeTodoId`. Avoid inline object arguments such
+as `{ id: activeTodoId }` unless that object reference is stable and
+intentionally part of the selector contract.
 
 ### 3. Compose selectors with .select(state), not readable calls
 

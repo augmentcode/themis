@@ -171,6 +171,12 @@ function* debounceSearch() {
 ## Selector Channel Effects
 
 React to **selector value changes** in sagas. These handle channel lifecycle automatically.
+Selector-channel helpers accept Store-created selectors from Svelte `Store`,
+`ReactStore`, and `StreamingStore` as long as they expose the shared
+`.select(state, ...args)` / `.effect(...args)` selector read shape. In saga code,
+pass plain, stable selector arguments just as you would to `.effect(...)`; do not
+pass or subscribe to direct Svelte `Readable`, React `ReadonlySignal`, or Kefir
+`Observable` selector outputs.
 
 **Public API:** `@augmentcode/themis/saga`
 
@@ -224,13 +230,20 @@ yield* takeLatestFromSelector(selectItemById, [itemId], function* ({ payload }) 
 });
 ```
 
+Keep selector-channel args tuples stable. Prefer primitive scalar values such as
+ids, booleans, enum strings, numbers, `null`, or `undefined`; avoid fresh object,
+array, or function literals in the tuple. If an object/function selector argument
+is required, pass a stable, intentional reference such as a memoized config or
+existing source object rather than constructing it at the helper call site.
+
 ### `createChannelFromSelector` — Complex Patterns
 
 For patterns that don't fit `takeEvery`/`takeLatest`/`takeLeading` (e.g., races, conditional loops):
 
 Selector channels subscribe through the actual Redux store in saga context, using
 `getState()` for reads and `subscribe()` for change notifications. They do not
-require or receive a Svelte readable state wrapper from saga context.
+require or receive a Svelte readable state wrapper, React signal, or Kefir
+observable from saga context.
 
 ```typescript
 import { createChannelFromSelector } from "@augmentcode/themis/saga";
@@ -249,7 +262,7 @@ function* complexWatcher() {
   }
 }
 
-// With arguments
+// With stable scalar arguments
 function* watchSpecificItem(itemId: string) {
   const channel = yield* createChannelFromSelector(selectItemById, itemId);
   try {
@@ -482,7 +495,9 @@ function* watchChannel() {
    }
    ```
 
-8. **Never `take('*')` or other wildcard takes** — Wildcard takes subscribe to every dispatched action and wake the saga on each one. They are especially harmful during streaming flows where chunk actions fire continuously, because the wildcard worker competes with the intended work and amplifies scheduler load. Use concrete action creators (or arrays of action creators), or a selector-channel helper when the trigger is a state change.
+8. **Keep selector arguments stable** — In `.effect(...args)`, selector-channel args tuples, and `waitFor` args tuples, prefer scalar args over freshly constructed object/array/function args. Object/function args are valid only when their identity is stable and intentional.
+
+9. **Never `take('*')` or other wildcard takes** — Wildcard takes subscribe to every dispatched action and wake the saga on each one. They are especially harmful during streaming flows where chunk actions fire continuously, because the wildcard worker competes with the intended work and amplifies scheduler load. Use concrete action creators (or arrays of action creators), or a selector-channel helper when the trigger is a state change.
 
    ```typescript
    // ❌ BAD — wakes the saga on every action, including streaming chunks

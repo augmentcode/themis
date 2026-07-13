@@ -7,10 +7,12 @@ import {
   createCachedSelector,
   type SelectorTraceReporter,
 } from "../selector-core/create-cached-selector";
+import { getOrCreate } from "../selector-core/selector-output-cache";
 import { areStoreUpdatesLocked } from "../selector-core/store-update-lock";
 import {
   DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
   resolveSelectorFlushManager,
+  type SelectorFlushManager,
   type SelectorFlushManagerSource,
 } from "../selector-core/throttled-selector-options";
 import { createThrottledSignal } from "./selector-scheduler";
@@ -18,10 +20,16 @@ import { createThrottledSignal } from "./selector-scheduler";
 export { createCachedSelector };
 
 export type StoreSignalStateSource<TState = StoreState> = {
-  getSignalState(): ReadonlySignal<TState>;
+  getStateObservable(): ReadonlySignal<TState>;
 };
 
 type SignalState<TStore> = TStore extends StoreSignalStateSource<infer TState> ? TState : StoreState<TStore>;
+
+type StoreSelectorRuntimeSource<TState, R, ARGS extends unknown[]> = {
+  getSelectorFlushManager?: () => SelectorFlushManager;
+  getSelectorTraceReporter?: <STATE = TState, RESULT = R, SELECTOR_ARGS extends unknown[] = ARGS>() => SelectorTraceReporter<STATE, RESULT, SELECTOR_ARGS>;
+  shouldTraceSelectorCache?: () => boolean;
+};
 
 export type SignalArgs<ARGS extends any[]> = {
   [K in keyof ARGS]: ARGS[K] | ReadonlySignal<ARGS[K]>;
@@ -60,17 +68,34 @@ const isSignalStateSource = <TState = StoreState>(arg: unknown): arg is StoreSig
     return false;
   }
 
-  return "getSignalState" in arg && typeof arg.getSignalState === "function";
+  return "getStateObservable" in arg && typeof arg.getStateObservable === "function";
 };
 
-const resolveSignalState = <TState>(
-  store: StoreSignalStateSource<TState> | ReadonlySignal<TState>
-): ReadonlySignal<TState> => {
-  if (isSignal<TState>(store)) {
-    return store;
-  }
+const getStoreSelectorFlushManagerSource = <TState, R, ARGS extends unknown[]>(
+  stateSource: StoreSignalStateSource<TState> | ReadonlySignal<TState>
+): SelectorFlushManagerSource | undefined => {
+  const getSelectorFlushManager = (stateSource as StoreSelectorRuntimeSource<TState, R, ARGS>).getSelectorFlushManager;
+  return typeof getSelectorFlushManager === "function"
+    ? () => getSelectorFlushManager.call(stateSource)
+    : undefined;
+};
 
-  return store.getSignalState();
+const getStoreSelectorTraceReporter = <TState, R, ARGS extends unknown[]>(
+  stateSource: StoreSignalStateSource<TState> | ReadonlySignal<TState>
+): SelectorTraceReporter<TState, R, ARGS> | undefined => {
+  const getSelectorTraceReporter = (stateSource as StoreSelectorRuntimeSource<TState, R, ARGS>).getSelectorTraceReporter;
+  return typeof getSelectorTraceReporter === "function"
+    ? getSelectorTraceReporter.call(stateSource) as SelectorTraceReporter<TState, R, ARGS>
+    : undefined;
+};
+
+const getStoreSelectorCacheTracePredicate = <TState, R, ARGS extends unknown[]>(
+  stateSource: StoreSignalStateSource<TState> | ReadonlySignal<TState>
+): (() => boolean) | undefined => {
+  const shouldTraceSelectorCache = (stateSource as StoreSelectorRuntimeSource<TState, R, ARGS>).shouldTraceSelectorCache;
+  return typeof shouldTraceSelectorCache === "function"
+    ? () => shouldTraceSelectorCache.call(stateSource)
+    : undefined;
 };
 
 const readSignalArg = <T>(arg: T | ReadonlySignal<T>): T => {
@@ -81,35 +106,65 @@ const readSignalArg = <T>(arg: T | ReadonlySignal<T>): T => {
   return arg;
 };
 
+const resolveSignalState = <TState>(
+  stateSource: StoreSignalStateSource<TState> | ReadonlySignal<TState>
+): ReadonlySignal<TState> => {
+  if (isSignal<TState>(stateSource)) {
+    return stateSource;
+  }
+
+  return stateSource.getStateObservable();
+};
+
 export const createSelectorFromSignalState = <TState = StoreState, ARGS extends any[] = [], R = unknown>(
-  getSignalState: () => ReadonlySignal<TState>,
+  stateSourceOrGetStateObservable: StoreSignalStateSource<TState> | (() => ReadonlySignal<TState>),
   selectorFunc: StoreSelectorCallback<R, ARGS, TState>,
   selectorFlushManagerOrFrequency: SelectorFlushManagerSource = DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
-  traceReporter?: SelectorTraceReporter<TState, R, ARGS>
+  traceReporter?: SelectorTraceReporter<TState, R, ARGS>,
+  stateSource?: StoreSignalStateSource<TState> | ReadonlySignal<TState>,
+  shouldTraceSelectorCache?: () => boolean
 ): StoreReactSelector<R, ARGS, TState> => {
-  const selectorFlushManager = typeof selectorFlushManagerOrFrequency === "function"
+  const sourceBoundSelector = typeof stateSourceOrGetStateObservable === "function" ? undefined : stateSourceOrGetStateObservable;
+  const getStateObservable = typeof stateSourceOrGetStateObservable === "function"
+    ? stateSourceOrGetStateObservable
+    : () => resolveSignalState(stateSourceOrGetStateObservable);
+  const defaultStateSource = sourceBoundSelector ?? stateSource;
+  const effectiveSelectorFlushManagerOrFrequency = defaultStateSource
+    ? getStoreSelectorFlushManagerSource<TState, R, ARGS>(defaultStateSource) ?? selectorFlushManagerOrFrequency
+    : selectorFlushManagerOrFrequency;
+  const effectiveTraceReporter = traceReporter ?? (defaultStateSource
+    ? getStoreSelectorTraceReporter<TState, R, ARGS>(defaultStateSource)
+    : undefined);
+  const effectiveShouldTraceSelectorCache = shouldTraceSelectorCache ?? (defaultStateSource
+    ? getStoreSelectorCacheTracePredicate<TState, R, ARGS>(defaultStateSource)
+    : undefined);
+  const selectorFlushManager = typeof effectiveSelectorFlushManagerOrFrequency === "function"
     ? undefined
-    : resolveSelectorFlushManager(selectorFlushManagerOrFrequency);
+    : resolveSelectorFlushManager(effectiveSelectorFlushManagerOrFrequency);
   const getSelectorFlushManager = () =>
-    selectorFlushManager ?? resolveSelectorFlushManager(selectorFlushManagerOrFrequency);
+    selectorFlushManager ?? resolveSelectorFlushManager(effectiveSelectorFlushManagerOrFrequency);
   const boundSelector = (
-    signalStoreState: ReadonlySignal<TState>,
+    stateSource: StoreSignalStateSource<TState> | ReadonlySignal<TState>,
     ...restArgs: SignalArgs<ARGS>
   ): ReadonlySignal<R> => {
-    const cachedSelector = createCachedSelector<TState, ARGS, R>(selectorFunc, {
-      lockUpdatesPredicate: areStoreUpdatesLocked,
-      traceReporter,
-    });
-    const selected = computed(() => {
-      const args = restArgs.map(readSignalArg) as ARGS;
-      return cachedSelector(signalStoreState.value, ...args);
-    });
+    const signalState = resolveSignalState(stateSource);
 
-    return createThrottledSignal(selected, getSelectorFlushManager());
+    return getOrCreate(stateSource, selectorFunc, restArgs, () => {
+      const cachedSelector = createCachedSelector<TState, ARGS, R>(selectorFunc, {
+        lockUpdatesPredicate: areStoreUpdatesLocked,
+        traceReporter: effectiveTraceReporter,
+      });
+      const selected = computed(() => {
+        const args = restArgs.map(readSignalArg) as ARGS;
+        return cachedSelector(signalState.value, ...args);
+      });
+
+      return createThrottledSignal(selected, getSelectorFlushManager());
+    }, effectiveTraceReporter && effectiveShouldTraceSelectorCache?.() ? { traceReporter: effectiveTraceReporter } : undefined);
   };
 
   const signalSelector = ((...restArgs: SignalArgs<ARGS>) => {
-    return boundSelector(getSignalState(), ...restArgs);
+    return boundSelector(defaultStateSource ?? getStateObservable(), ...restArgs);
   }) as StoreReactSelector<R, ARGS, TState>;
 
   signalSelector.useValue = (...args: SignalArgs<ARGS>) => {
@@ -117,7 +172,7 @@ export const createSelectorFromSignalState = <TState = StoreState, ARGS extends 
     return signalSelector(...args).value;
   };
   signalSelector.withStore = (store: StoreSignalStateSource<TState> | ReadonlySignal<TState>) => {
-    return (...args: SignalArgs<ARGS>) => boundSelector(resolveSignalState(store), ...args);
+    return (...args: SignalArgs<ARGS>) => boundSelector(store, ...args);
   };
   signalSelector.select = selectorFunc;
   signalSelector.effect = (...args: ARGS) => {
@@ -139,7 +194,10 @@ const createSelectorImpl = <TStore extends StoreSignalStateSource<any>, ARGS ext
     throw new TypeError("createSelector requires a selector function as the second argument.");
   }
 
-  return createSelectorFromSignalState(() => store.getSignalState(), selectorFunc);
+  return createSelectorFromSignalState(
+    store,
+    selectorFunc
+  );
 };
 
 export const createSelector = createSelectorImpl as CreateReactSelector;

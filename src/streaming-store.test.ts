@@ -39,10 +39,10 @@ describe('StreamingStore', () => {
 
   it('returns streaming selectors bound to Redux store updates', () => {
     const store = new StreamingStore({ counter: counterReducer });
-    const selectCount = store.createSelector((state) => state.counter.count);
     const values: number[] = [];
 
     store.init();
+    const selectCount = store.createSelector((state) => state.counter.count);
     const subscription = selectCount().observe((value) => values.push(value));
     store.dispatch({ type: 'counter/set', payload: 2 });
     expect(values).toEqual([0]);
@@ -66,14 +66,21 @@ describe('StreamingStore', () => {
 
     try {
       const store = new StreamingStore({ counter: counterReducer });
-      const selectCount = store.createSelector((state) => state.counter.count);
 
       store.traceSelectors();
       store.init();
+      const selectCount = store.createSelector((state) => state.counter.count);
       const subscription = selectCount().observe(() => {});
       subscription.unsubscribe();
 
-      expect(consoleInfoSpy).toHaveBeenCalledTimes(1);
+      expect(consoleInfoSpy).toHaveBeenCalledWith(
+        '[themis] selector trace',
+        expect.objectContaining({
+          observableCacheRequestCount: expect.any(Number),
+          observableCacheCachedCount: expect.any(Number),
+          selectorSource: expect.stringContaining('state.counter.count'),
+        })
+      );
       expect(consoleInfoSpy).toHaveBeenCalledWith(
         '[themis] selector trace',
         expect.objectContaining({
@@ -87,16 +94,49 @@ describe('StreamingStore', () => {
     }
   });
 
+  it('traces streaming selector observable cache request and cached counts', () => {
+    const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+
+    try {
+      const store = new StreamingStore({ counter: counterReducer });
+
+      store.traceSelectors();
+      store.init();
+      const selectCount = store.createSelector((state) => state.counter.count);
+      const first = selectCount();
+      const second = selectCount();
+      const third = selectCount();
+
+      expect(second).toBe(first);
+      expect(third).toBe(first);
+
+      const cacheTraces = consoleInfoSpy.mock.calls
+        .map((call) => call[1])
+        .filter((payload) => payload && 'observableCacheRequestCount' in payload);
+      expect(cacheTraces).toHaveLength(3);
+      expect(cacheTraces[1].observableCacheRequestCount).toBe(
+        cacheTraces[0].observableCacheRequestCount + 1
+      );
+      expect(cacheTraces[2].observableCacheRequestCount).toBe(
+        cacheTraces[0].observableCacheRequestCount + 2
+      );
+      expect(cacheTraces[1].observableCacheCachedCount).toBe(cacheTraces[0].observableCacheCachedCount);
+      expect(cacheTraces[2].observableCacheCachedCount).toBe(cacheTraces[0].observableCacheCachedCount);
+    } finally {
+      consoleInfoSpy.mockRestore();
+    }
+  });
+
   it('throttles selector emissions with the configured Store option', () => {
     const store = new StreamingStore(
       { counter: counterReducer },
       undefined,
       { throttledSelectorFrequency: 10 }
     );
-    const selectCount = store.createSelector((state) => state.counter.count);
     const values: number[] = [];
 
     store.init();
+    const selectCount = store.createSelector((state) => state.counter.count);
     const subscription = selectCount().observe((value) => values.push(value));
     store.dispatch({ type: 'counter/set', payload: 2 });
     vi.advanceTimersByTime(0);
@@ -121,12 +161,12 @@ describe('StreamingStore', () => {
       undefined,
       { throttledSelectorFrequency: 10 }
     );
-    const selectCount = store.createSelector((state) => state.counter.count);
-    const selectDoubleCount = store.createSelector((state) => state.counter.count * 2);
     const countValues: number[] = [];
     const doubleValues: number[] = [];
 
     store.init();
+    const selectCount = store.createSelector((state) => state.counter.count);
+    const selectDoubleCount = store.createSelector((state) => state.counter.count * 2);
     const countSubscription = selectCount().observe((value) => countValues.push(value));
     const doubleSubscription = selectDoubleCount().observe((value) => doubleValues.push(value));
     store.dispatch({ type: 'counter/set', payload: 1 });
@@ -157,15 +197,15 @@ describe('StreamingStore', () => {
     expect(doubleValues).toEqual([0, 4]);
   });
 
-  it('throws when stream state is read before initialization', () => {
+  it('throws when a stream selector output is requested before initialization', () => {
     const store = new StreamingStore({ counter: counterReducer });
-    const selectCount = store.createSelector((state) => state.counter.count);
 
-    expect(() => store.getStreamState()).toThrow(
-      'Cannot access StreamingStore.getStreamState() before Store.init() has been called.'
+    expect(() => store.getStateObservable()).toThrow(
+      'Cannot access StreamingStore.getStateObservable() before Store.init() has been called.'
     );
+    const selectCount = store.createSelector((state) => state.counter.count);
     expect(() => selectCount()).toThrow(
-      'Cannot access StreamingStore.getStreamState() before Store.init() has been called.'
+      'Cannot access StreamingStore.getStateObservable() before Store.init() has been called.'
     );
   });
 
@@ -173,11 +213,11 @@ describe('StreamingStore', () => {
     const store = new StreamingStore({ counter: counterReducer });
 
     store.init();
-    expect(store.getStreamState()).toBeInstanceOf(Kefir.Observable);
+    expect(store.getStateObservable()).toBeInstanceOf(Kefir.Observable);
     store.dispose();
 
-    expect(() => store.getStreamState()).toThrow(
-      'Cannot access StreamingStore.getStreamState() before Store.init() has been called.'
+    expect(() => store.getStateObservable()).toThrow(
+      'Cannot access StreamingStore.getStateObservable() before Store.init() has been called.'
     );
   });
 });

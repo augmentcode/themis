@@ -57,7 +57,7 @@ selector observation rules in the same app/package/code path.
 - Use `.select(reactStore.state, ...args)` in handlers and tests when a plain
   snapshot value is needed.
 - Use `.select(state, ...args)` inside selector callbacks to compose selectors.
-- Use `.effect(...args)` in sagas and selector-channel helpers.
+- Use `.effect(...args)` in sagas, and pass ReactStore selectors with plain args to selector-channel helpers when a saga needs to react to selector value changes.
 - Use `.withStore(...)` only when you intentionally need to bind the selector to an
   explicit `ReactStore` or compatible signal state source.
 
@@ -72,6 +72,9 @@ selector observation rules in the same app/package/code path.
   is not a replacement for `.select(state, ...args)` in handlers/tests/sagas.
 - `.select(state, ...args)` and `.effect(...args)` take plain selector arguments,
   not signal wrappers.
+- Selector-channel helpers use the Redux store from saga context; they do not
+  subscribe to direct `ReadonlySignal`, Svelte readable, or Kefir observable
+  selector outputs.
 
 ## Don't
 

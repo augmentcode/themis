@@ -61,11 +61,11 @@ selector consumption. Generic Redux/redux-saga guidance remains in `../core/`.
 | Route | Use when |
 | --- | --- |
 | `./signals/SKILL.md` | General Preact Signals guidance for ReactStore apps: `ReadonlySignal<T>`, `.value`, `computed`, Babel transform/`useSignals()` tracking, direct JSX signal rendering, component-local signal hooks, and avoiding module-level shared signal state. |
-| `./store/SKILL.md` | Choosing/importing `ReactStore`, initialization/disposal, `getSignalState()`, shared Store runtime behavior, or Store-family contrast. |
-| `./selectors/SKILL.md` | Authoring selectors whose direct calls return `ReadonlySignal<R>`, preferring direct signals in React consumers, using `.useValue(...args)` only for hook/plain-value fallback paths, plus `.withStore`, `.select`, and saga-only `.effect`. |
+| `./store/SKILL.md` | Choosing/importing `ReactStore`, initialization/disposal, `getStateObservable()`, shared Store runtime behavior, or Store-family contrast. |
+| `./selectors/SKILL.md` | Authoring selectors whose direct calls return cached `ReadonlySignal<R>` outputs, preferring direct signals in React consumers, using `.useValue(...args)` only for hook/plain-value fallback paths, plus `.withStore`, `.select`, and saga-only `.effect`. |
 | `./component-integration/SKILL.md` | Wiring `ReactStore` into JSX/TSX React apps, bootstrap/root init and disposal ownership, app saga startup through `reactStore.runSaga(sagaFn)`, React component reads through direct signals first, and Store-first dispatch. |
 | `./selector-lifecycle/SKILL.md` | Choosing React selector call modes across component render/custom hooks, direct signal-aware code, handlers/callbacks/tests, sagas, selector composition, and explicit `.withStore(...)` binding. |
-| `./selector-scheduling/SKILL.md` | React signal/`.useValue(...args)` scheduling guidance: Store-owned selector coalescing, `throttledSelectorFrequency`, package-private scheduler boundaries, and no manual debounce/audit-log misuse. |
+| `./selector-scheduling/SKILL.md` | React `ReadonlySignal`/`.useValue(...args)` scheduling guidance: same source + selector + args output reuse, Store-owned selector coalescing, `throttledSelectorFrequency`, package-private scheduler boundaries, and no manual debounce/audit-log misuse. |
 | `./migration/SKILL.md` | React migration/adoption work from local React state/context/hooks/effects/external stores to `ReactStore`, selectors, actions, reducers, sagas, signal-first component consumption, and cleanup. |
 
 First-time app setup starts at the canonical root setup skill: `../setup/SKILL.md`.
@@ -85,6 +85,7 @@ First-time app setup starts at the canonical root setup skill: `../setup/SKILL.m
   the consumer to accept a signal is impractical.
 - Direct signal outputs and `.useValue(...args)` are throttled by
   `throttledSelectorFrequency`.
+- Direct `ReadonlySignal` outputs are cached for the same state source + selector + args; do not add memoize/cache/debounce/throttle wrappers for selector performance.
 - Selector trace output is a default-off diagnostic; pass
   `{ traceSelectors: true }` only while diagnosing selector scheduling.
 - `.effect(...args)` stays saga-only; it is not a hook or render subscription.

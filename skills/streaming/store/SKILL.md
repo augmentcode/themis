@@ -3,7 +3,7 @@ name: streaming/store
 description: >-
   StreamingStore import, initialization, disposal, and Store-runtime guidance for
   the Kefir/observable Store variant. Use for @augmentcode/themis/streaming-store,
-  getStreamState(), inherited runSaga/dispatch/state behavior, and contrast with
+  getStateObservable(), inherited runSaga/dispatch/state behavior, and contrast with
   Svelte-readable Store without teaching readable selector call modes.
 type: sub-skill
 requires:
@@ -17,7 +17,7 @@ sources:
 triggers:
   - StreamingStore
   - streaming-store import
-  - getStreamState
+  - getStateObservable
   - Kefir Store
   - observable Store
 ---
@@ -43,8 +43,8 @@ const dispose = streamStore.init();
 
 ## Lifecycle rules
 
-- Construct `StreamingStore` with app-owned reducers and optional middleware,then call `streamStore.init(initialState?)` before invoking streaming selectorcalls or `streamStore.getStreamState()`.
-- `getStreamState()` returns a Kefir `Observable` backed by Redux updates afterinitialization and throws before `init()` or after `dispose()`.
+- Construct `StreamingStore` with app-owned reducers and optional middleware,then call `streamStore.init(initialState?)` before invoking streaming selectorcalls or `streamStore.getStateObservable()`.
+- `getStateObservable()` returns a Kefir `Observable` backed by Redux updates afterinitialization and throws before `init()` or after `dispose()`.
 - `streamStore.dispatch`, `streamStore.state`, `streamStore.runSaga(sagaFn)`, and`streamStore.dispose()` follow the shared Store runtime behavior documented incore Store guidance.
 - Do not manually register package-owned `@internal_` reducers or internal sagas.
 

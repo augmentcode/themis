@@ -1,6 +1,6 @@
 {
   "name": "@augmentcode/themis",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "publishConfig": {
     "access": "public"
   },
@@ -164,6 +164,10 @@
     "./eslint-plugins/plugins/direct-selector-call-mode": {
       "import": "./eslint-plugins/store/direct-selector-call-mode/plugin.mjs",
       "default": "./eslint-plugins/store/direct-selector-call-mode/plugin.mjs"
+    },
+    "./eslint-plugins/plugins/selector-argument-stability": {
+      "import": "./eslint-plugins/store/selector-argument-stability/plugin.mjs",
+      "default": "./eslint-plugins/store/selector-argument-stability/plugin.mjs"
     },
     "./eslint-plugins/plugins/duplicate-action-type": {
       "import": "./eslint-plugins/store/duplicate-action-type/plugin.mjs",

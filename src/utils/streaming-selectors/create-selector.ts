@@ -6,10 +6,12 @@ import {
   createCachedSelector,
   type SelectorTraceReporter,
 } from "../selector-core/create-cached-selector";
+import { getOrCreate } from "../selector-core/selector-output-cache";
 import { areStoreUpdatesLocked } from "../selector-core/store-update-lock";
 import {
   DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
   resolveSelectorFlushManager,
+  type SelectorFlushManager,
   type SelectorFlushManagerSource,
 } from "../selector-core/throttled-selector-options";
 import { createThrottledObservable } from "./selector-scheduler";
@@ -17,10 +19,16 @@ import { createThrottledObservable } from "./selector-scheduler";
 export { createCachedSelector };
 
 export type StoreStreamingStateSource<TState = StoreState> = {
-  getStreamState(): Observable<TState, any>;
+  getStateObservable(): Observable<TState, any>;
 };
 
 type StreamingState<TStore> = TStore extends StoreStreamingStateSource<infer TState> ? TState : StoreState<TStore>;
+
+type StoreSelectorRuntimeSource<TState, R, ARGS extends unknown[]> = {
+  getSelectorFlushManager?: () => SelectorFlushManager;
+  getSelectorTraceReporter?: <STATE = TState, RESULT = R, SELECTOR_ARGS extends unknown[] = ARGS>() => SelectorTraceReporter<STATE, RESULT, SELECTOR_ARGS>;
+  shouldTraceSelectorCache?: () => boolean;
+};
 
 export type StreamingArgs<ARGS extends any[]> = {
   [K in keyof ARGS]: ARGS[K] | Observable<ARGS[K], any>;
@@ -58,7 +66,34 @@ const isStreamingStateSource = <TState = StoreState>(arg: unknown): arg is Store
     return false;
   }
 
-  return "getStreamState" in arg && typeof arg.getStreamState === "function";
+  return "getStateObservable" in arg && typeof arg.getStateObservable === "function";
+};
+
+const getStoreSelectorFlushManagerSource = <TState, R, ARGS extends unknown[]>(
+  stateSource: StoreStreamingStateSource<TState> | Observable<TState, any>
+): SelectorFlushManagerSource | undefined => {
+  const getSelectorFlushManager = (stateSource as StoreSelectorRuntimeSource<TState, R, ARGS>).getSelectorFlushManager;
+  return typeof getSelectorFlushManager === "function"
+    ? () => getSelectorFlushManager.call(stateSource)
+    : undefined;
+};
+
+const getStoreSelectorTraceReporter = <TState, R, ARGS extends unknown[]>(
+  stateSource: StoreStreamingStateSource<TState> | Observable<TState, any>
+): SelectorTraceReporter<TState, R, ARGS> | undefined => {
+  const getSelectorTraceReporter = (stateSource as StoreSelectorRuntimeSource<TState, R, ARGS>).getSelectorTraceReporter;
+  return typeof getSelectorTraceReporter === "function"
+    ? getSelectorTraceReporter.call(stateSource) as SelectorTraceReporter<TState, R, ARGS>
+    : undefined;
+};
+
+const getStoreSelectorCacheTracePredicate = <TState, R, ARGS extends unknown[]>(
+  stateSource: StoreStreamingStateSource<TState> | Observable<TState, any>
+): (() => boolean) | undefined => {
+  const shouldTraceSelectorCache = (stateSource as StoreSelectorRuntimeSource<TState, R, ARGS>).shouldTraceSelectorCache;
+  return typeof shouldTraceSelectorCache === "function"
+    ? () => shouldTraceSelectorCache.call(stateSource)
+    : undefined;
 };
 
 const toKefirObservable = <T>(arg: T | Observable<T, any>): Observable<T, any> => {
@@ -76,46 +111,68 @@ const resolveStreamState = <TState>(
     return store;
   }
 
-  return store.getStreamState();
+  return store.getStateObservable();
 };
 
+type StreamingStateSource<TState> = StoreStreamingStateSource<TState> | Observable<TState, any>;
+
 export const createSelectorFromStreamState = <TState = StoreState, ARGS extends any[] = [], R = unknown>(
-  getStreamState: () => Observable<TState, any>,
+  stateSourceOrGetStateObservable: StreamingStateSource<TState> | (() => Observable<TState, any>),
   selectorFunc: StoreSelectorCallback<R, ARGS, TState>,
   selectorFlushManagerOrFrequency: SelectorFlushManagerSource = DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
-  traceReporter?: SelectorTraceReporter<TState, R, ARGS>
+  traceReporter?: SelectorTraceReporter<TState, R, ARGS>,
+  stateSource?: StreamingStateSource<TState>,
+  shouldTraceSelectorCache?: () => boolean
 ): StoreStreamingSelector<R, ARGS, TState> => {
-  const selectorFlushManager = typeof selectorFlushManagerOrFrequency === "function"
+  const sourceBoundSelector = typeof stateSourceOrGetStateObservable === "function" ? undefined : stateSourceOrGetStateObservable;
+  const getStateObservable = typeof stateSourceOrGetStateObservable === "function"
+    ? stateSourceOrGetStateObservable
+    : () => resolveStreamState(stateSourceOrGetStateObservable);
+  const defaultStateSource = sourceBoundSelector ?? stateSource;
+  const effectiveSelectorFlushManagerOrFrequency = defaultStateSource
+    ? getStoreSelectorFlushManagerSource<TState, R, ARGS>(defaultStateSource) ?? selectorFlushManagerOrFrequency
+    : selectorFlushManagerOrFrequency;
+  const effectiveTraceReporter = traceReporter ?? (defaultStateSource
+    ? getStoreSelectorTraceReporter<TState, R, ARGS>(defaultStateSource)
+    : undefined);
+  const effectiveShouldTraceSelectorCache = shouldTraceSelectorCache ?? (defaultStateSource
+    ? getStoreSelectorCacheTracePredicate<TState, R, ARGS>(defaultStateSource)
+    : undefined);
+  const selectorFlushManager = typeof effectiveSelectorFlushManagerOrFrequency === "function"
     ? undefined
-    : resolveSelectorFlushManager(selectorFlushManagerOrFrequency);
+    : resolveSelectorFlushManager(effectiveSelectorFlushManagerOrFrequency);
   const getSelectorFlushManager = () =>
-    selectorFlushManager ?? resolveSelectorFlushManager(selectorFlushManagerOrFrequency);
+    selectorFlushManager ?? resolveSelectorFlushManager(effectiveSelectorFlushManagerOrFrequency);
   const boundSelector = (
-    streamStoreState: Observable<TState, any>,
+    stateSource: StreamingStateSource<TState>,
     ...restArgs: StreamingArgs<ARGS>
   ): Observable<R, any> => {
-    const cachedSelector = createCachedSelector<TState, ARGS, R>(selectorFunc, {
-      lockUpdatesPredicate: areStoreUpdatesLocked,
-      traceReporter,
-    });
-    const streamArgs = restArgs.map(toKefirObservable);
-    const combinedArgs = [streamStoreState, ...streamArgs] as Array<Observable<any, any>>;
+    const streamStoreState = resolveStreamState(stateSource);
 
-    const combined = Kefir.combine(combinedArgs as any) as Observable<any[], any>;
+    return getOrCreate(streamStoreState, selectorFunc, restArgs, () => {
+      const cachedSelector = createCachedSelector<TState, ARGS, R>(selectorFunc, {
+        lockUpdatesPredicate: areStoreUpdatesLocked,
+        traceReporter: effectiveTraceReporter,
+      });
+      const streamArgs = restArgs.map(toKefirObservable);
+      const combinedArgs = [streamStoreState, ...streamArgs] as Array<Observable<any, any>>;
 
-    const selected = combined.map(([storeState, ...args]) => {
-      return cachedSelector(storeState as TState, ...(args as ARGS));
-    });
+      const combined = Kefir.combine(combinedArgs as any) as Observable<any[], any>;
 
-    return createThrottledObservable(selected, getSelectorFlushManager()).toProperty();
+      const selected = combined.map(([storeState, ...args]) => {
+        return cachedSelector(storeState as TState, ...(args as ARGS));
+      });
+
+      return createThrottledObservable(selected, getSelectorFlushManager()).toProperty();
+    }, effectiveTraceReporter && effectiveShouldTraceSelectorCache?.() ? { traceReporter: effectiveTraceReporter } : undefined);
   };
 
   const streamSelector = ((...restArgs: StreamingArgs<ARGS>) => {
-    return boundSelector(getStreamState(), ...restArgs);
+    return boundSelector(defaultStateSource ?? getStateObservable(), ...restArgs);
   }) as StoreStreamingSelector<R, ARGS, TState>;
 
   streamSelector.withStore = (store: StoreStreamingStateSource<TState> | Observable<TState, any>) => {
-    return (...args: StreamingArgs<ARGS>) => boundSelector(resolveStreamState(store), ...args);
+    return (...args: StreamingArgs<ARGS>) => boundSelector(store, ...args);
   };
   streamSelector.select = selectorFunc;
   streamSelector.effect = (...args: ARGS) => {
@@ -137,7 +194,10 @@ const createSelectorImpl = <TStore extends StoreStreamingStateSource<any>, ARGS 
     throw new TypeError("createSelector requires a selector function as the second argument.");
   }
 
-  return createSelectorFromStreamState(() => store.getStreamState(), selectorFunc);
+  return createSelectorFromStreamState(
+    store,
+    selectorFunc
+  );
 };
 
 export const createSelector = createSelectorImpl as CreateStreamingSelector;

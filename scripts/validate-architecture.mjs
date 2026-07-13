@@ -53,6 +53,7 @@ export const architectureRules = {
   passThroughWrapper: "pass-through-wrapper",
   directSelectorCallMode: "direct-selector-call-mode",
   noExtraSelectorCaching: "no-extra-selector-caching",
+  selectorArgumentStability: "selector-argument-stability",
   waitForNamedSelector: "wait-for-named-selector",
   typedSagaYieldStar: "typed-saga-yield-star",
   autoForkingChannelHelper: "auto-forking-channel-helper",

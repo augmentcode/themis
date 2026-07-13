@@ -47,7 +47,7 @@ The top-level store lives at `src/store.ts` (or wherever you export your `Store`
 
 ```typescript
 // src/store.ts
-import { Store } from '@augmentcode/themis/svelte-store';
+import { Store } from '<selected Store family package>';
 import type { StoreState } from '@augmentcode/themis/types';
 import { mySliceReducer } from './slices/my-slice/my-slice-slice';
 import { mySliceSaga } from './slices/my-slice/sagas/my-slice-saga';
@@ -58,22 +58,12 @@ export type AppState = StoreState<typeof store>;
 
 Use `StoreState<typeof store>` for app state typing after constructing the store with app reducer maps. Constructor reducer maps preserve reducer-state inference without an explicit `: Store` annotation. Register only app-owned reducers. `Store` manages package-owned internals automatically under reserved `@internal_` names: internal reducers such as `@internal_storeUtility` are always package-managed, and the internal saga manager starts during `Store` initialization. Do not add app reducers/sagas with that prefix or couple selectors/tests to the internal state shape.
 
-Then in the root layout — initialize the store, and start each app saga explicitly by function:
+Then in the application's selected Store family root lifecycle, initialize the
+store and start each app saga explicitly by function. Use the selected Store
+family skill for component/runtime lifecycle details; core owns the file layout,
+saga registration, and reducer ownership rules.
 
-```svelte
-<script>
-  import { onDestroy, onMount } from 'svelte';
-  import { store } from '$lib/store/store';
-  import { mySliceSaga } from '$lib/store/slices/my-slice/sagas/my-slice-saga';
-  const dispose = store.init();
-  onDestroy(dispose);
-  onMount(() => store.runSaga(mySliceSaga));
-</script>
-
-{@render children()}
-```
-
-`store.init()` combines the registered reducers, creates the Redux store with middleware, lets the concrete Store variant create its selector state source, and starts the package saga manager. It does **not** start app sagas — start each one with `store.runSaga(sagaFn)` from `onMount` for mount-scoped cleanup, or imperatively and keep the returned cancel function. It derives the manager name from the saga function and rejects direct `@internal_sagaManager` usage. Register the `store.init()` disposer with `onDestroy`; that disposer delegates to `store.dispose()`, which tears down the initialized Store runtime and stops Store-owned saga tasks when the whole Store lifetime ends.
+`store.init()` combines the registered reducers, creates the Redux store with middleware, lets the concrete Store variant create its selector state source, and starts the package saga manager. It does **not** start app sagas — start each one with `store.runSaga(sagaFn)` from the family-appropriate root lifecycle, or imperatively and keep the returned cancel function. It derives the manager name from the saga function and rejects direct `@internal_sagaManager` usage. Register the `store.init()` disposer with the selected Store family lifecycle cleanup; that disposer delegates to `store.dispose()`, which tears down the initialized Store runtime and stops Store-owned saga tasks when the whole Store lifetime ends.
 
 ### Saga-only slice (no state, no reducer)
 
@@ -212,5 +202,5 @@ Source: `../SKILL.md` §1, §9 · **Priority: MEDIUM**
 
 - `core/core-policy/SKILL.md` — why types live in `-types.ts`
 - `core/actions/SKILL.md` — action naming and namespacing
-- `svelte/component-integration/SKILL.md` — Store initialization wiring
+- Selected Store family skill — Store initialization wiring
 

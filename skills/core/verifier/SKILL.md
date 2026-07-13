@@ -71,7 +71,7 @@ type VerifierEvidence = {
 
 export const evidence: VerifierEvidence = {
   instructionsRead: ["task note", "./SKILL.md", "docs/ARCHITECTURE.md"],
-  scopeFiles: ["../../svelte/selectors/SKILL.md"],
+  scopeFiles: ["skills/core/state-integrity/SKILL.md"],
   gateResults: [{ command: "git diff --check", exitCode: 0, keyOutput: "no whitespace errors" }],
   blockers: [],
 };
@@ -193,7 +193,7 @@ Use this repository's maintainer `npm run ...` scripts when reviewing package re
 - **Always require **`git diff --check` for any local diff before acceptance;whitespace errors block acceptance until fixed or explicitly scoped out by theuser.
 - **Require **`npm run validate:architecture` for Redux state, actions,selectors, sagas, reducer/slice behavior, component/store import boundaries,localStorage access, collection state, pass-through wrappers, package testpatterns, or skills/docs that govern those areas.
 - **Require **`npm test` for runtime source changes, test changes, behavioralfixes, refactors, or anything whose acceptance depends on executable behavior.Use focused tests when they cover the change; require the broader test suitefor final package behavior review when dependencies are available.
-- **Require **`npm run build` for public exports, package entrypoints,TypeScript/Svelte source, build configuration, or docs claiming build/releasereadiness.
+- **Require **`npm run build` for public exports, package entrypoints,TypeScript/component source, build configuration, or docs claiming build/releasereadiness.
 - **Require **`npm run validate:release` for release/package validation,package manifests, export surface changes, build-script changes, final releasesmoke checks, or when the task asks for release readiness. Treat it as ablocking aggregate gate and still report any nested gate diagnostics.
 
 Missing or stale evidence rules:
@@ -308,7 +308,7 @@ Pass/fail checks:
 - **FAIL** — violations are omitted from the handoff or described only as “looksokay” without command output.
 - **FAIL** — an ignore comment masks derived/duplicated Redux state or duplicateactions/selectors/sagas without a reviewed reason and owner plan.
 - **FAIL** — new action types are unnamespaced, Redux state uses non-serializabletypes, components import saga/reducer internals, sagas use`takeEvery(action.type, ...)`, sagas read inline selectors, or direct`window.localStorage` usage appears outside the safe helper layer without areviewed exception.
-- **FAIL** — RTK helpers, shared `*.store.svelte.ts` stores, object arrays incollection state, collection-internal mutations, initialState runtime objects,reducer side effects/nondeterminism, lifecycle Redux store access, or thinpass-through wrappers appear without a reviewed rule-specific exception and amigration/compatibility/sunset reason.
+- **FAIL** — RTK helpers, legacy family-local shared stores, object arrays incollection state, collection-internal mutations, initialState runtime objects,reducer side effects/nondeterminism, lifecycle Redux store access, or thinpass-through wrappers appear without a reviewed rule-specific exception and amigration/compatibility/sunset reason.
 - **FAIL** — direct selector call-mode misuse, inline `waitFor` selectors, baretyped saga `yield`, channel lifecycle leaks, low-noise file-structure namingviolations, or high-signal test-pattern violations appear without passing gateevidence or a reviewed rule-specific exception.
 - **FAIL** — a verifier asks CI to enforce broad semantic adequacy or migrationcompleteness without explicit approval for a new gate.
 

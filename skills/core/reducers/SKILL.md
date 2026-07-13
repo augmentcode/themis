@@ -164,6 +164,6 @@ export const reducer = createReducer({ filters: { query: "" } }).with(setSearch,
 - `docs/REDUCERS.md` — human reference for reducer and action examples.
 - `core/actions/SKILL.md` — action creator contracts consumed by `.with()`.
 - `core/collections/SKILL.md` — immutable entity updates.
-- `svelte/selectors/SKILL.md` — derived values belong in selectors.
+- Selected Store family selector skill — derived values belong in selectors.
 - `core/state-serialization/SKILL.md` — serializable state rules.
 - `core/testing/SKILL.md` — reducer test expectations.

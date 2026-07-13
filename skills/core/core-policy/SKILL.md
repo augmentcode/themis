@@ -4,8 +4,8 @@ description: >-
   Top-level architectural rules for themis. Redux owns all shared
   state and stores canonical facts only; components render and dispatch; side
   effects live in sagas; state must be structured-cloneable; arrays hold
-  primitives only (use Collection<T,K> for entities); Svelte stores
-  (*.store.svelte.ts) are deprecated — migrate on contact; slice types go in
+  primitives only (use Collection<T,K> for entities); legacy family-local shared
+  stores are deprecated — migrate to Redux on contact; slice types go in
   {slice-name}-types.ts so cross-process imports do not pull in reducers or saga
   code.
 type: sub-skill
@@ -15,7 +15,7 @@ requires:
 triggers:
   - redux policy
   - shared state rule
-  - svelte store deprecated
+  - legacy store deprecated
   - core rules
 ---
 # Core Policy
@@ -34,14 +34,14 @@ Before editing code or docs under this skill:
 
 ## Setup — core rules
 
-1. **Redux for ALL shared/domain state.** Svelte stores (`*.store.svelte.ts`) are **DEPRECATED** — never create new ones.
+1. **Redux for ALL shared/domain state.** Legacy family-local shared stores are **DEPRECATED** — never create new ones.
 2. **Components render; Redux owns state.** Components read via selectors, dispatch actions. Business logic goes in reducers + sagas.
-3. **Side effects in sagas, not components.** API calls, localStorage, timers, event listeners, subscriptions, IPC/websocket, async workflows → sagas. Do NOT create React `useEffect`, custom hooks, or Svelte `$effect` that carry business logic or side effects. Use React `useEffect`/Svelte `$effect` only for DOM-local work (focus, scroll, measurements, third-party widget lifecycle that cannot live elsewhere).
+3. **Side effects in sagas, not components.** API calls, localStorage, timers, event listeners, subscriptions, IPC/websocket, async workflows → sagas. Do NOT create component lifecycle hooks or effects that carry business logic or side effects. Use component lifecycle/effect APIs only for DOM-local work (focus, scroll, measurements, third-party widget lifecycle that cannot live elsewhere).
 4. **State must be serializable.** No `Date`, `Map`, `Set`, `RegExp`, `Promise`, `Function`, class instances, `Symbol`. Use plain objects, arrays, strings, numbers, booleans, `null`, `undefined`. See `core/state-serialization/SKILL.md`.
 5. **State is canonical only.** Never store derived fields, duplicated entity copies, parallel arrays/maps for the same records, or values a selector can compute. See `core/state-integrity/SKILL.md`.
 6. **Arrays hold primitives only.** For entity/object storage, always use `Collection<T, K>`. Never store `Item[]` in state — use Collections for O(1) lookups and normalized data. See `core/collections/SKILL.md`.
 7. **Actions/selectors/sagas have one owner.** Before adding any action, selector, watcher, or saga registration, search for an existing owner and import/compose/extend it instead of duplicating it. See `core/state-integrity/SKILL.md`.
-8. **Svelte store migration on contact.** If you encounter `.store.svelte.ts`, do not expand it — migrate to Redux. See `svelte/migration/SKILL.md`.
+8. **Legacy shared-store migration on contact.** If you encounter family-local shared store files, do not expand them — migrate shared/domain state to Redux. Use the selected Store family skill only for framework lifecycle details.
 9. **Refactor cleanup is mandatory.** After moving, renaming, or splitting modules, inspect every old path and remove thin pass-through wrappers. Keep one only as a documented compatibility shim with a reason and sunset/removal condition.
 10. **Types in separate modules.** Define all slice types/interfaces in `{slice-name}-types.ts`, not in `-slice.ts`. Enables safe cross-process imports.
 11. **Utility reuse discovery before helpers.** Before adding a helper, search existing utilities and document why the final choice is reuse, extension, or new code.
@@ -77,7 +77,7 @@ Before adding Redux state, actions, selectors, or sagas, load `core/state-integr
 **Use Redux when:**
 
 - State is shared by multiple components
-- State is needed by services or non-Svelte code
+- State is needed by services or non-component code
 - State is persisted, synced over IPC/network, or survives navigation
 - State drives business logic, workflows, or cross-feature coordination
 - State is derived in multiple places
@@ -88,7 +88,7 @@ Before adding Redux state, actions, selectors, or sagas, load `core/state-integr
 - Only matters while this one component is mounted
 - Not shared, persisted, or part of business logic
 
-**Use **`$effect`** only when:**
+**Use component lifecycle/effect APIs only when:**
 
 - Effect is directly tied to this component's rendered DOM
 - Focus/scroll/measurement work
@@ -144,12 +144,12 @@ export const selectActiveCount = store.createSelector((state) =>
 
 Source: `core/state-integrity/SKILL.md` · **Priority: CRITICAL**
 
-### ❌ Putting shared state in a Svelte store
+### ❌ Putting shared state in a family-local store
 
-State becomes invisible to Redux state inspection and unreachable from sagas or non-Svelte code.
+State becomes invisible to Redux state inspection and unreachable from sagas or non-component code.
 
 ```typescript
-// feature.store.svelte.ts — new store file (WRONG)
+// feature-local-store.ts — new family-local shared store file (WRONG)
 let items = $state<Item[]>([]);
 export const itemsStore = {
   get items() { return items; },
@@ -228,4 +228,4 @@ Source: `docs/ARCHITECTURE.md` → Refactor Cleanup Guard · **Priority: HIGH**
 - `core/state-integrity/SKILL.md` — canonical state and owner deduplication rules
 - `core/file-structure/SKILL.md` — where each file lives
 - `core/state-serialization/SKILL.md` — allowed/forbidden state types
-- `svelte/migration/SKILL.md` — migrating existing Svelte stores
+- Selected Store family skill — lifecycle details for migration after shared state moves to Redux

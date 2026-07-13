@@ -69,17 +69,15 @@ export class StreamingStore<
     selectorFunc: StoreSelectorCallback<R, ARGS, StoreBoundState<TStateMap>>
   ): StoreStreamingSelector<R, ARGS, StoreBoundState<TStateMap>> {
     return createSelectorFromStreamState<StoreBoundState<TStateMap>, ARGS, R>(
-      () => this.getStreamState(),
-      selectorFunc,
-      () => this.getSelectorFlushManager(),
-      this.getSelectorTraceReporter<StoreBoundState<TStateMap>, R, ARGS>()
+      this,
+      selectorFunc
     );
   }
 
-  getStreamState(): Observable<StoreBoundState<TStateMap>, any> {
+  getStateObservable(): Observable<StoreBoundState<TStateMap>, any> {
     if (!this.streamState) {
       throw new Error(
-        'Cannot access StreamingStore.getStreamState() before Store.init() has been called.'
+        'Cannot access StreamingStore.getStateObservable() before Store.init() has been called.'
       );
     }
     return this.streamState;

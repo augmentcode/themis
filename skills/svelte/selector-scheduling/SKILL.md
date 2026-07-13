@@ -30,7 +30,7 @@ Public facade: `@augmentcode/themis/svelte-store` (`store.createSelector` and `S
 - Omit `throttledSelectorFrequency` for the default `64` FPS; explicit values must be finite numbers in the inclusive `1..256` range. Fractional values are supported.
 - Selector trace output is disabled by default; pass `{ traceSelectors: true }` in the final Store options object only for temporary diagnostics.
 - In components, call selector readables directly at component init: `const value$ = selectValue()`.
-- Let the package's selector internals cache selector results and schedule/coalesce readable emissions.
+- Let the package's selector internals cache selector results, reuse readable outputs for the same source + selector + args, and schedule/coalesce readable emissions.
 - For one-shot reads, use `selectValue.select(store.state, ...args)`.
 - For sagas, use `yield* selectValue.effect(...args)`.
 - For explicit non-context binding, use `selectValue.withStore(store)(...args)` after `store.init()`.
@@ -38,7 +38,7 @@ Public facade: `@augmentcode/themis/svelte-store` (`store.createSelector` and `S
 ## Do not
 
 - Do not import selector scheduler internals from app code.
-- Do not wrap Store-created selectors or selector readables in extra `memoize`, `cache`, debounce/throttle, timer, `requestAnimationFrame`, scheduler, or writable-proxy layers just to reduce recomputes or UI updates.
+- Do not wrap Store-created selectors, selector callbacks, selector calls, or selector readables in extra `memoize`, `cache`, debounce/throttle, timer, `requestAnimationFrame`, scheduler, or writable-proxy layers just to reduce recomputes or UI updates.
 - Do not rely on selector readables as audit/event streams; they represent the latest derived state and may coalesce intermediate writes.
 - Do not call selector readable mode from event handlers, callbacks, async functions, services, or tests; use `.select(store.state, ...)` or `.withStore(store)`.
 - Do not replace this Svelte-readable scheduling model with StreamingStore/Kefirselector setup in the same app.

@@ -56,8 +56,8 @@ Use this root for Streaming-specific `themis` work and as thedefault package rou
 
 | Route | Use when |
 | --- | --- |
-| ./store/SKILL.md | Choosing/importing StreamingStore, initializing/disposal, getStreamState(), inherited Store runtime behavior, or contrasting with the Svelte-readable Store. |
-| ./selectors/SKILL.md | Authoring Store-bound selectors whose direct calls return Kefir Observable values, including observable selector arguments, .withStore, .select, and .effect. |
+| ./store/SKILL.md | Choosing/importing StreamingStore, initializing/disposal, getStateObservable(), inherited Store runtime behavior, or contrasting with the Svelte-readable Store. |
+| ./selectors/SKILL.md | Authoring Store-bound selectors whose direct calls return cached Kefir Observable values, including observable selector arguments, .withStore, .select, and .effect. |
 | ./selector-lifecycle/SKILL.md | Deciding when streaming selectors may be invoked/observed, how init()/dispose() affect stream state, and which Svelte-readable call-mode rules do not apply. |
 
 First-time app setup starts at the canonical root setup skill: `../setup/SKILL.md`.
@@ -68,6 +68,7 @@ First-time app setup starts at the canonical root setup skill: `../setup/SKILL.m
 - Treat this app/code path as Streaming-only; do not add Svelte-readable orSvelte component lifecycle setup to the same app.
 - Create production app-local streaming selectors through the configured`StreamingStore` instance: `streamStore.createSelector(...)`.
 - Direct selector calls return Kefir observables. They are not Svelte readables,React signals, or React `.useValue(...)` values; do not use `$selector` templatesyntax, React render hooks, or Svelte context.
+- Direct Kefir `Observable` outputs are cached for the same source observable + selector + args; prefer the same selector+args over props drilling/manual stream passing where valid.
 - Streaming selector emissions use the configured Store `throttledSelectorFrequency`policy, defaulting to 64 FPS; rapid Store or observable argument bursts coalesceto the latest pending selector value.
 - Selector trace output is disabled by default; pass `{ traceSelectors: true }` in the final StreamingStore options object only for temporary diagnostics.
 - `.select(state, ...args)` stays the pure selector path for tests/composition.

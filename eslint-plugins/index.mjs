@@ -48,6 +48,7 @@ const ruleDefinitions = {
   "inline-saga-selector": { files: sourceFiles },
   "saga-local-selector": { files: sourceFiles },
   "no-extra-selector-caching": { files: sourceFiles },
+  "selector-argument-stability": { files: sourceFiles },
   "no-wildcard-saga-take": { files: sourceFiles },
   "direct-selector-call-mode": { files: sourceFiles },
   "wait-for-named-selector": { files: sourceFiles },

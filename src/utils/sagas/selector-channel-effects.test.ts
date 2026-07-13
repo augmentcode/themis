@@ -1,9 +1,19 @@
-import { describe, expect, it, vi } from "vitest";
+import type { ReadonlySignal } from "@preact/signals-react";
+import type { Observable } from "kefir";
+import type { Readable } from "svelte/store";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { runSaga, type EventChannel } from "redux-saga";
 import type { StoreSelector, StoreState } from "../../types";
-import type { SelectorChannelPayload } from "./selector-channel-effects";
+import type { StoreReactSelector } from "../react-selectors/create-selector";
+import type { StoreStreamingSelector } from "../streaming-selectors/create-selector";
+import type { SelectorChannelPayload, SelectorChannelSelector } from "./selector-channel-effects";
 import { INTERNAL_STORE_UTILITY_DOMAIN } from "../store/store-runtime-constants";
-import { createChannelFromSelector } from "./selector-channel-effects";
+import {
+  createChannelFromSelector,
+  takeEveryFromSelector,
+  takeLatestFromSelector,
+  takeLeadingFromSelector,
+} from "./selector-channel-effects";
 
 type CounterState = StoreState & {
   counter: { count: number };
@@ -39,7 +49,60 @@ const createCountSelector = () => ({
   select: vi.fn((state: CounterState, multiplier: number) => state.counter.count * multiplier),
 }) as unknown as StoreSelector<number, [number], CounterState>;
 
+const assertSelectorFamilyTypes = () => {
+  type SvelteCountSelector = StoreSelector<number, [number], CounterState>;
+  type ReactCountSelector = StoreReactSelector<number, [number], CounterState>;
+  type StreamingCountSelector = StoreStreamingSelector<number, [number], CounterState>;
+
+  expectTypeOf<SvelteCountSelector>().toMatchTypeOf<SelectorChannelSelector<number, [number], any>>();
+  expectTypeOf<ReactCountSelector>().toMatchTypeOf<SelectorChannelSelector<number, [number], any>>();
+  expectTypeOf<StreamingCountSelector>().toMatchTypeOf<SelectorChannelSelector<number, [number], any>>();
+  expectTypeOf<ReturnType<SvelteCountSelector>>().toEqualTypeOf<Readable<number>>();
+  expectTypeOf<ReturnType<ReactCountSelector>>().toEqualTypeOf<ReadonlySignal<number>>();
+  expectTypeOf<ReturnType<StreamingCountSelector>>().toEqualTypeOf<Observable<number, any>>();
+
+  const svelteSelector = {} as SvelteCountSelector;
+  const reactSelector = {} as ReactCountSelector;
+  const streamingSelector = {} as StreamingCountSelector;
+  const noArgsSelector = {} as StoreSelector<boolean, [], CounterState>;
+  const selectorArgs: [number] = [2];
+  const signalArg = {} as ReadonlySignal<number>;
+  const streamArg = {} as Observable<number, any>;
+
+  expectTypeOf(createChannelFromSelector(svelteSelector, ...selectorArgs)).toEqualTypeOf<
+    Generator<any, EventChannel<SelectorChannelPayload<number>>, any>
+  >();
+  expectTypeOf(createChannelFromSelector(reactSelector, ...selectorArgs)).toEqualTypeOf<
+    Generator<any, EventChannel<SelectorChannelPayload<number>>, any>
+  >();
+  expectTypeOf(createChannelFromSelector(streamingSelector, ...selectorArgs)).toEqualTypeOf<
+    Generator<any, EventChannel<SelectorChannelPayload<number>>, any>
+  >();
+
+  takeEveryFromSelector(noArgsSelector, function* (payload) {
+    expectTypeOf(payload.payload).toEqualTypeOf<boolean>();
+  });
+  takeEveryFromSelector(reactSelector, selectorArgs, function* (payload) {
+    expectTypeOf(payload.payload).toEqualTypeOf<number>();
+  });
+  takeLatestFromSelector(streamingSelector, selectorArgs, function* (payload) {
+    expectTypeOf(payload.prevPayload).toEqualTypeOf<number | undefined | null>();
+  });
+  takeLeadingFromSelector(svelteSelector, selectorArgs, function* (payload) {
+    expectTypeOf(payload.payload).toEqualTypeOf<number>();
+  });
+
+  // @ts-expect-error selector-channel helpers take plain selector args, not React signal args.
+  createChannelFromSelector(reactSelector, signalArg);
+  // @ts-expect-error selector-channel helpers take plain selector args, not Streaming observable args.
+  takeEveryFromSelector(streamingSelector, [streamArg], function* () {});
+};
+
 describe("createChannelFromSelector", () => {
+  it("accepts Svelte, React, and Streaming selectors through shared selector capabilities", () => {
+    expect(assertSelectorFamilyTypes).toBeTypeOf("function");
+  });
+
   it("reads and subscribes through the Redux store from saga context", async () => {
     const reduxStore = createMockReduxStore(withUtility(1));
     const selector = createCountSelector();

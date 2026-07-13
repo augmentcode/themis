@@ -40,6 +40,10 @@ template syntax, `ReactStore`, `.useValue(...args)`, or Svelte/React lifecycle/s
 - Compose selectors with `.select(state, ...args)` inside another selector.
 - Keep generic selector helper modules Store-parameterized: accept a configured
   store and call `store.createSelector(...)` at the integration boundary.
+- Trust Store-owned selector-result and observable-output caching; do not add extra memoize/cache/debounce/throttle wrappers solely for performance.
+- Prefer primitive scalar selector arguments over freshly constructed object,
+  array, or function arguments; object/function args are valid only when their
+  identity is stable and intentional.
 - Do not import from any `themis` streaming-selector internal deep path; those are
   implementation internals, not package API.
 
@@ -73,6 +77,35 @@ value emits at the scheduled moment. Selector trace output is disabled by
 default; pass `{ traceSelectors: true }` in the final Store options object only
 for temporary diagnostics.
 
+Selector-channel helpers that consume `.select`/`.effect`-compatible selectors
+run in sagas and support `StreamingStore` selectors through the same shared
+selector read shape used by Svelte `Store` and `ReactStore` selectors. Pass
+plain stable selector arguments as the helper args tuple; selector-channel
+effects read Redux state from saga context and do not subscribe to direct Kefir
+`Observable`, Svelte readable, or React signal selector outputs.
+
+## Selector caching
+
+- Store-created selectors have internal selector-result caching/memoization.
+- Direct Kefir `Observable` outputs are cached per source observable + selector + arguments; repeated `selectFoo(args)` calls for the same source reuse the same Kefir Observable.
+- Do not wrap selector callbacks or selector calls in extra `memoize`, `cache`, manual cache maps, debounce, or throttle layers solely for performance.
+- Prefer the same Store-bound selector + same arguments over props drilling/manual stream passing when the receiving consumer can reasonably call the selector in valid streaming setup; otherwise use `.select`, `.effect`, or `.withStore` as the context requires.
+
+## Stable selector arguments
+
+- Prefer primitive scalar selector arguments: ids, booleans, enum strings,
+  numbers, `null`, or `undefined`.
+- Do not pass freshly constructed object, array, or function arguments to direct
+  `selectFoo(...)`, `.select(state, ...)`, `.effect(...)`, `.withStore(source)(...)`,
+  selector-channel args tuples, or `waitFor` args tuples.
+- Object/function args are valid only when the identity is stable and intentional,
+  such as a module constant, memoized config, existing source object, or Kefir
+  observable. Observable arguments are valid direct-call inputs when the stream is
+  owned elsewhere; do not recreate a stream solely for a selector call.
+- Prefer selector definitions like `(state, id, status)` over `(state, { id,
+  status })`; destructure an object arg only when callers pass a documented stable
+  reference.
+
 ## Collection reads
 
 Use public collection utilities in selector callbacks when a package-level helper
@@ -96,7 +129,11 @@ export const selectTodo = streamStore.createSelector((state, id: string) => {
   React component signal setup into the same Streaming app.
 - Do not call another selector's direct streaming form inside a selector callback;
   use `.select(state)` to keep composition pure and synchronous.
+- Do not props-drill derived values solely to avoid selector calls when the consumer can call the same Store-bound selector with the same args in a valid streaming context.
+- Do not add manual memoization/cache/debounce/throttle wrappers inside selector callbacks or around observable selector calls just to improve selector performance.
 - Do not use standalone streaming selector utilities as public package imports.
+- Do not construct `{ ... }`, `[ ... ]`, `() => ...`, or new argument streams inline
+  just to call a selector; pass scalar args or stable intentional references.
 
 ## Verification cues
 

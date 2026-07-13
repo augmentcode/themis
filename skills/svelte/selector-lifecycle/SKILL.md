@@ -47,7 +47,7 @@ observation, setup, or teardown rules in the same app/package/code path.
 
 - Capture selector readables during component initialization and dispatch through the configured Store instance.
 - Use `.select(store.state, ...)` with the existing initialized `Store` instance captured outside the handler for one-shot reads when no state argument is already available.
-- Use `.effect()` in sagas instead of passing selector objects to `select`.
+- Use `.effect()` in sagas instead of passing selector objects to `select`; use selector-channel helpers with plain args when a saga needs to react to selector value changes.
 - Use `.select(state)` when composing selectors or testing them.
 
 ## Don't
@@ -56,6 +56,9 @@ observation, setup, or teardown rules in the same app/package/code path.
 - Do not call `get(selectFoo())` outside component initialization.
 - Do not import standalone dispatch helpers; use `store.dispatch(action)` on the configured Store instance.
 - Do not pass the selector object itself to saga `select`; use `.effect()` or `.select` intentionally.
+- Do not make selector-channel effects call or subscribe to direct Svelte readables;
+  they read the Redux store from saga context and share the `.select`/`.effect`
+  selector shape with ReactStore and StreamingStore selectors.
 - Do not replace Svelte readable lifecycle rules with React signal or streaming
   selector lifecycle rules in a Svelte app.
 
@@ -147,7 +150,7 @@ async function onSaveLaterSafely(itemId: string) {
 ## Pitfalls
 
 - `selectFoo()` depends on `getContext()`, so create selector readables during component initialization. Dispatch does not need a context helper; use the configured Store instance.
-- A selector readable created in a template expression can allocate repeatedly and lose memoization benefits.
+- A selector readable call in a template expression still violates lifecycle guidance even though same source + selector + args reuse the cached readable; capture it once at component init and render the captured `$value$`.
 - `.select(state)` returns a value; `selectFoo()` returns a readable. Mixing them often produces wrong-shape bugs before it crashes.
 
 ## Verification cues

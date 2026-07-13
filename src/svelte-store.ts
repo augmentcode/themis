@@ -70,17 +70,15 @@ export class Store<
     selectorFunc: StoreSelectorCallback<R, ARGS, StoreBoundState<TStateMap>>
   ): StoreSelector<R, ARGS, StoreBoundState<TStateMap>> {
     return createSelectorFromReadableState<StoreBoundState<TStateMap>, ARGS, R>(
-      () => this.getReadableState(),
-      selectorFunc,
-      () => this.getSelectorFlushManager(),
-      this.getSelectorTraceReporter<StoreBoundState<TStateMap>, R, ARGS>()
+      this,
+      selectorFunc
     );
   }
 
-  getReadableState(): Readable<StoreBoundState<TStateMap>> {
+  getStateObservable(): Readable<StoreBoundState<TStateMap>> {
     if (!this.readableState) {
       throw new Error(
-        'Cannot access Store.getReadableState() before Store.init() has been called.'
+        'Cannot access Store.getStateObservable() before Store.init() has been called.'
       );
     }
 

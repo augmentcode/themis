@@ -597,6 +597,28 @@ export const store = new Store(reducers, undefined, { throttledSelectorFrequency
 
 Remediate by removing obvious memoization and scheduling wrappers such as `memoize`, `useMemo`, `derived`/manual `readable`, `debounce`, and `throttle` around Store-created selectors or selector calls. Store selector machinery already caches accessed state paths, tracks arguments, and coalesces Store-family emissions; use normal direct selector calls, `.select(state, ...args)` composition, or public Store constructor options such as `throttledSelectorFrequency` instead.
 
+### `themis/selector-argument-stability`
+
+Invalid:
+
+```ts
+selectTodoById({ id: todoId });
+selectTodosByFilter.select(state, { filter });
+yield* takeEveryFromSelector(selectTodosByFilter, [{ filter }], todoWorker);
+export const selectTodo = store.createSelector((state, { id }) => state.todos.map[id]);
+```
+
+Valid:
+
+```ts
+selectTodoById(todoId);
+selectTodosByFilter.select(state, filterId, true);
+yield* takeEveryFromSelector(selectTodosByFilter, [filterId], todoWorker);
+export const selectTodo = store.createSelector((state, id: string) => state.todos.map[id]);
+```
+
+Remediate by passing separate primitive/scalar selector arguments, or by passing an intentionally stable identifier/member reference when object, signal, readable, or observable identity is the selector key. The rule rejects fresh object, array, function, class, `new`, and spread-created arguments for imported or local Store-created selectors, `.select`/`.effect`/`.useValue`/`.withStore(source)(...)` calls, practical selector-channel args tuples, and destructured selector callback parameters after `state`.
+
 ### `themis/direct-selector-call-mode`
 
 Invalid:

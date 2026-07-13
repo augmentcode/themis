@@ -4,8 +4,8 @@ description: >-
   Which store modules components may import (actions, selectors, types,
   and the initialized Store instance for dispatch/one-shot reads) and which
   are forbidden (saga files, operation modules, reducer internals, collection
-  utils). .svelte files must never import typed-redux-saga or
-  redux-saga. Services/non-component TS may import actions and selectors;
+  utils). Component files must never import typed-redux-saga or redux-saga.
+  Services/non-component TS may import actions and selectors;
   sagas may import anything inside the store directory.
 type: sub-skill
 requires:
@@ -27,7 +27,7 @@ The documented public surface is the approved subpackage interface plus explicit
 
 The utility exports are explicit leaf entries, not wildcard domains. The package still does not export the root `themis`, `@augmentcode/themis/utils`, `@augmentcode/themis/utils/runtime/*`, selector implementation internals (`utils/svelte-selectors/*`, `utils/streaming-selectors/*`, or `utils/selector-core/*`), old `themis/components/*` paths, `themis/src/*`, or directory `index` barrels.
 
-The relevant public subpackages components, services, and sagas actually use:
+The public subpackages relevant to Store-family import boundaries include:
 
 - `@augmentcode/themis/svelte-store` — canonical Svelte-readable `Store` class. Per-store operations go through the configured Store instance (`store.init`, `store.dispatch`, `store.state`, `store.createSelector`, `store.runSaga`, `store.dispose`). Utility helpers are not exported here; use the explicit utility leaf subpaths below.
 - `@augmentcode/themis/streaming-store` — direct `StreamingStore` leaf for Kefir/observable selectors. Do not import streaming selector internals directly.
@@ -42,7 +42,7 @@ Migration note: replace flat package-root examples, removed utilities-subpackage
 
 ## Core Patterns
 
-### Components (`*.svelte`, component-level `*.ts`) — allowed
+### Components and component-level modules — allowed
 
 - ✅ Actions from `*-slice.ts`
 - ✅ Selectors from `*-selectors.ts`
@@ -70,7 +70,7 @@ Sagas may import anything within the store directory (actions, selectors, other 
 ### 1. Public package subpaths and utility leaf imports
 
 ```ts
-import { Store } from "@augmentcode/themis/svelte-store";
+import { Store } from "<selected Store family package>";
 import type { StoreState } from "@augmentcode/themis/types";
 import { createAction } from "@augmentcode/themis/utils/store/create-action";
 import { retryWithTimeout } from "@augmentcode/themis/saga";
@@ -176,7 +176,7 @@ export function queueItemFromAnywhere(id: string) {
 ```
 
 ```ts
-import type { Store } from "@augmentcode/themis/svelte-store";
+import type { Store } from "<selected Store family package>";
 import { addItem } from "$lib/store/slices/items/items-slice";
 
 export function queueItem(store: Store, id: string) {
@@ -186,7 +186,7 @@ export function queueItem(store: Store, id: string) {
 
 Source: `../SKILL.md` §2, §7 · **Priority: MEDIUM**
 
-### ❌ Importing from `typed-redux-saga` in a `.svelte` file
+### ❌ Importing from `typed-redux-saga` in a component file
 
 `typed-redux-saga` effects (`call`, `put`, `select`, `takeEvery`, ...) only have meaning inside saga generators. Importing them in a component has no runtime benefit, bloats the client bundle, and in test environments drags the saga mock (`core/testing`) into non-saga files.
 
@@ -239,5 +239,5 @@ Source: `../SKILL.md` §2 (Components must never import saga files / redux-saga 
 ## See also
 
 - `core/core-policy/SKILL.md` — the policy these boundaries enforce
-- `svelte/component-integration/SKILL.md` — Store dispatch + selector usage inside components
+- Selected Store family skill — Store dispatch + selector usage inside components
 

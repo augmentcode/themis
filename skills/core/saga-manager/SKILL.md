@@ -16,7 +16,7 @@ requires:
   - core/state-serialization
 sources:
   - augmentcode/themis:docs/SAGAS.md#saga-manager
-  - "@augmentcode/themis/svelte-store"
+  - public configured Store instance API
   - package-internal saga manager implementation
 triggers:
   - saga manager
@@ -83,13 +83,11 @@ Use this skill when an agent must explain, verify, or minimally adjust saga mana
 ### 1. Start app sagas explicitly by function
 
 ```ts
-import { onMount } from "svelte";
-import { Store } from "@augmentcode/themis/svelte-store";
-
 export const store = new Store({ todos: todosReducer });
 store.init();
 
-onMount(() => store.runSaga(syncTodosSaga));
+const cancelSyncTodos = store.runSaga(syncTodosSaga);
+// Register cancelSyncTodos with the selected Store family root cleanup.
 ```
 
 ### 2. Pair every runSaga owner with its own cancel function
@@ -153,10 +151,10 @@ function closeDetailsPanelSafely(cancelSyncTodos: () => void) {
 
 ## Common mistakes to prevent
 
-- **Promoting internals as app APIs** — `addCrash`, `clearCrashes`, raw manager status records, reducer state keys, and `@internal_sagaManager` are package-owned. Public facade: `@augmentcode/themis/svelte-store` (`store.runSaga`); source context: `docs/SAGAS.md#saga-manager` and package-internal saga manager implementation.
+- **Promoting internals as app APIs** — `addCrash`, `clearCrashes`, raw manager status records, reducer state keys, and `@internal_sagaManager` are package-owned. Public facade: the configured Store instance (`store.runSaga`); source context: `docs/SAGAS.md#saga-manager` and package-internal saga manager implementation.
 - **Saying cleanup is global** — `clearCrashes(sagaName)` removes only one saga entry. This is package-internal behavior, not a public app API.
-- **Forgetting reference counting** — duplicate `store.runSaga(sagaFn)` calls for the same function share the saga and require matching cancels before the task stops. Public facade: `@augmentcode/themis/svelte-store`; source context: package-internal saga manager implementation.
-- **Using Store disposal as per-saga cleanup** — `store.dispose()` stops tasks owned by the initialized Store context as part of whole-store teardown; use `store.runSaga(sagaFn)` cancel functions for normal saga lifetimes. Public API: `@augmentcode/themis/svelte-store`.
+- **Forgetting reference counting** — duplicate `store.runSaga(sagaFn)` calls for the same function share the saga and require matching cancels before the task stops. Public facade: the configured Store instance; source context: package-internal saga manager implementation.
+- **Using Store disposal as per-saga cleanup** — `store.dispose()` stops tasks owned by the initialized Store context as part of whole-store teardown; use `store.runSaga(sagaFn)` cancel functions for normal saga lifetimes. Public API: configured Store instance lifecycle methods.
 - **Flattening backoff behavior** — backoff starts at 1s, doubles to a 10-minute cap, and restart pressure decays after stable runtime. Source context: package-internal saga manager implementation.
 
 ## Verification cues
