@@ -46,7 +46,7 @@ signal is impractical.
 - Keep selector callbacks pure and derived-only; reducers must not store selector
   outputs.
 - Compose selectors with `.select(state, ...args)` inside another selector.
-- Trust Store-owned selector caching and signal scheduling; do not wrap Store-created selectors in extra `memoize`, `cache`, debounce/throttle, manual cache maps, or scheduler helpers.
+- Trust Store-owned selector-result caching and signal scheduling; do not wrap Store-created selectors in extra `memoize`, `cache`, debounce/throttle, manual cache maps, or scheduler helpers.
 - Do not import from `themis` React selector internal deep paths.
 
 ```tsx
@@ -99,6 +99,13 @@ hook, signal subscription, or throttled render path.
 Selector-channel helpers that consume `.effect(...)`-compatible selectors run in
 sagas and subscribe through the Redux store object's `getState()` / `subscribe()`
 context path, not through React signals or a Svelte readable wrapper.
+
+## Selector caching
+
+- Store-created selectors have internal selector-result caching/memoization.
+- Direct React `ReadonlySignal` outputs are cached per state source + selector + arguments; repeated `selectFoo(args)` calls for the same source reuse the same `ReadonlySignal`.
+- Do not wrap selector callbacks, direct signal calls, or `.useValue(...args)` calls in extra `memoize`, `cache`, manual cache maps, debounce, or throttle layers solely for performance.
+- Prefer the same Store-bound selector + same arguments over props drilling when the receiving consumer can reasonably call the selector in valid React/signal context; otherwise use `.select`, `.effect`, `.withStore`, or `.useValue` as the boundary requires.
 
 ## Call-mode examples
 
@@ -223,6 +230,7 @@ Use `todo.value`, pass/render the signal intentionally, or choose
 - Do not call another selector's direct signal form inside a selector callback; use
   `.select(state)` to keep composition pure and synchronous.
 - Do not add manual memoization or throttling wrappers around selector calls, direct signals, or `.useValue(...)`; configure selector coalescing through the owning `ReactStore` options instead.
+- Do not props-drill derived values solely to avoid selector calls when the consumer can call the same Store-bound selector with the same args in a valid React/signal context.
 - Do not use standalone React selector utilities as public package imports.
 
 ## Verification cues

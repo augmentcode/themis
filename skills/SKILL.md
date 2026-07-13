@@ -46,6 +46,12 @@ Use this repository root skill first when choosing package guidance. Its job isr
 - Do not mix `./svelte/`, `./react/`, and `./streaming/` concrete Store guidance forthe same app, package entry, runtime, or code path. `./core/` may be pairedwith the one selected concrete family because it is shared Redux/redux-sagaguidance, not a second Store family.
 - Mixed repositories must route per app/package/code path. Separate apps in thesame repository may choose different families, but one app must not usepatterns from multiple concrete Store families.
 
+## Selector output cache routing
+
+- Cached direct selector outputs are not Svelte-only. Route Svelte readable cache guidance to `./svelte/selectors/SKILL.md` and `./svelte/selector-scheduling/SKILL.md`.
+- Route React `ReadonlySignal` cache guidance to `./react/selectors/SKILL.md` and `./react/selector-scheduling/SKILL.md`; direct signal calls are preferred where valid.
+- Route Streaming/Kefir `Observable` cache guidance to `./streaming/selectors/SKILL.md` and `./streaming/selector-lifecycle/SKILL.md`; prefer same selector+args over manual stream passing where valid.
+
 ## Universal architecture rule — effects live in sagas, not components
 
 This rule applies to EVERY family below (Svelte, React, Streaming, Core). Components render and dispatch only. **Do NOT create new custom hooks, React `useEffect`, or Svelte `$effect` that contain business logic or side effects** — API calls, persistence/localStorage, timers, subscriptions, event listeners, IPC/websocket, or async workflows. Those belong in sagas. Dispatch an action from the component and handle the work in a saga.
