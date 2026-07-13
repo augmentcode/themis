@@ -35,7 +35,9 @@ Use this skill for one-shot saga waits on selector state. Keep conceptual/API pr
 ## Do
 
 - Call as `waitFor(selector, argsTuple, predicate, timeoutMs?)`.
-- Pass `[]` for no-arg selectors and `[arg1, arg2]` for selector arguments.
+- Pass `[]` for no-arg selectors and `[arg1, arg2]` for stable selector arguments.
+- Prefer primitive scalar args in the tuple; pass object/function args only when
+  their identity is stable and intentional.
 - Keep the predicate pure: no dispatches, API calls, mutations, timers, or state reads.
 - Add a timeout for production waits unless an indefinite wait is explicitly safe.
 - Check the boolean return when a timeout is supplied.
@@ -48,6 +50,8 @@ Use this skill for one-shot saga waits on selector state. Keep conceptual/API pr
 - Do not ignore `false` from timed waits.
 - Do not use `waitFor` for polling or continuous reactions; use `takeLatestFromSelector`, `takeEveryFromSelector`, or a selector channel instead.
 - Do not duplicate the implementation's channel/race logic in app code.
+- Do not put fresh object, array, or function literals in the args tuple; split to
+  scalar args or pass a stable intentional reference.
 
 ## Implementation cues
 
@@ -85,6 +89,9 @@ function* processItem(itemId: string) {
   if (ready) yield* startItemProcessing(itemId);
 }
 ```
+
+Use scalar args like `itemId`. Avoid args tuples such as `[{ id: itemId }]`
+unless that object is a stable, intentional selector key reused across calls.
 
 ### 3. Guard previous-value comparisons on the immediate check
 
@@ -158,6 +165,7 @@ function* publishAfterRealStatusChange(documentId: string) {
 ## Common mistakes to prevent
 
 - `waitFor(selectReady, predicate)` — missing `[]` args tuple.
+- `waitFor(selectItem, [{ id }], predicate)` — fresh object selector arg.
 - Acting after a timed wait without checking the returned boolean.
 - Predicate change detection that treats initial `prevVal === undefined` or first-emission `prevVal === null` as a real transition.
 - Replacing one-shot waits with hand-rolled selector channels.

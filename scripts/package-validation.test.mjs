@@ -280,7 +280,7 @@ describe("package metadata", () => {
       react: [...storeRootRuleIds, ...architectureRuleDomains.react],
       streaming: storeRootRuleIds,
     };
-    const expectedRootRuleCounts = { core: 4, store: 40, svelte: 43, react: 44, streaming: 40 };
+    const expectedRootRuleCounts = { core: 4, store: 41, svelte: 44, react: 45, streaming: 41 };
 
     expect(Object.keys(architectureRootModule).sort()).toEqual(["core", "plugins", "react", "store", "streaming", "svelte"]);
     expect(architectureRootModule.full).toBeUndefined();
@@ -958,6 +958,86 @@ describe("package metadata", () => {
       ruleId: "no-extra-selector-caching",
       summary: "Store-created selector is wrapped in redundant caching or optimization.",
     });
+  });
+
+  it("flags unstable selector arguments while allowing primitive and stable references", () => {
+    const invalidMessages = lintArchitectureRule(
+      "selector-argument-stability",
+      architectureRulePlugins["selector-argument-stability"],
+      `
+        import { waitFor, takeEveryFromSelector } from "@augmentcode/themis/saga";
+        import { selectTodoById, selectTodosByFilter } from "../todos/todos-selectors";
+
+        export const selectTodoByObject = store.createSelector((state, { id }) => state.todos.map[id]);
+        export const selectTodoByTuple = store.createSelector((state, [id]) => state.todos.map[id]);
+        export const selectLocalTodo = store.createSelector((state, id) => state.todos.map[id]);
+
+        function* todoWorker() {}
+
+        export function useUnstableSelectorArgs(state, todoId, filter, source) {
+          selectTodoById({ id: todoId });
+          selectTodoById([todoId]);
+          selectTodoById(() => todoId);
+          selectTodoById(class TodoKey {});
+          selectTodoById(new TodoKey(todoId));
+          selectTodoById(...[{ id: todoId }]);
+          selectTodosByFilter.select(state, { filter });
+          selectTodosByFilter.effect({ filter });
+          selectTodosByFilter.useValue({ filter });
+          selectTodosByFilter.withStore(source)({ filter });
+          selectLocalTodo({ id: todoId });
+        }
+
+        export function* watchUnstableSelectorArgs(filter) {
+          yield* takeEveryFromSelector(selectTodosByFilter, [{ filter }], todoWorker);
+          yield* waitFor(selectTodosByFilter, [{ filter }], (todos) => todos.length > 0, 5000);
+        }
+      `,
+      "src/todos/todos-selectors.ts"
+    );
+
+    expect(invalidMessages.map(({ ruleId }) => ruleId)).toEqual(Array.from({ length: 15 }, () => namespacedRuleId("selector-argument-stability")));
+    expect(invalidMessages.map(({ message }) => message).join("\n")).toContain("primitive/scalar");
+
+    const validMessages = lintArchitectureRule(
+      "selector-argument-stability",
+      architectureRulePlugins["selector-argument-stability"],
+      `
+        import { waitFor, takeEveryFromSelector } from "@augmentcode/themis/saga";
+        import { selectTodoById, selectTodosByFilter } from "../todos/todos-selectors";
+
+        const stableFilter = { status: "open" };
+        const stableArgs = ["first"];
+        export const selectLocalTodo = store.createSelector((state, todoId) => state.todos.map[todoId]);
+
+        function* todoWorker() {}
+
+        export function useStableSelectorArgs(state, todoId, source, signalArg, readableArg, observableArg) {
+          selectTodoById(todoId);
+          selectTodoById("first");
+          selectTodoById(stableFilter);
+          selectTodoById(source.currentFilter);
+          selectTodoById(...stableArgs);
+          selectTodosByFilter.select(state, todoId, true);
+          selectTodosByFilter.effect(todoId, signalArg);
+          selectTodosByFilter.useValue(todoId, readableArg);
+          selectTodosByFilter.withStore(source)(todoId, observableArg);
+          selectLocalTodo(todoId);
+        }
+
+        export function* watchStableSelectorArgs(todoId) {
+          yield* takeEveryFromSelector(selectTodosByFilter, [todoId], todoWorker);
+          yield* waitFor(selectTodosByFilter, [todoId], (todos) => todos.length > 0, 5000);
+        }
+      `,
+      "src/todos/todos-selectors.ts"
+    );
+
+    expect(validMessages).toEqual([]);
+    expect(selectedRuleIdsFromConfig(store)).toContain("selector-argument-stability");
+    expect(selectedRuleIdsFromConfig(svelte)).toContain("selector-argument-stability");
+    expect(selectedRuleIdsFromConfig(react)).toContain("selector-argument-stability");
+    expect(selectedRuleIdsFromConfig(streaming)).toContain("selector-argument-stability");
   });
 
   it("keeps custom ESLint rule messages concise while preserving detailed metadata", () => {

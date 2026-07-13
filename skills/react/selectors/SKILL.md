@@ -47,6 +47,9 @@ signal is impractical.
   outputs.
 - Compose selectors with `.select(state, ...args)` inside another selector.
 - Trust Store-owned selector-result caching and signal scheduling; do not wrap Store-created selectors in extra `memoize`, `cache`, debounce/throttle, manual cache maps, or scheduler helpers.
+- Prefer primitive scalar selector arguments over freshly constructed object,
+  array, or function arguments; object/function args are valid only when their
+  identity is stable and intentional.
 - Do not import from `themis` React selector internal deep paths.
 
 ```tsx
@@ -99,9 +102,9 @@ hook, signal subscription, or throttled render path.
 Selector-channel helpers that consume `.select`/`.effect`-compatible selectors
 run in sagas and support `ReactStore` selectors through the same shared selector
 read shape used by Svelte `Store` and `StreamingStore` selectors. Pass plain
-selector arguments as the helper args tuple; selector-channel effects subscribe
-through the Redux store object's `getState()` / `subscribe()` context path, not
-through React signals, Svelte readables, or Kefir observables.
+stable selector arguments as the helper args tuple; selector-channel effects
+subscribe through the Redux store object's `getState()` / `subscribe()` context
+path, not through React signals, Svelte readables, or Kefir observables.
 
 ## Selector caching
 
@@ -109,6 +112,22 @@ through React signals, Svelte readables, or Kefir observables.
 - Direct React `ReadonlySignal` outputs are cached per state source + selector + arguments; repeated `selectFoo(args)` calls for the same source reuse the same `ReadonlySignal`.
 - Do not wrap selector callbacks, direct signal calls, or `.useValue(...args)` calls in extra `memoize`, `cache`, manual cache maps, debounce, or throttle layers solely for performance.
 - Prefer the same Store-bound selector + same arguments over props drilling when the receiving consumer can reasonably call the selector in valid React/signal context; otherwise use `.select`, `.effect`, `.withStore`, or `.useValue` as the boundary requires.
+
+## Stable selector arguments
+
+- Prefer primitive scalar selector arguments: ids, booleans, enum strings,
+  numbers, `null`, or `undefined`.
+- Do not pass freshly constructed object, array, or function arguments to direct
+  `selectFoo(...)`, `.useValue(...)`, `.select(state, ...)`, `.effect(...)`,
+  `.withStore(source)(...)`, selector-channel args tuples, or `waitFor` args
+  tuples.
+- Object/function args are valid only when the identity is stable and intentional,
+  such as a module constant, memoized config, existing source object, or Preact
+  signal. Signal arguments are valid direct-call inputs because the selector
+  tracks their `.value`; do not recreate the signal solely for a selector call.
+- Prefer selector definitions like `(state, id, includeDone)` over
+  `(state, { id, includeDone })`; destructure an object arg only when callers pass
+  a documented stable reference.
 
 ## Call-mode examples
 
@@ -235,6 +254,9 @@ Use `todo.value`, pass/render the signal intentionally, or choose
 - Do not add manual memoization or throttling wrappers around selector calls, direct signals, or `.useValue(...)`; configure selector coalescing through the owning `ReactStore` options instead.
 - Do not props-drill derived values solely to avoid selector calls when the consumer can call the same Store-bound selector with the same args in a valid React/signal context.
 - Do not use standalone React selector utilities as public package imports.
+- Do not construct `{ ... }`, `[ ... ]`, or `() => ...` selector arguments inline
+  during render or hook execution; use scalar args or a stable intentional
+  reference.
 
 ## Verification cues
 

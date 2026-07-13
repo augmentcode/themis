@@ -38,7 +38,8 @@ Use this skill when a saga should react to selector value changes instead of act
 
 - Use named selectors created by the selected Store family utilities; selector-channel helpers require the shared `.select(state, ...args)` / `.effect(...args)` read shape.
 - Import the selectors from the owning slice's `[slice]-selectors.ts` file; do not declare local `select*` functions/factories inside saga modules.
-- Pass plain selector arguments as the args tuple in the second position, e.g. `[itemId]`, matching `.select(state, ...args)` / `.effect(...args)` rather than direct-call reactive argument wrappers.
+- Pass plain stable selector arguments as the args tuple in the second position, e.g. `[itemId]`, matching `.select(state, ...args)` / `.effect(...args)` rather than direct-call reactive argument wrappers.
+- Prefer primitive scalar args in selector-channel tuples; pass object/function args only when their identity is stable and intentional.
 - Expect worker payloads to include `{ payload, prevPayload }`.
 - Prefer the `take*FromSelector` helpers because they create and clean up channels for you.
 - Close raw channels in `finally` every time.
@@ -54,12 +55,17 @@ Use this skill when a saga should react to selector value changes instead of act
 - Do not leave manual channel loops without cancellation and cleanup.
 - Do not confuse selector channels with action watchers; use core saga effects for actions.
 - Do not pass or subscribe to direct reactive/observable selector outputs in selector-channel effects.
+- Do not put fresh object, array, or function literals in selector-channel args
+  tuples; split to scalar args or create a stable reference before the helper call.
 
 ## Implementation cues
 
 - Selector-channel effects use the saga-context Redux store directly: read with `getState()` and subscribe with `subscribe()`. Do not introduce family-specific reactive wrappers for selector channels.
 - For no-arg selectors, pass the worker directly to the helper.
 - For selectors with args, pass the args tuple before the worker.
+- The args tuple may be a fresh array wrapper, but the values inside it should be
+  stable selector args; avoid `[ { id } ]`, `[ids.map(...)]`, or `[() => ...]`
+  unless the inner value is an intentional stable reference.
 - The first channel emission can have `prevPayload` as `null`/`undefined`; guard transition logic accordingly.
 - If multiple dispatches produce intermediate values, model the final UI value with selectors or action design; there is no public lock/unlock action API.
 - For generic IPC/websocket/DOM `EventChannel` consumers, route to `core/channel-effects` instead.
@@ -91,6 +97,10 @@ function* watchTodo(todoId: string) {
   });
 }
 ```
+
+Use scalar args like `todoId`. Do not pass freshly built selector option objects
+such as `[{ id: todoId }]`; if a selector intentionally keys by object identity,
+construct that object once and reuse the stable reference.
 
 ### 3. Use takeLeadingFromSelector when in-flight work should ignore new values
 
@@ -160,6 +170,7 @@ function* watchTodoGood(todoId: string) {
 - Hand-rolled channel loops where `takeLatestFromSelector` is enough.
 - Missing `channel.close()` in `finally`.
 - Passing selector args through closures instead of an args tuple.
+- Passing freshly constructed object/array/function selector args in the tuple.
 - Using generic `takeLatest(channel, worker)` on a channel created from a selector instead of `takeLatestFromSelector`.
 - Declaring `select*` selectors locally in the saga module instead of importing them from `[slice]-selectors.ts`.
 - Reaching for `take('*')` instead of a selector-channel helper or a concrete action creator.

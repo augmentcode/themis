@@ -30,6 +30,7 @@ import { plugin as reducerSideEffectPlugin } from "../store/reducer-side-effect/
 import { plugin as removedMiddlewareSourcePlugin } from "../core/removed-middleware-source/plugin.mjs";
 import { plugin as sagaLocalSelectorPlugin } from "../store/saga-local-selector/plugin.mjs";
 import { plugin as sagaWatcherActionTypePlugin } from "../store/saga-watcher-action-type/plugin.mjs";
+import { plugin as selectorArgumentStabilityPlugin } from "../store/selector-argument-stability/plugin.mjs";
 import { plugin as selectorExportNamePlugin } from "../store/selector-export-name/plugin.mjs";
 import { plugin as selectorFileNamePlugin } from "../store/selector-file-name/plugin.mjs";
 import { plugin as sharedReactStoreBoundaryPlugin } from "../react/shared-react-store-boundary/plugin.mjs";
@@ -79,6 +80,7 @@ export {
   removedMiddlewareSourcePlugin,
   sagaLocalSelectorPlugin,
   sagaWatcherActionTypePlugin,
+  selectorArgumentStabilityPlugin,
   selectorExportNamePlugin,
   selectorFileNamePlugin,
   sharedReactStoreBoundaryPlugin,
@@ -149,6 +151,7 @@ export const sagaSelectorChannelRulePlugins = {
   "inline-saga-selector": inlineSagaSelectorPlugin,
   "saga-local-selector": sagaLocalSelectorPlugin,
   "no-extra-selector-caching": noExtraSelectorCachingPlugin,
+  "selector-argument-stability": selectorArgumentStabilityPlugin,
   "no-wildcard-saga-take": noWildcardSagaTakePlugin,
   "direct-selector-call-mode": directSelectorCallModePlugin,
   "wait-for-named-selector": waitForNamedSelectorPlugin,
@@ -199,6 +202,7 @@ export const storeRulePlugins = {
   "inline-saga-selector": inlineSagaSelectorPlugin,
   "saga-local-selector": sagaLocalSelectorPlugin,
   "no-extra-selector-caching": noExtraSelectorCachingPlugin,
+  "selector-argument-stability": selectorArgumentStabilityPlugin,
   "no-wildcard-saga-take": noWildcardSagaTakePlugin,
   "wait-for-named-selector": waitForNamedSelectorPlugin,
   "typed-saga-yield-star": typedSagaYieldStarPlugin,
