@@ -75,10 +75,10 @@ export class Store<
     );
   }
 
-  getReadableState(): Readable<StoreBoundState<TStateMap>> {
+  getStateObservable(): Readable<StoreBoundState<TStateMap>> {
     if (!this.readableState) {
       throw new Error(
-        'Cannot access Store.getReadableState() before Store.init() has been called.'
+        'Cannot access Store.getStateObservable() before Store.init() has been called.'
       );
     }
 

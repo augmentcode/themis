@@ -287,32 +287,67 @@ describe('Store', () => {
         selectorStore.init();
         selectCount().subscribe(() => {})();
 
-        expect(consoleInfoSpy).toHaveBeenCalledTimes(1);
-        expect(consoleInfoSpy).toHaveBeenNthCalledWith(
-          1,
-          '[themis] selector trace',
+        const accessTraces = () =>
+          consoleInfoSpy.mock.calls
+            .map((call) => call[1] as any)
+            .filter((payload) => payload && 'accessedPathCount' in payload);
+
+        expect(accessTraces()).toEqual([
           expect.objectContaining({
             accessedPathCount: 2,
             accessedPaths: ['trace', 'trace.count'],
             selectorSource: expect.stringContaining('state.trace.count'),
-          })
-        );
+          }),
+        ]);
 
         selectEqualPathCount().subscribe(() => {})();
         selectFewerPaths().subscribe(() => {})();
-        expect(consoleInfoSpy).toHaveBeenCalledTimes(1);
+        expect(accessTraces()).toHaveLength(1);
 
         selectMorePaths().subscribe(() => {})();
-        expect(consoleInfoSpy).toHaveBeenCalledTimes(2);
-        expect(consoleInfoSpy).toHaveBeenNthCalledWith(
-          2,
-          '[themis] selector trace',
+        expect(accessTraces()).toHaveLength(2);
+        expect(accessTraces()[1]).toEqual(
           expect.objectContaining({
             accessedPathCount: 4,
             accessedPaths: ['trace', 'trace.count', 'trace.user', 'trace.user.name'],
             selectorSource: expect.stringContaining('state.trace.user.name'),
           })
         );
+      } finally {
+        consoleInfoSpy.mockRestore();
+      }
+    });
+
+    it('traces Store-created readable selector output cache request and cached counts', () => {
+      const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const initialState = { count: 0 };
+      const reducer = Object.assign((state = initialState) => state, { initialState });
+
+      try {
+        const selectorStore = new Store({ trace: reducer });
+        const selectCount = selectorStore.createSelector((state) => state.trace.count);
+
+        selectorStore.traceSelectors();
+        selectorStore.init();
+        const first = selectCount();
+        const second = selectCount();
+        const third = selectCount();
+
+        expect(second).toBe(first);
+        expect(third).toBe(first);
+
+        const cacheTraces = consoleInfoSpy.mock.calls
+          .map((call) => call[1] as any)
+          .filter((payload) => payload && 'observableCacheRequestCount' in payload);
+        expect(cacheTraces).toHaveLength(3);
+        expect(cacheTraces[1].observableCacheRequestCount).toBe(
+          cacheTraces[0].observableCacheRequestCount + 1
+        );
+        expect(cacheTraces[2].observableCacheRequestCount).toBe(
+          cacheTraces[0].observableCacheRequestCount + 2
+        );
+        expect(cacheTraces[1].observableCacheCachedCount).toBe(cacheTraces[0].observableCacheCachedCount);
+        expect(cacheTraces[2].observableCacheCachedCount).toBe(cacheTraces[0].observableCacheCachedCount);
       } finally {
         consoleInfoSpy.mockRestore();
       }
@@ -481,18 +516,18 @@ describe('Store', () => {
     });
   });
 
-  describe('getReadableState', () => {
+  describe('getStateObservable', () => {
     it('returns the initialized readable store state', () => {
       store.init();
 
-      expect(store.getReadableState()).toEqual(
+      expect(store.getStateObservable()).toEqual(
         expect.objectContaining({ subscribe: expect.any(Function) })
       );
     });
 
     it('throws if init() has not been called', () => {
-      expect(() => store.getReadableState()).toThrow(
-        'Cannot access Store.getReadableState() before Store.init() has been called.'
+      expect(() => store.getStateObservable()).toThrow(
+        'Cannot access Store.getStateObservable() before Store.init() has been called.'
       );
     });
   });

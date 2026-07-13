@@ -273,7 +273,7 @@ const incompleteRouting = {
 
 | Route | Use when | Path |
 | --- | --- | --- |
-| `./store/SKILL.md` | Choosing/importing `Store`, initialization/disposal, `getReadableState()`, `useInitStore`/`useRunSaga` helpers, shared Store runtime behavior, or Store-family contrast. | `./store/SKILL.md` |
+| `./store/SKILL.md` | Choosing/importing `Store`, initialization/disposal, `getStateObservable()`, `useInitStore`/`useRunSaga` helpers, shared Store runtime behavior, or Store-family contrast. | `./store/SKILL.md` |
 | `./component-integration/SKILL.md` | Wiring Store initialization, component reads, Store dispatch, and template reactivity. | `./component-integration/SKILL.md` |
 | `../streaming/store/SKILL.md` | Importing, initializing, and disposing the Kefir/observable StreamingStore variant. | `../streaming/store/SKILL.md` |
 
