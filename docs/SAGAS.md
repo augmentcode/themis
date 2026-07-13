@@ -171,6 +171,12 @@ function* debounceSearch() {
 ## Selector Channel Effects
 
 React to **selector value changes** in sagas. These handle channel lifecycle automatically.
+Selector-channel helpers accept Store-created selectors from Svelte `Store`,
+`ReactStore`, and `StreamingStore` as long as they expose the shared
+`.select(state, ...args)` / `.effect(...args)` selector read shape. In saga code,
+pass plain selector arguments just as you would to `.effect(...)`; do not pass or
+subscribe to direct Svelte `Readable`, React `ReadonlySignal`, or Kefir
+`Observable` selector outputs.
 
 **Public API:** `@augmentcode/themis/saga`
 
@@ -230,7 +236,8 @@ For patterns that don't fit `takeEvery`/`takeLatest`/`takeLeading` (e.g., races,
 
 Selector channels subscribe through the actual Redux store in saga context, using
 `getState()` for reads and `subscribe()` for change notifications. They do not
-require or receive a Svelte readable state wrapper from saga context.
+require or receive a Svelte readable state wrapper, React signal, or Kefir
+observable from saga context.
 
 ```typescript
 import { createChannelFromSelector } from "@augmentcode/themis/saga";
