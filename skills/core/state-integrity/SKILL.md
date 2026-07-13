@@ -191,5 +191,5 @@ Implementation handoffs must include:
 
 - `core/core-policy` — always-on Redux ownership rules.
 - `core/collections` — canonical entity storage.
-- `svelte/selectors` — where derived values belong.
+- Selected Store family selector skill — where derived values belong.
 - `core/verifier` — review gates for these rules.
