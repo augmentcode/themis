@@ -10,4 +10,8 @@ export {
   takeLatestFromSelector,
   takeLeadingFromSelector,
 } from './utils/sagas/selector-channel-effects';
-export type { SelectorChannelPayload, SelectorWorkerSaga } from './utils/sagas/selector-channel-effects';
+export type {
+  SelectorChannelPayload,
+  SelectorChannelSelector,
+  SelectorWorkerSaga,
+} from './utils/sagas/selector-channel-effects';

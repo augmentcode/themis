@@ -1,7 +1,9 @@
 import { type EventChannel } from "redux-saga";
 import { call, race, take, delay } from "typed-redux-saga";
-import { type StoreSelector } from "../../../types";
-import { createChannelFromSelector } from "../../../utils/sagas/selector-channel-effects";
+import {
+  createChannelFromSelector,
+  type SelectorChannelSelector,
+} from "../../../utils/sagas/selector-channel-effects";
 
 const checkValueSaga = function* <R, T extends { payload: R; prevPayload: R | undefined | null }>(
   channel: EventChannel<T>,
@@ -16,7 +18,7 @@ const checkValueSaga = function* <R, T extends { payload: R; prevPayload: R | un
 };
 
 export function* waitFor<ARGS extends any[], R>(
-  selector: StoreSelector<R, ARGS>,
+  selector: SelectorChannelSelector<R, ARGS, any>,
   args: ARGS,
   isExpectedValue: (value: R, prevVal: R | undefined | null) => boolean,
   timeoutMs?: number

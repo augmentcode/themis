@@ -27,10 +27,21 @@
 import { take, cancel, fork, getContext as getSagaContext } from "typed-redux-saga";
 import { eventChannel, type EventChannel, type Task } from "redux-saga";
 import type { ReduxStore } from "../../internal-types";
-import type { StoreSelector, StoreState } from "../../types";
+import type { StoreSelectorCallback, StoreSelectorEffect, StoreState } from "../../types";
 import { shallowEqual } from "fast-equals";
 import { createCachedSelector } from "../selector-core/create-cached-selector";
 import { INTERNAL_STORE_UTILITY_DOMAIN } from "../store/store-runtime-constants";
+
+/**
+ * Structural selector shape used by selector-channel saga effects.
+ *
+ * This intentionally depends on the shared plain-argument selector capabilities
+ * instead of a selector's direct-call observable output type.
+ */
+export type SelectorChannelSelector<R, ARGS extends any[] = [], TState = StoreState> = {
+  select: StoreSelectorCallback<R, ARGS, TState>;
+  effect: StoreSelectorEffect<R, ARGS>;
+};
 
 /**
  * The payload type emitted by selector channels
@@ -69,7 +80,7 @@ export type SelectorWorkerSaga<R> = (
  * @returns An event channel that emits { payload, prevPayload } on value changes
  */
 export function* createChannelFromSelector<R, ARGS extends any[]>(
-  selector: StoreSelector<R, ARGS, any>,
+  selector: SelectorChannelSelector<R, ARGS, any>,
   ...args: ARGS
 ): Generator<any, EventChannel<SelectorChannelPayload<R>>, any> {
   const reduxStore = (yield* getSagaContext("reduxStore")) as ReduxStore | undefined;
@@ -108,7 +119,7 @@ export function* createChannelFromSelector<R, ARGS extends any[]>(
  * Internal implementation for takeEvery pattern with selector channels.
  */
 function* takeEveryFromSelectorImpl<R, ARGS extends any[]>(
-  selector: StoreSelector<R, ARGS, any>,
+  selector: SelectorChannelSelector<R, ARGS, any>,
   args: ARGS,
   worker: SelectorWorkerSaga<R>
 ) {
@@ -135,18 +146,18 @@ function* takeEveryFromSelectorImpl<R, ARGS extends any[]>(
  * @param worker - Worker saga to run for each value change (optional if argsOrWorker is the worker)
  */
 export function takeEveryFromSelector<R>(
-  selector: StoreSelector<R, [], any>,
+  selector: SelectorChannelSelector<R, [], any>,
   worker: SelectorWorkerSaga<R>
 ): Generator<any, Task, any>;
 
 export function takeEveryFromSelector<R, ARGS extends any[]>(
-  selector: StoreSelector<R, ARGS, any>,
+  selector: SelectorChannelSelector<R, ARGS, any>,
   args: ARGS,
   worker: SelectorWorkerSaga<R>
 ): Generator<any, Task, any>;
 
 export function* takeEveryFromSelector<R, ARGS extends any[]>(
-  selector: StoreSelector<R, ARGS, any>,
+  selector: SelectorChannelSelector<R, ARGS, any>,
   argsOrWorker: ARGS | SelectorWorkerSaga<R>,
   worker?: SelectorWorkerSaga<R>
 ): Generator<any, Task, any> {
@@ -163,7 +174,7 @@ export function* takeEveryFromSelector<R, ARGS extends any[]>(
  * Internal implementation for takeLatest pattern with selector channels.
  */
 function* takeLatestFromSelectorImpl<R, ARGS extends any[]>(
-  selector: StoreSelector<R, ARGS, any>,
+  selector: SelectorChannelSelector<R, ARGS, any>,
   args: ARGS,
   worker: SelectorWorkerSaga<R>
 ) {
@@ -194,18 +205,18 @@ function* takeLatestFromSelectorImpl<R, ARGS extends any[]>(
  * @param worker - Worker saga to run for each value change (optional if argsOrWorker is the worker)
  */
 export function takeLatestFromSelector<R>(
-  selector: StoreSelector<R, [], any>,
+  selector: SelectorChannelSelector<R, [], any>,
   worker: SelectorWorkerSaga<R>
 ): Generator<any, Task, any>;
 
 export function takeLatestFromSelector<R, ARGS extends any[]>(
-  selector: StoreSelector<R, ARGS, any>,
+  selector: SelectorChannelSelector<R, ARGS, any>,
   args: ARGS,
   worker: SelectorWorkerSaga<R>
 ): Generator<any, Task, any>;
 
 export function* takeLatestFromSelector<R, ARGS extends any[]>(
-  selector: StoreSelector<R, ARGS, any>,
+  selector: SelectorChannelSelector<R, ARGS, any>,
   argsOrWorker: ARGS | SelectorWorkerSaga<R>,
   worker?: SelectorWorkerSaga<R>
 ): Generator<any, Task, any> {
@@ -222,7 +233,7 @@ export function* takeLatestFromSelector<R, ARGS extends any[]>(
  * Internal implementation for takeLeading pattern with selector channels.
  */
 function* takeLeadingFromSelectorImpl<R, ARGS extends any[]>(
-  selector: StoreSelector<R, ARGS, any>,
+  selector: SelectorChannelSelector<R, ARGS, any>,
   args: ARGS,
   worker: SelectorWorkerSaga<R>
 ) {
@@ -259,18 +270,18 @@ function* takeLeadingFromSelectorImpl<R, ARGS extends any[]>(
  * @param worker - Worker saga to run (optional if argsOrWorker is the worker)
  */
 export function takeLeadingFromSelector<R>(
-  selector: StoreSelector<R, [], any>,
+  selector: SelectorChannelSelector<R, [], any>,
   worker: SelectorWorkerSaga<R>
 ): Generator<any, Task, any>;
 
 export function takeLeadingFromSelector<R, ARGS extends any[]>(
-  selector: StoreSelector<R, ARGS, any>,
+  selector: SelectorChannelSelector<R, ARGS, any>,
   args: ARGS,
   worker: SelectorWorkerSaga<R>
 ): Generator<any, Task, any>;
 
 export function* takeLeadingFromSelector<R, ARGS extends any[]>(
-  selector: StoreSelector<R, ARGS, any>,
+  selector: SelectorChannelSelector<R, ARGS, any>,
   argsOrWorker: ARGS | SelectorWorkerSaga<R>,
   worker?: SelectorWorkerSaga<R>
 ): Generator<any, Task, any> {
