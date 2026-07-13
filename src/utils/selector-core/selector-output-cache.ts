@@ -17,6 +17,11 @@ type SelectorOutputCacheNode = {
   value?: unknown;
 };
 
+type SelectorOutputCacheTraceState = {
+  observableCacheRequestCount: number;
+  observableCacheCachedCount: number;
+};
+
 const isWeakCacheKey = (key: unknown): key is object =>
   (typeof key === "object" && key !== null) || typeof key === "function";
 
@@ -58,17 +63,33 @@ const getChild = (node: SelectorOutputCacheNode, key: unknown): SelectorOutputCa
 };
 
 const root: SelectorOutputCacheNode = {};
-let observableCacheRequestCount = 0;
-let observableCacheCachedCount = 0;
+const traceStateBySelector = new WeakMap<SelectorOutputCacheKey, SelectorOutputCacheTraceState>();
+
+const getTraceState = (selectorFunc: SelectorOutputCacheKey): SelectorOutputCacheTraceState => {
+  const existing = traceStateBySelector.get(selectorFunc);
+  if (existing) {
+    return existing;
+  }
+
+  const state = {
+    observableCacheRequestCount: 0,
+    observableCacheCachedCount: 0,
+  };
+  traceStateBySelector.set(selectorFunc, state);
+  return state;
+};
 
 const reportCacheTrace = (
   selectorFunc: SelectorOutputCacheKey,
-  options: SelectorOutputCacheOptions | undefined
+  options: SelectorOutputCacheOptions | undefined,
+  traceState: SelectorOutputCacheTraceState | undefined
 ): void => {
+  if (!traceState) return;
+
   options?.traceReporter?.({
     selectorFunc: selectorFunc as any,
-    observableCacheRequestCount,
-    observableCacheCachedCount,
+    observableCacheRequestCount: traceState.observableCacheRequestCount,
+    observableCacheCachedCount: traceState.observableCacheCachedCount,
   });
 };
 
@@ -79,8 +100,9 @@ export const getOrCreate = <OUTPUT>(
   factory: SelectorOutputFactory<OUTPUT>,
   options?: SelectorOutputCacheOptions
 ): OUTPUT => {
-  if (options?.traceReporter) {
-    observableCacheRequestCount += 1;
+  const traceState = options?.traceReporter ? getTraceState(selectorFunc) : undefined;
+  if (traceState) {
+    traceState.observableCacheRequestCount += 1;
   }
 
   let current = getChild(root, stateSource);
@@ -91,16 +113,16 @@ export const getOrCreate = <OUTPUT>(
   }
 
   if (current.hasValue) {
-    reportCacheTrace(selectorFunc, options);
+    reportCacheTrace(selectorFunc, options, traceState);
     return current.value as OUTPUT;
   }
 
   const value = factory();
   current.value = value;
   current.hasValue = true;
-  if (options?.traceReporter) {
-    observableCacheCachedCount += 1;
+  if (traceState) {
+    traceState.observableCacheCachedCount += 1;
   }
-  reportCacheTrace(selectorFunc, options);
+  reportCacheTrace(selectorFunc, options, traceState);
   return value;
 };
