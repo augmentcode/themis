@@ -4,6 +4,7 @@
 
 - Added shared selector output caching with weak-object and primitive-key support.
 - Integrated cached selector outputs across Svelte readable selectors, React signal selectors, and Streaming Kefir selectors while preserving direct selector output behavior.
+- Renamed observable Store-family state accessor functions to `getStateObservable`.
 - Added cross-family selector-channel support so saga helpers accept Svelte, React, and Streaming selector objects without casts.
 - Added and updated selector output caching tests, selector-channel tests, Svelte explicit store binding coverage, React selector coverage, and Streaming selector coverage.
 - Fixed validation blockers for package self-reference imports and Svelte selector store detection.
