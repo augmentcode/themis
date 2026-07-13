@@ -234,14 +234,16 @@ describe("createSelector", () => {
   });
 
   it("does not share cached selector readables across explicit readable state sources", () => {
-    const sourceA = createMockStoreBinding(writable<CounterState>(withUtility({ counter: { count: 1 } })));
-    const sourceB = createMockStoreBinding(writable<CounterState>(withUtility({ counter: { count: 5 } })));
+    const sharedStoreState = writable<CounterState>(withUtility({ counter: { count: 1 } }));
+    const sourceA = createMockStoreBinding(sharedStoreState);
+    const sourceB = createMockStoreBinding(sharedStoreState);
     const selectCount = createSelector(sourceA, (state) => state.counter.count);
     const selectCountFromA = selectCount.withStore(sourceA);
     const selectCountFromB = selectCount.withStore(sourceB);
 
     expect(selectCountFromA()).toBe(selectCountFromA());
     expect(selectCountFromA()).not.toBe(selectCountFromB());
+    expect(selectCountFromA()).not.toBe(selectCount.withStore(sharedStoreState)());
   });
 });
 
