@@ -65,7 +65,8 @@ export class ReactStore<
       () => this.getSignalState(),
       selectorFunc,
       () => this.getSelectorFlushManager(),
-      this.getSelectorTraceReporter<StoreBoundState<TStateMap>, R, ARGS>()
+      this.getSelectorTraceReporter<StoreBoundState<TStateMap>, R, ARGS>(),
+      this
     );
   }
 
