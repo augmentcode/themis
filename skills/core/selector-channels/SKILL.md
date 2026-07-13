@@ -9,7 +9,6 @@ description: >-
 type: sub-skill
 requires:
   - core
-  - svelte/selectors
   - core/sagas
 triggers:
   - take latest selector
@@ -25,7 +24,7 @@ Use this skill when a saga should react to selector value changes instead of act
 
 - Human guide: `docs/SAGAS.md#selector-channel-effects`
 - Public API: `@augmentcode/themis/utils/sagas/selector-channel-effects` or aggregate `@augmentcode/themis/saga`.
-- Related skills: `core/sagas`, `core/wait-for`, `core/channel-effects`, `svelte/selector-lifecycle`
+- Related skills: `core/sagas`, `core/wait-for`, `core/channel-effects`, plus the selected Store family selector lifecycle skill when direct selector call modes matter.
 
 ## Choose the helper
 
@@ -37,9 +36,9 @@ Use this skill when a saga should react to selector value changes instead of act
 
 ## Do
 
-- Use named selectors created by the package selector utilities.
+- Use named selectors created by the selected Store family utilities; selector-channel helpers require the shared `.select(state, ...args)` / `.effect(...args)` read shape.
 - Import the selectors from the owning slice's `[slice]-selectors.ts` file; do not declare local `select*` functions/factories inside saga modules.
-- Pass selector arguments as the args tuple in the second position, e.g. `[itemId]`.
+- Pass plain selector arguments as the args tuple in the second position, e.g. `[itemId]`, matching `.select(state, ...args)` / `.effect(...args)` rather than direct-call reactive argument wrappers.
 - Expect worker payloads to include `{ payload, prevPayload }`.
 - Prefer the `take*FromSelector` helpers because they create and clean up channels for you.
 - Close raw channels in `finally` every time.
@@ -54,10 +53,11 @@ Use this skill when a saga should react to selector value changes instead of act
 - Do not choose a raw channel for simple load-on-change behavior.
 - Do not leave manual channel loops without cancellation and cleanup.
 - Do not confuse selector channels with action watchers; use core saga effects for actions.
+- Do not pass or subscribe to direct reactive/observable selector outputs in selector-channel effects.
 
 ## Implementation cues
 
-- Selector-channel effects use the saga-context Redux store directly: read with`getState()` and subscribe with `subscribe()`. Do not introduce a Sveltereadable state wrapper for selector channels.
+- Selector-channel effects use the saga-context Redux store directly: read with `getState()` and subscribe with `subscribe()`. Do not introduce family-specific reactive wrappers for selector channels.
 - For no-arg selectors, pass the worker directly to the helper.
 - For selectors with args, pass the args tuple before the worker.
 - The first channel emission can have `prevPayload` as `null`/`undefined`; guard transition logic accordingly.
@@ -169,4 +169,4 @@ function* watchTodoGood(todoId: string) {
 - `docs/SAGAS.md` — full selector-channel examples and saga context.
 - `core/wait-for` — one-shot selector waits.
 - `core/channel-effects` — generic `EventChannel` consumers.
-- `svelte/selector-lifecycle` — selector initialization and call modes.
+- Selected Store family selector lifecycle skill — selector initialization and call modes.

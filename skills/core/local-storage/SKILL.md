@@ -151,11 +151,11 @@ Source: `../SKILL.md §15`. Priority: **HIGH**.
 
 **Mechanism:** Side effects belong in sagas; a component write cannot be replayed, logged, or tested like a saga.
 
-```svelte
-<!-- WRONG -->
-<script>
-  $effect(() => { localStorage.setItem("theme", $theme$); });
-</script>
+```typescript
+// WRONG — component lifecycle/effect code writes storage directly
+function persistThemeFromComponent(theme: string) {
+  window.localStorage.setItem("theme", theme);
+}
 ```
 
 ```typescript

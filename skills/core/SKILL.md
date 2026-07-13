@@ -5,8 +5,9 @@ description: >-
   themis. Use for canonical Redux state policy, action/reducer
   primitives, normalized state helpers, typed-redux-saga patterns, saga manager
   behavior, saga channel/effect helpers, explicit store pruning, serialization,
-  testing, debugging, and verifier handoff. Use Svelte or Streaming skills for framework-specific Store
-  selector/component behavior, choosing only one concrete Store family per app.
+  testing, debugging, and verifier handoff. Use the selected Store family skill
+  for framework-specific Store selector/component behavior, choosing only one
+  concrete Store family per app.
 type: core
 triggers:
   - redux core
@@ -27,7 +28,7 @@ triggers:
 
 Use this skill for framework-independent Redux/redux-saga work in the
 `themis` package. It routes to the core skills that are not owned
-by the Svelte-specific or Streaming-specific taxonomy waves.
+by Store-family-specific taxonomy waves.
 
 > This package uses a CUSTOM Redux setup — not Redux Toolkit (RTK). Do not use
 > `createSlice`, `configureStore`, `createAsyncThunk`, or any RTK API.
@@ -38,11 +39,11 @@ by the Svelte-specific or Streaming-specific taxonomy waves.
 - Cite the applicable skills and docs in implementation plans and handoffs.
 - Include verifier-ready evidence: owner searches, focused tests, validation
   scripts, or `git diff --check` depending on the change.
-- Stop and ask if a request crosses into Svelte-specific selector/component
-  behavior or Streaming/Kefir-specific behavior.
+- Stop and ask if a request crosses into Store-family-specific selector,
+  component, lifecycle, or observable behavior.
 - Pair core with at most one concrete Store family for a given app/code path;
   core is shared Redux/redux-saga guidance and is not permission to integrate
-  both Svelte and Streaming Store patterns in one app.
+  multiple concrete Store family patterns in one app.
 
 ## Core routing workflow
 
@@ -84,10 +85,8 @@ by the Svelte-specific or Streaming-specific taxonomy waves.
 
 ## Related non-core routes
 
-- Svelte Store/component/selector lifecycle guidance lives under `../svelte/`.
-- StreamingStore and Kefir/observable selector guidance lives under
-  `../streaming/`.
-- These concrete Store families are mutually exclusive per app. Mixed
-  repositories may use different families in separate apps/packages/code paths,
-  but one app must not combine both.
-- Migration lifecycle skills remain under `../svelte/migration/`.
+- Store family selector, component, lifecycle, migration, and observable-output
+  guidance is selected by the root router outside core.
+- Concrete Store families are mutually exclusive per app. Mixed repositories may
+  use different families in separate apps/packages/code paths, but one app must
+  not combine multiple Store family patterns.

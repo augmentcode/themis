@@ -222,6 +222,6 @@ it("claims the todo flow works", () => {
 
 - `docs/TESTING.md` — human reference with reducer, selector, saga, and integration examples.
 - `core/reducers/SKILL.md` — reducer purity and reference equality.
-- `svelte/selectors/SKILL.md` — `.select(state)` selector testing.
+- Selected Store family selector skill — `.select(state)` selector testing.
 - `core/sagas/SKILL.md` — saga effect and watcher conventions.
 - `core/state-integrity/SKILL.md` — canonical ownership evidence.

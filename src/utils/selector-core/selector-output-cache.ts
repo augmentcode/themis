@@ -2,14 +2,6 @@ export type SelectorOutputCacheKey = (...args: any[]) => unknown;
 
 export type SelectorOutputFactory<OUTPUT> = () => OUTPUT;
 
-export type SelectorOutputCache = {
-  getOrCreate<OUTPUT>(
-    selectorFunc: SelectorOutputCacheKey,
-    selectorArgs: readonly unknown[],
-    factory: SelectorOutputFactory<OUTPUT>
-  ): OUTPUT;
-};
-
 type PrimitiveCacheKey = string | number | boolean | bigint | symbol | null | undefined;
 
 type SelectorOutputCacheNode = {
@@ -59,36 +51,27 @@ const getChild = (node: SelectorOutputCacheNode, key: unknown): SelectorOutputCa
   return getPrimitiveChild(node, key as PrimitiveCacheKey);
 };
 
-export const createSelectorOutputCache = (): SelectorOutputCache => {
-  const roots = new WeakMap<SelectorOutputCacheKey, SelectorOutputCacheNode>();
+const root: SelectorOutputCacheNode = {};
 
-  const getRoot = (selectorFunc: SelectorOutputCacheKey): SelectorOutputCacheNode => {
-    const existing = roots.get(selectorFunc);
-    if (existing) {
-      return existing;
-    }
+export const getOrCreate = <OUTPUT>(
+  stateSource: object,
+  selectorFunc: SelectorOutputCacheKey,
+  selectorArgs: readonly unknown[],
+  factory: SelectorOutputFactory<OUTPUT>
+): OUTPUT => {
+  let current = getChild(root, stateSource);
+  current = getChild(current, selectorFunc);
 
-    const root: SelectorOutputCacheNode = {};
-    roots.set(selectorFunc, root);
-    return root;
-  };
+  for (const arg of selectorArgs) {
+    current = getChild(current, arg);
+  }
 
-  return {
-    getOrCreate(selectorFunc, selectorArgs, factory) {
-      let current = getRoot(selectorFunc);
+  if (current.hasValue) {
+    return current.value as OUTPUT;
+  }
 
-      for (const arg of selectorArgs) {
-        current = getChild(current, arg);
-      }
-
-      if (current.hasValue) {
-        return current.value as ReturnType<typeof factory>;
-      }
-
-      const value = factory();
-      current.value = value;
-      current.hasValue = true;
-      return value;
-    },
-  };
+  const value = factory();
+  current.value = value;
+  current.hasValue = true;
+  return value;
 };

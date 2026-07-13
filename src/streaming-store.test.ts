@@ -39,10 +39,10 @@ describe('StreamingStore', () => {
 
   it('returns streaming selectors bound to Redux store updates', () => {
     const store = new StreamingStore({ counter: counterReducer });
-    const selectCount = store.createSelector((state) => state.counter.count);
     const values: number[] = [];
 
     store.init();
+    const selectCount = store.createSelector((state) => state.counter.count);
     const subscription = selectCount().observe((value) => values.push(value));
     store.dispatch({ type: 'counter/set', payload: 2 });
     expect(values).toEqual([0]);
@@ -66,10 +66,10 @@ describe('StreamingStore', () => {
 
     try {
       const store = new StreamingStore({ counter: counterReducer });
-      const selectCount = store.createSelector((state) => state.counter.count);
 
       store.traceSelectors();
       store.init();
+      const selectCount = store.createSelector((state) => state.counter.count);
       const subscription = selectCount().observe(() => {});
       subscription.unsubscribe();
 
@@ -93,10 +93,10 @@ describe('StreamingStore', () => {
       undefined,
       { throttledSelectorFrequency: 10 }
     );
-    const selectCount = store.createSelector((state) => state.counter.count);
     const values: number[] = [];
 
     store.init();
+    const selectCount = store.createSelector((state) => state.counter.count);
     const subscription = selectCount().observe((value) => values.push(value));
     store.dispatch({ type: 'counter/set', payload: 2 });
     vi.advanceTimersByTime(0);
@@ -121,12 +121,12 @@ describe('StreamingStore', () => {
       undefined,
       { throttledSelectorFrequency: 10 }
     );
-    const selectCount = store.createSelector((state) => state.counter.count);
-    const selectDoubleCount = store.createSelector((state) => state.counter.count * 2);
     const countValues: number[] = [];
     const doubleValues: number[] = [];
 
     store.init();
+    const selectCount = store.createSelector((state) => state.counter.count);
+    const selectDoubleCount = store.createSelector((state) => state.counter.count * 2);
     const countSubscription = selectCount().observe((value) => countValues.push(value));
     const doubleSubscription = selectDoubleCount().observe((value) => doubleValues.push(value));
     store.dispatch({ type: 'counter/set', payload: 1 });
@@ -159,12 +159,11 @@ describe('StreamingStore', () => {
 
   it('throws when stream state is read before initialization', () => {
     const store = new StreamingStore({ counter: counterReducer });
-    const selectCount = store.createSelector((state) => state.counter.count);
 
     expect(() => store.getStreamState()).toThrow(
       'Cannot access StreamingStore.getStreamState() before Store.init() has been called.'
     );
-    expect(() => selectCount()).toThrow(
+    expect(() => store.createSelector((state) => state.counter.count)).toThrow(
       'Cannot access StreamingStore.getStreamState() before Store.init() has been called.'
     );
   });

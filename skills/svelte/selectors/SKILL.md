@@ -55,6 +55,13 @@ For React consumers in a separate React app/package/code path, route to
 app/package/code path, route to `streaming/selectors`. Do not mix those concrete
 Store families into the Svelte app using this skill.
 
+Selector-channel helpers can consume Svelte `Store` selectors through the same
+`.select`/`.effect`-compatible read shape used by `ReactStore` and
+`StreamingStore` selectors. Pass plain selector arguments as the helper args
+tuple in sagas; selector-channel effects read the Redux store from saga context
+and do not call or subscribe to direct Svelte readable, React signal, or Kefir
+observable selector outputs.
+
 ## Selector caching
 
 - Store-created selectors have internal selector-result caching/memoization.

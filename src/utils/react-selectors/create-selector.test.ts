@@ -165,6 +165,58 @@ describe("react createSelector", () => {
     expect(mocks.useSignals).toHaveBeenCalledTimes(1);
   });
 
+  it("reuses cached selector signal outputs for the same state source and args", () => {
+    const state = signal<CounterState>(withUtility({ counter: { count: 2 } }));
+    const selectorStore = createMockStoreBinding(state);
+    const selectScaledCount = createSelector(selectorStore, (state, factor: number) => {
+      return state.counter.count * factor;
+    });
+
+    expect(selectScaledCount(3)).toBe(selectScaledCount(3));
+  });
+
+  it("creates distinct selector signal outputs for different primitive args", () => {
+    const state = signal<CounterState>(withUtility({ counter: { count: 2 } }));
+    const selectorStore = createMockStoreBinding(state);
+    const selectLabel = createSelector(selectorStore, (state, label: string, page: number) => {
+      return `${label}:${page}:${state.counter.count}`;
+    });
+
+    expect(selectLabel("count", 1)).toBe(selectLabel("count", 1));
+    expect(selectLabel("count", 1)).not.toBe(selectLabel("count", 2));
+    expect(selectLabel("count", 1)).not.toBe(selectLabel("other", 1));
+  });
+
+  it("keys selector signal outputs by object identity and argument ordering", () => {
+    const state = signal<CounterState>(withUtility({ counter: { count: 2 } }));
+    const selectorStore = createMockStoreBinding(state);
+    const selectPair = createSelector(selectorStore, (state, first: { id: string }, second: { id: string }) => {
+      return `${first.id}:${second.id}:${state.counter.count}`;
+    });
+    const first = { id: "first" };
+    const firstCopy = { id: "first" };
+    const second = { id: "second" };
+
+    expect(selectPair(first, second)).toBe(selectPair(first, second));
+    expect(selectPair(first, second)).not.toBe(selectPair(firstCopy, second));
+    expect(selectPair(first, second)).not.toBe(selectPair(second, first));
+  });
+
+  it("separates cached selector signal outputs by explicit state source", () => {
+    const defaultState = signal<CounterState>(withUtility({ counter: { count: 1 } }));
+    const sharedOverrideState = signal<CounterState>(withUtility({ counter: { count: 5 } }));
+    const selectorStore = createMockStoreBinding(defaultState);
+    const overrideStoreA = createMockStoreBinding(sharedOverrideState);
+    const overrideStoreB = createMockStoreBinding(sharedOverrideState);
+    const selectCount = createSelector(selectorStore, (state, label: string) => {
+      return `${label}:${state.counter.count}`;
+    });
+
+    expect(selectCount.withStore(overrideStoreA)("count")).toBe(selectCount.withStore(overrideStoreA)("count"));
+    expect(selectCount.withStore(overrideStoreA)("count")).not.toBe(selectCount.withStore(overrideStoreB)("count"));
+    expect(selectCount.withStore(overrideStoreA)("count")).not.toBe(selectCount.withStore(sharedOverrideState)("count"));
+  });
+
   it("propagates Store.getSignalState() initialization guard errors", () => {
     const selectorStore: StoreSignalStateSource<CounterState> = {
       getSignalState: vi.fn(() => {

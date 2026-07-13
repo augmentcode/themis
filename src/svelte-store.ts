@@ -73,7 +73,8 @@ export class Store<
       () => this.getReadableState(),
       selectorFunc,
       () => this.getSelectorFlushManager(),
-      this.getSelectorTraceReporter<StoreBoundState<TStateMap>, R, ARGS>()
+      this.getSelectorTraceReporter<StoreBoundState<TStateMap>, R, ARGS>(),
+      this
     );
   }
 

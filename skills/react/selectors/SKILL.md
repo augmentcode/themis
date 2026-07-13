@@ -96,9 +96,12 @@ default; pass `{ traceSelectors: true }` in the final Store options object only
 for temporary diagnostics. `.effect(...args)` is saga-only; it is not a React
 hook, signal subscription, or throttled render path.
 
-Selector-channel helpers that consume `.effect(...)`-compatible selectors run in
-sagas and subscribe through the Redux store object's `getState()` / `subscribe()`
-context path, not through React signals or a Svelte readable wrapper.
+Selector-channel helpers that consume `.select`/`.effect`-compatible selectors
+run in sagas and support `ReactStore` selectors through the same shared selector
+read shape used by Svelte `Store` and `StreamingStore` selectors. Pass plain
+selector arguments as the helper args tuple; selector-channel effects subscribe
+through the Redux store object's `getState()` / `subscribe()` context path, not
+through React signals, Svelte readables, or Kefir observables.
 
 ## Selector caching
 

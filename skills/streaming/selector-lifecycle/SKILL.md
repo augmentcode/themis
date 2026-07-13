@@ -42,8 +42,13 @@ Use it only for apps that chose the Streaming Store family. Do not combine these
 
 - `StreamingStore.getStreamState()` intentionally throws before `init()` and after`dispose()`; do not hide that error with fallback empty streams.
 - A direct selector call returns a Kefir observable. Manage observation/teardownusing the consuming app's Kefir subscription pattern.
+- Same source observable + selector + args direct calls reuse the cached Kefir Observable, but only call direct observable mode after `init()` or through a valid `.withStore(...)` source.
 - `.withStore(...)` accepts either a source with `getStreamState()` or a Kefirobservable of Store state; use it for tests/integration adapters that own theirown state stream.
 - `.select(...)` and `.effect(...)` are not streaming subscriptions. They are thepure read and saga read escape hatches shared with the Svelte selector API.
+- Selector-channel helpers can consume StreamingStore selectors in sagas through
+  the shared `.select`/`.effect` read shape. Pass plain args to the helper args
+  tuple; do not treat direct Kefir Observable selector outputs as saga
+  subscriptions.
 
 ## Svelte-readable contrast
 

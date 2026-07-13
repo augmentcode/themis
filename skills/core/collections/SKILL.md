@@ -111,7 +111,7 @@ afterRelease.ids satisfies string[];
 ### Collection selectors expose item and ordered-list reads
 
 ```ts
-import { Store } from "@augmentcode/themis/svelte-store";
+import { Store } from "<selected Store family package>";
 import { type Collection, createCollection, getItem, getItems } from "@augmentcode/themis/utils/collections/collection-utils";
 import { createReducer } from "@augmentcode/themis/utils/store/create-reducer";
 
@@ -167,5 +167,5 @@ export const todosReducer = createReducer(initialState).with(renameTodo, (state,
 
 - `docs/COLLECTIONS.md` — human reference for helper signatures and examples.
 - `core/reducers/SKILL.md` — pure immutable reducer updates.
-- `svelte/selectors/SKILL.md` — collection selector helpers.
+- Selected Store family selector skill — collection selector helpers.
 - `core/state-serialization/SKILL.md` — collections as serializable alternatives to `Map`/`Set`.

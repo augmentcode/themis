@@ -239,7 +239,7 @@ const incompleteRouting = {
 | --- | --- | --- |
 | `../core/actions/SKILL.md` | Creating custom `createAction` or `createAsyncAction` actions. | `../core/actions/SKILL.md` |
 | `../core/reducers/SKILL.md` | Building immutable chained reducers and no-op reference equality behavior. | `../core/reducers/SKILL.md` |
-| `./selectors/SKILL.md` | Creating Store-bound selectors, collection utility reads, `.select`, or `.effect` usage. | `./selectors/SKILL.md` |
+| `./selectors/SKILL.md` | Creating Store-bound selectors, cached Svelte readable direct outputs, collection utility reads, `.select`, or `.effect` usage. | `./selectors/SKILL.md` |
 | `../streaming/selectors/SKILL.md` | Creating StreamingStore selectors whose direct calls return Kefir observables. | `../streaming/selectors/SKILL.md` |
 
 ### Selector system
@@ -249,7 +249,7 @@ const incompleteRouting = {
 | `./selector-lifecycle/SKILL.md` | Choosing component-init, handler, or saga selector call modes; using Store-first dispatch. | `./selector-lifecycle/SKILL.md` |
 | `../streaming/selector-lifecycle/SKILL.md` | Choosing StreamingStore selector invocation/observation timing and non-readable call modes. | `../streaming/selector-lifecycle/SKILL.md` |
 | `../core/selector-channels/SKILL.md` | Reacting to selector value changes from sagas or creating selector-backed channels. | `../core/selector-channels/SKILL.md` |
-| `./selector-scheduling/SKILL.md` | Recognizing selector emission scheduling as an internal detail; do not import removed throttled-readable helpers. | `./selector-scheduling/SKILL.md` |
+| `./selector-scheduling/SKILL.md` | Recognizing cached readable output reuse and selector emission scheduling as internal details; do not import removed throttled-readable helpers. | `./selector-scheduling/SKILL.md` |
 | `../core/wait-for/SKILL.md` | Suspending sagas until selector predicates pass or time out. | `../core/wait-for/SKILL.md` |
 
 ### Sagas and side effects

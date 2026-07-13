@@ -175,8 +175,8 @@ window.svelteRedux.reduxContext.dispatch(action);
 
 ## 6. See also
 
-- `svelte/component-integration` — `store.init()`, why
-  multiple layouts calling `store.init()` is the usual
+- Selected Store family lifecycle skill — `store.init()`, why
+  multiple root lifecycle entries calling `store.init()` is the usual
   "multiple stores initialized" root cause.
 - `core/reducers` — the same-reference on no-op contract
   that reducer tests should enforce.
