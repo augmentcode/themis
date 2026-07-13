@@ -1,6 +1,12 @@
+import type { SelectorTraceReporter } from "./create-cached-selector";
+
 export type SelectorOutputCacheKey = (...args: any[]) => unknown;
 
 export type SelectorOutputFactory<OUTPUT> = () => OUTPUT;
+
+export type SelectorOutputCacheOptions = {
+  traceReporter?: SelectorTraceReporter<any, any, any[]>;
+};
 
 type PrimitiveCacheKey = string | number | boolean | bigint | symbol | null | undefined;
 
@@ -52,13 +58,31 @@ const getChild = (node: SelectorOutputCacheNode, key: unknown): SelectorOutputCa
 };
 
 const root: SelectorOutputCacheNode = {};
+let observableCacheRequestCount = 0;
+let observableCacheCachedCount = 0;
+
+const reportCacheTrace = (
+  selectorFunc: SelectorOutputCacheKey,
+  options: SelectorOutputCacheOptions | undefined
+): void => {
+  options?.traceReporter?.({
+    selectorFunc: selectorFunc as any,
+    observableCacheRequestCount,
+    observableCacheCachedCount,
+  });
+};
 
 export const getOrCreate = <OUTPUT>(
   stateSource: object,
   selectorFunc: SelectorOutputCacheKey,
   selectorArgs: readonly unknown[],
-  factory: SelectorOutputFactory<OUTPUT>
+  factory: SelectorOutputFactory<OUTPUT>,
+  options?: SelectorOutputCacheOptions
 ): OUTPUT => {
+  if (options?.traceReporter) {
+    observableCacheRequestCount += 1;
+  }
+
   let current = getChild(root, stateSource);
   current = getChild(current, selectorFunc);
 
@@ -67,11 +91,16 @@ export const getOrCreate = <OUTPUT>(
   }
 
   if (current.hasValue) {
+    reportCacheTrace(selectorFunc, options);
     return current.value as OUTPUT;
   }
 
   const value = factory();
   current.value = value;
   current.hasValue = true;
+  if (options?.traceReporter) {
+    observableCacheCachedCount += 1;
+  }
+  reportCacheTrace(selectorFunc, options);
   return value;
 };

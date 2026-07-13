@@ -11,12 +11,22 @@ export type CachedSelector<STATE, R, ARGS extends unknown[] = []> = (
   ...args: ARGS
 ) => R;
 
-export type SelectorTrace<STATE, R, ARGS extends unknown[] = []> = {
+export type SelectorAccessTrace<STATE, R, ARGS extends unknown[] = []> = {
   selectorFunc: CachedSelector<STATE, R, ARGS>;
   accessedPathCount: number;
   accessedPaths: Set<string>;
   parsedPaths: Map<string, AccessedPath>;
 };
+
+export type SelectorOutputCacheTrace<STATE, R, ARGS extends unknown[] = []> = {
+  selectorFunc: CachedSelector<STATE, R, ARGS>;
+  observableCacheRequestCount: number;
+  observableCacheCachedCount: number;
+};
+
+export type SelectorTrace<STATE, R, ARGS extends unknown[] = []> =
+  | SelectorAccessTrace<STATE, R, ARGS>
+  | SelectorOutputCacheTrace<STATE, R, ARGS>;
 
 export type SelectorTraceReporter<STATE, R, ARGS extends unknown[] = []> = (
   trace: SelectorTrace<STATE, R, ARGS>
