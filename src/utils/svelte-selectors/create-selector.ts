@@ -26,12 +26,27 @@ import {
 
 export { createCachedSelector };
 
+const isReduxStore = (arg: unknown): arg is ReduxStore => {
+  if (!arg || typeof arg !== "object") {
+    return false;
+  }
+
+  return (
+    "dispatch" in arg &&
+    typeof arg.dispatch === "function" &&
+    "getState" in arg &&
+    typeof arg.getState === "function" &&
+    "subscribe" in arg &&
+    typeof arg.subscribe === "function"
+  );
+};
+
 const isReadable = <T = any>(arg: unknown): arg is Readable<T> => {
   if (!arg || typeof arg !== "object") {
     return false;
   }
 
-  return "subscribe" in arg && typeof arg.subscribe === "function";
+  return "subscribe" in arg && typeof arg.subscribe === "function" && !isReduxStore(arg);
 };
 
 const isReadableStateSource = <TState = StoreState>(arg: unknown): arg is StoreReadableStateSource<TState> => {
