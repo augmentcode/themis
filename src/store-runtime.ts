@@ -263,10 +263,23 @@ export abstract class StoreRuntime<
     return (trace) => this.reportSelectorTrace(trace);
   }
 
+  protected shouldTraceSelectorCache(): boolean {
+    return this.selectorTracingEnabled;
+  }
+
   private reportSelectorTrace<STATE, R, ARGS extends unknown[] = []>(
     trace: SelectorTrace<STATE, R, ARGS>
   ): void {
     if (!this.selectorTracingEnabled) {
+      return;
+    }
+
+    if ('observableCacheRequestCount' in trace) {
+      console.info('[themis] selector trace', {
+        observableCacheRequestCount: trace.observableCacheRequestCount,
+        observableCacheCachedCount: trace.observableCacheCachedCount,
+        selectorSource: getSelectorSourceSnippet(trace.selectorFunc),
+      });
       return;
     }
 

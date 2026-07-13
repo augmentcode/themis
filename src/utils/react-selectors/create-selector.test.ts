@@ -42,7 +42,7 @@ const withUtility = <T extends StoreState>(state: T): T & InternalUtilityTestSta
 const createMockStoreBinding = <TState extends StoreState>(
   signalState: ReadonlySignal<TState>
 ): StoreSignalStateSource<TState> => ({
-  getSignalState: vi.fn(() => signalState),
+  getStateObservable: vi.fn(() => signalState),
 });
 
 describe("react createSelector", () => {
@@ -152,7 +152,7 @@ describe("react createSelector", () => {
     vi.advanceTimersByTime(0);
     unsubscribe();
 
-    expect(overrideStore.getSignalState).toHaveBeenCalledTimes(2);
+    expect(overrideStore.getStateObservable).toHaveBeenCalledTimes(2);
     expect(values).toEqual([5, 6]);
   });
 
@@ -217,16 +217,16 @@ describe("react createSelector", () => {
     expect(selectCount.withStore(overrideStoreA)("count")).not.toBe(selectCount.withStore(sharedOverrideState)("count"));
   });
 
-  it("propagates Store.getSignalState() initialization guard errors", () => {
+  it("propagates Store.getStateObservable() initialization guard errors", () => {
     const selectorStore: StoreSignalStateSource<CounterState> = {
-      getSignalState: vi.fn(() => {
-        throw new Error("Cannot access ReactStore.getSignalState() before Store.init() has been called.");
+      getStateObservable: vi.fn(() => {
+        throw new Error("Cannot access ReactStore.getStateObservable() before Store.init() has been called.");
       }),
     };
     const selectCount = createSelector(selectorStore, (state) => state.counter.count);
 
     expect(() => selectCount()).toThrow(
-      "Cannot access ReactStore.getSignalState() before Store.init() has been called."
+      "Cannot access ReactStore.getStateObservable() before Store.init() has been called."
     );
   });
 

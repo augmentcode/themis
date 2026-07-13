@@ -115,7 +115,7 @@ export type StoreStateFromReducers<Reducers extends ReducersMap> = {
 };
 export type StoreState<TStore = unknown> = TStore extends { readonly state: infer State }
   ? State
-  : TStore extends { getReadableState(): Readable<infer State> }
+  : TStore extends { getStateObservable(): Readable<infer State> }
   ? State
   : TStore extends { getReducers(): infer Reducers }
   ? Reducers extends ReducersMap
@@ -129,7 +129,7 @@ export type StoreState<TStore = unknown> = TStore extends { readonly state: infe
 export type StoreInstanceState<TStore = unknown> = StoreState<TStore>;
 
 export type StoreReadableStateSource<TState = StoreState> = {
-  getReadableState(): Readable<TState>;
+  getStateObservable(): Readable<TState>;
 };
 
 export type PreloadedStoreState<TState = StoreState> = Partial<TState>;

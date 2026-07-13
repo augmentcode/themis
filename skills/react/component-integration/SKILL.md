@@ -92,7 +92,7 @@ if (import.meta.hot) {
 ```
 
 Pass preloaded state to `reactStore.init(preloadedState)` when the app needs
-hydration. Initialize before selector reads because `ReactStore.getSignalState()`
+hydration. Initialize before selector reads because `ReactStore.getStateObservable()`
 throws before `init()` and after `dispose()`.
 
 ## 3. Dispose at the same owner boundary
@@ -259,7 +259,7 @@ fallback boundary.
 
 ## 8. See also
 
-- `react/store/SKILL.md` — `ReactStore` import, lifecycle, and `getSignalState()`.
+- `react/store/SKILL.md` — `ReactStore` import, lifecycle, and `getStateObservable()`.
 - `react/signals/SKILL.md` — Preact Signals `.value`, tracking, direct JSX signal
   rendering, and component-local signal hooks.
 - `react/selector-lifecycle/SKILL.md` — selector call modes across components,handlers, tests, composition, explicit binding, and sagas.

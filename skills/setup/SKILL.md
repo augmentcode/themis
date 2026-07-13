@@ -55,7 +55,7 @@ Use the shared slice/action/reducer/saga examples below for all families, but ad
 | Setup seam | Svelte Store | React Store | Streaming Store |
 | --- | --- | --- | --- |
 | Store import and instance | import { Store } from '@augmentcode/themis/svelte-store'; export const store = new Store({ counter: counterReducer }) | import { ReactStore } from '@augmentcode/themis/react-store'; export const reactStore = new ReactStore({ counter: counterReducer }) | import { StreamingStore } from '@augmentcode/themis/streaming-store'; export const streamStore = new StreamingStore({ counter: counterReducer }) |
-| State bridge expectation | store.init() creates the Svelte readable state bridge; getReadableState() and window.svelteRedux.reduxContext are Svelte-readable/devtool inspection paths | reactStore.init() creates the Preact React signal state bridge; getSignalState() is available only after init and direct selector calls return signals | streamStore.init() creates the Kefir state stream; getStreamState() is available only after init and direct selector calls return Kefir observables |
+| State bridge expectation | store.init() creates the Svelte readable state bridge; store.getStateObservable() and window.svelteRedux.reduxContext are Svelte-readable/devtool inspection paths | reactStore.init() creates the Preact React signal state bridge; reactStore.getStateObservable() is available only after init and direct selector calls return signals | streamStore.init() creates the Kefir state stream; streamStore.getStateObservable() is available only after init and direct selector calls return Kefir observables |
 | Selector direct call mode | selectFoo() returns a Svelte readable and belongs at Svelte component init; templates use $foo | selectFoo() returns a ReadonlySignal<R> and is the preferred React consumer path; use selectFoo.useValue(...args) only for necessary plain-value boundaries | selectFoo() returns a Kefir Observable<R, any>; consumers own observation/subscription teardown |
 | Non-render selector reads | .select(state, ...args) for tests, handlers, and selector composition; yield* selectFoo.effect(...args) in sagas | Same .select(...) and saga .effect(...); .useValue(...) is not a saga/test helper | Same .select(...) and saga .effect(...); observable calls are not Svelte readables or React hooks |
 | Initialization owner | Svelte root layout calls const dispose = store.init(); onDestroy(dispose) before children use selectors | App bootstrap initializes reactStore before React selector reads; dispose when the root/test owner unmounts or exits | Process/server/test owner initializes streamStore before observing selector streams; dispose when that owner exits |
@@ -388,7 +388,7 @@ If you register devtools with `store.initDevTool()` after `store.init()`, the in
 
 | Console Command | Effect |
 | --- | --- |
-| window.svelteRedux.reduxContext | Access the initialized Store instance (state, dispatch, getReadableState()) |
+| window.svelteRedux.reduxContext | Access the initialized Store instance (state, dispatch, getStateObservable()) |
 
 ### Inspecting state from the console:
 
@@ -400,7 +400,7 @@ window.svelteRedux.reduxContext.state
 window.svelteRedux.reduxContext.dispatch({ type: 'counter/increment', payload: undefined })
 
 // Subscribe to readable state
-window.svelteRedux.reduxContext.getReadableState().subscribe(console.log)
+window.svelteRedux.reduxContext.getStateObservable().subscribe(console.log)
 ```
 
 ## Quick Reference

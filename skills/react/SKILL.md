@@ -61,7 +61,7 @@ selector consumption. Generic Redux/redux-saga guidance remains in `../core/`.
 | Route | Use when |
 | --- | --- |
 | `./signals/SKILL.md` | General Preact Signals guidance for ReactStore apps: `ReadonlySignal<T>`, `.value`, `computed`, Babel transform/`useSignals()` tracking, direct JSX signal rendering, component-local signal hooks, and avoiding module-level shared signal state. |
-| `./store/SKILL.md` | Choosing/importing `ReactStore`, initialization/disposal, `getSignalState()`, shared Store runtime behavior, or Store-family contrast. |
+| `./store/SKILL.md` | Choosing/importing `ReactStore`, initialization/disposal, `getStateObservable()`, shared Store runtime behavior, or Store-family contrast. |
 | `./selectors/SKILL.md` | Authoring selectors whose direct calls return cached `ReadonlySignal<R>` outputs, preferring direct signals in React consumers, using `.useValue(...args)` only for hook/plain-value fallback paths, plus `.withStore`, `.select`, and saga-only `.effect`. |
 | `./component-integration/SKILL.md` | Wiring `ReactStore` into JSX/TSX React apps, bootstrap/root init and disposal ownership, app saga startup through `reactStore.runSaga(sagaFn)`, React component reads through direct signals first, and Store-first dispatch. |
 | `./selector-lifecycle/SKILL.md` | Choosing React selector call modes across component render/custom hooks, direct signal-aware code, handlers/callbacks/tests, sagas, selector composition, and explicit `.withStore(...)` binding. |

@@ -56,7 +56,7 @@ const createMutableProperty = <T>(initialValue: T) => {
 const createMockStoreBinding = <TState extends StoreState>(
   streamState: Observable<TState, any>
 ): StoreStreamingStateSource<TState> => ({
-  getStreamState: vi.fn(() => streamState),
+  getStateObservable: vi.fn(() => streamState),
 });
 
 describe("streaming createSelector", () => {
@@ -99,11 +99,11 @@ describe("streaming createSelector", () => {
     const selectorStore = createMockStoreBinding(state.stream);
     const selectCount = createSelector(selectorStore, (state) => state.counter.count);
 
-    expect(selectorStore.getStreamState).not.toHaveBeenCalled();
+    expect(selectorStore.getStateObservable).not.toHaveBeenCalled();
     const selected = selectCount();
 
     expect(selected).toBeInstanceOf(Kefir.Observable);
-    expect(selectorStore.getStreamState).toHaveBeenCalledTimes(1);
+    expect(selectorStore.getStateObservable).toHaveBeenCalledTimes(1);
   });
 
   it("returns a Kefir stream from direct selector invocation and emits selected values", () => {
@@ -220,7 +220,7 @@ describe("streaming createSelector", () => {
     const values: number[] = [];
 
     const boundSelector = selectCount.withStore(overrideStore);
-    expect(overrideStore.getStreamState).not.toHaveBeenCalled();
+    expect(overrideStore.getStateObservable).not.toHaveBeenCalled();
     const selected = boundSelector();
     expectTypeOf(selected).toEqualTypeOf<Observable<number, any>>();
     const subscription = selected.observe((value) => values.push(value));
@@ -229,7 +229,7 @@ describe("streaming createSelector", () => {
     vi.advanceTimersByTime(0);
     subscription.unsubscribe();
 
-    expect(overrideStore.getStreamState).toHaveBeenCalledTimes(1);
+    expect(overrideStore.getStateObservable).toHaveBeenCalledTimes(1);
     expect(values).toEqual([5, 6]);
   });
 

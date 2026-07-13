@@ -19,7 +19,7 @@ import { createThrottledObservable } from "./selector-scheduler";
 export { createCachedSelector };
 
 export type StoreStreamingStateSource<TState = StoreState> = {
-  getStreamState(): Observable<TState, any>;
+  getStateObservable(): Observable<TState, any>;
 };
 
 type StreamingState<TStore> = TStore extends StoreStreamingStateSource<infer TState> ? TState : StoreState<TStore>;
@@ -66,7 +66,7 @@ const isStreamingStateSource = <TState = StoreState>(arg: unknown): arg is Store
     return false;
   }
 
-  return "getStreamState" in arg && typeof arg.getStreamState === "function";
+  return "getStateObservable" in arg && typeof arg.getStateObservable === "function";
 };
 
 const getStoreSelectorFlushManagerSource = <TState, R, ARGS extends unknown[]>(
@@ -111,23 +111,23 @@ const resolveStreamState = <TState>(
     return store;
   }
 
-  return store.getStreamState();
+  return store.getStateObservable();
 };
 
 type StreamingStateSource<TState> = StoreStreamingStateSource<TState> | Observable<TState, any>;
 
 export const createSelectorFromStreamState = <TState = StoreState, ARGS extends any[] = [], R = unknown>(
-  stateSourceOrGetStreamState: StreamingStateSource<TState> | (() => Observable<TState, any>),
+  stateSourceOrGetStateObservable: StreamingStateSource<TState> | (() => Observable<TState, any>),
   selectorFunc: StoreSelectorCallback<R, ARGS, TState>,
   selectorFlushManagerOrFrequency: SelectorFlushManagerSource = DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
   traceReporter?: SelectorTraceReporter<TState, R, ARGS>,
   stateSource?: StreamingStateSource<TState>,
   shouldTraceSelectorCache?: () => boolean
 ): StoreStreamingSelector<R, ARGS, TState> => {
-  const sourceBoundSelector = typeof stateSourceOrGetStreamState === "function" ? undefined : stateSourceOrGetStreamState;
-  const getStreamState = typeof stateSourceOrGetStreamState === "function"
-    ? stateSourceOrGetStreamState
-    : () => resolveStreamState(stateSourceOrGetStreamState);
+  const sourceBoundSelector = typeof stateSourceOrGetStateObservable === "function" ? undefined : stateSourceOrGetStateObservable;
+  const getStateObservable = typeof stateSourceOrGetStateObservable === "function"
+    ? stateSourceOrGetStateObservable
+    : () => resolveStreamState(stateSourceOrGetStateObservable);
   const defaultStateSource = sourceBoundSelector ?? stateSource;
   const effectiveSelectorFlushManagerOrFrequency = defaultStateSource
     ? getStoreSelectorFlushManagerSource<TState, R, ARGS>(defaultStateSource) ?? selectorFlushManagerOrFrequency
@@ -168,7 +168,7 @@ export const createSelectorFromStreamState = <TState = StoreState, ARGS extends 
   };
 
   const streamSelector = ((...restArgs: StreamingArgs<ARGS>) => {
-    return boundSelector(defaultStateSource ?? getStreamState(), ...restArgs);
+    return boundSelector(defaultStateSource ?? getStateObservable(), ...restArgs);
   }) as StoreStreamingSelector<R, ARGS, TState>;
 
   streamSelector.withStore = (store: StoreStreamingStateSource<TState> | Observable<TState, any>) => {

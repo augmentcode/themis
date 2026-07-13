@@ -72,7 +72,7 @@ const createMockStore = (initialState: StoreState) => {
 const createMockStoreBinding = <TState extends StoreState>(
   storeState: Writable<TState>
 ): StoreReadableStateSource<TState> => ({
-  getReadableState: vi.fn(() => storeState),
+  getStateObservable: vi.fn(() => storeState),
 });
 
 describe("createSelector", () => {
@@ -110,7 +110,7 @@ describe("createSelector", () => {
     expect(mocks.select).toHaveBeenCalledWith(selectorFn, "u1");
   });
 
-  it("creates readable selectors from the supplied Store.getReadableState()", () => {
+  it("creates readable selectors from the supplied Store.getStateObservable()", () => {
     const storeState = writable<CounterState>(withUtility({ counter: { count: 2 } }));
     const selectorStore = createMockStoreBinding(storeState);
     const multiplier = writable(3);
@@ -142,11 +142,11 @@ describe("createSelector", () => {
 
   it("reuses direct selector readables without a selector-argument cache key", () => {
     const storeState = writable<CounterState>(withUtility({ counter: { count: 2 } }));
-    const getReadableState = vi.fn(() => storeState);
-    const selectCount = createSelectorFromReadableState(getReadableState, (state) => state.counter.count);
+    const getStateObservable = vi.fn(() => storeState);
+    const selectCount = createSelectorFromReadableState(getStateObservable, (state) => state.counter.count);
 
     expect(selectCount()).toBe(selectCount());
-    expect(getReadableState).toHaveBeenCalledTimes(2);
+    expect(getStateObservable).toHaveBeenCalledTimes(2);
   });
 
   it("keys cached selector readables by object identity and argument order", () => {
@@ -181,16 +181,16 @@ describe("createSelector", () => {
     expect(values).toEqual([2, 7]);
   });
 
-  it("propagates Store.getReadableState() initialization guard errors", () => {
+  it("propagates Store.getStateObservable() initialization guard errors", () => {
     const selectorStore: StoreReadableStateSource<CounterState> = {
-      getReadableState: vi.fn(() => {
-        throw new Error("Cannot access Store.getReadableState() before Store.init() has been called.");
+      getStateObservable: vi.fn(() => {
+        throw new Error("Cannot access Store.getStateObservable() before Store.init() has been called.");
       }),
     };
     const selectCount = createSelector(selectorStore, (state) => state.counter.count);
 
     expect(() => selectCount()).toThrow(
-      "Cannot access Store.getReadableState() before Store.init() has been called."
+      "Cannot access Store.getStateObservable() before Store.init() has been called."
     );
   });
 

@@ -62,18 +62,15 @@ export class ReactStore<
     selectorFunc: StoreSelectorCallback<R, ARGS, StoreBoundState<TStateMap>>
   ): StoreReactSelector<R, ARGS, StoreBoundState<TStateMap>> {
     return createSelectorFromSignalState<StoreBoundState<TStateMap>, ARGS, R>(
-      () => this.getSignalState(),
-      selectorFunc,
-      () => this.getSelectorFlushManager(),
-      this.getSelectorTraceReporter<StoreBoundState<TStateMap>, R, ARGS>(),
-      this
+      this,
+      selectorFunc
     );
   }
 
-  getSignalState(): ReadonlySignal<StoreBoundState<TStateMap>> {
+  getStateObservable(): ReadonlySignal<StoreBoundState<TStateMap>> {
     if (!this.signalState) {
       throw new Error(
-        'Cannot access ReactStore.getSignalState() before Store.init() has been called.'
+        'Cannot access ReactStore.getStateObservable() before Store.init() has been called.'
       );
     }
 

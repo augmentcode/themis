@@ -56,7 +56,7 @@ Use this root for Streaming-specific `themis` work and as thedefault package rou
 
 | Route | Use when |
 | --- | --- |
-| ./store/SKILL.md | Choosing/importing StreamingStore, initializing/disposal, getStreamState(), inherited Store runtime behavior, or contrasting with the Svelte-readable Store. |
+| ./store/SKILL.md | Choosing/importing StreamingStore, initializing/disposal, getStateObservable(), inherited Store runtime behavior, or contrasting with the Svelte-readable Store. |
 | ./selectors/SKILL.md | Authoring Store-bound selectors whose direct calls return cached Kefir Observable values, including observable selector arguments, .withStore, .select, and .effect. |
 | ./selector-lifecycle/SKILL.md | Deciding when streaming selectors may be invoked/observed, how init()/dispose() affect stream state, and which Svelte-readable call-mode rules do not apply. |
 

@@ -3,7 +3,7 @@ name: svelte/store
 description: >-
   Store import, initialization, disposal, and Store-runtime guidance for the
   canonical Svelte-readable Store variant. Use for @augmentcode/themis/svelte-store,
-  getReadableState(), useInitStore/useRunSaga lifecycle helpers, inherited
+  getStateObservable(), useInitStore/useRunSaga lifecycle helpers, inherited
   runSaga/dispatch/state behavior, and contrast with ReactStore or
   StreamingStore without teaching those call modes.
 type: sub-skill
@@ -19,7 +19,7 @@ sources:
 triggers:
   - Store class
   - svelte-store import
-  - getReadableState
+  - getStateObservable
   - useInitStore
   - useRunSaga
   - Svelte readable Store
@@ -28,7 +28,7 @@ triggers:
 
 Use this skill when a task needs the canonical Svelte-readable Store variant. For shared state policy, reducers, actions, sagas, and package import boundaries, also follow the matching `core/*` skills.
 
-This is Svelte Store family guidance. For the same app/package/code path, do not apply `StreamingStore`, Kefir/observable selector, `getStreamState()`, `ReactStore`, Preact signal selector, React `.useValue(...)`, React component setup, or streaming lifecycle patterns. Separate React or Node/server apps in a mixed repository must route to `../../react/SKILL.md` or `../../streaming/SKILL.md` independently.
+This is Svelte Store family guidance. For the same app/package/code path, do not apply `StreamingStore`, Kefir/observable selector, `StreamingStore.getStateObservable()`, `ReactStore`, Preact signal selector, React `.useValue(...)`, React component setup, or streaming lifecycle patterns. Separate React or Node/server apps in a mixed repository must route to `../../react/SKILL.md` or `../../streaming/SKILL.md` independently.
 
 ## Correct import and class choice
 
@@ -46,8 +46,8 @@ const dispose = store.init();
 
 ## Lifecycle rules
 
-- Construct `Store` with app-owned reducers and optional middleware, then call `store.init(initialState?)` before invoking direct selector calls or `store.getReadableState()`.
-- `getReadableState()` returns the Store state as a Svelte `Readable` after initialization and throws before `init()` or after `dispose()`.
+- Construct `Store` with app-owned reducers and optional middleware, then call `store.init(initialState?)` before invoking direct selector calls or `store.getStateObservable()`.
+- `getStateObservable()` returns the Store state as a Svelte `Readable` after initialization and throws before `init()` or after `dispose()`.
 - If a store context already exists in the Svelte component tree, `init()` skips setup and returns a noop disposer, so nested Store components do not double-initialize.
 - `store.dispatch`, `store.state`, `store.runSaga(sagaFn)`, and `store.dispose()` follow the shared Store runtime behavior documented in core Store guidance.
 - Do not manually register package-owned `@internal_` reducers or internal sagas.
