@@ -55,6 +55,13 @@ For React consumers in a separate React app/package/code path, route to
 app/package/code path, route to `streaming/selectors`. Do not mix those concrete
 Store families into the Svelte app using this skill.
 
+## Selector caching
+
+- Store-created selectors have internal selector-result caching/memoization.
+- Direct readable outputs are cached per state source + selector + arguments; repeated `selectFoo(args)` calls for the same source reuse the same Svelte readable.
+- Do not wrap selector callbacks or selector calls in extra `memoize`, `cache`, manual cache maps, debounce, or throttle layers solely for performance.
+- Prefer the same Store-bound selector + same arguments over props drilling when the receiving consumer can reasonably call the selector in valid Svelte init context; otherwise use `.select`, `.effect`, or `.withStore` as the context requires.
+
 ## Do
 
 - Search for an existing selector owner by name, entity, operation, and output shape before adding one.
@@ -62,6 +69,7 @@ Store families into the Svelte app using this skill.
 - Compose selectors with `.select(state)` so there is one canonical implementation.
 - Back entity lookup selectors with `Collection<T, K>` rather than repeated array scans.
 - Treat `@internal_` state domains as implementation details even when memoization behavior references them.
+- Prefer direct Store-bound selector reuse over drilling derived props when the consumer is in valid readable context and can call the same selector with the same args.
 
 ## Don't
 
@@ -69,6 +77,7 @@ Store families into the Svelte app using this skill.
 - Do not duplicate selector bodies in multiple files.
 - Do not store selector outputs in reducer state.
 - Do not use inline saga selectors for values that should be named, cached, and testable.
+- Do not add manual memoization/cache/debounce/throttle wrappers inside selector callbacks or around selector calls just to improve selector performance.
 - Do not import or apply ReactStore/signal or StreamingStore/Kefir selector patterns in this Svelte app.
 
 ## Examples
