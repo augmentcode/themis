@@ -76,7 +76,8 @@ export const createSelectorFromReadableState = <TState = StoreState, ARGS extend
   selectorFunc: StoreSelectorCallback<R, ARGS, TState>,
   selectorFlushManagerOrFrequency: SelectorFlushManagerSource = DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
   traceReporter?: SelectorTraceReporter<TState, R, ARGS>,
-  stateSource?: StoreReadableStateSource<TState> | ReduxStore | Readable<TState>
+  stateSource?: StoreReadableStateSource<TState> | ReduxStore | Readable<TState>,
+  shouldTraceSelectorCache?: () => boolean
 ): StoreSelector<R, ARGS, TState> => {
   const selectorFlushManager = typeof selectorFlushManagerOrFrequency === "function"
     ? undefined
@@ -104,7 +105,7 @@ export const createSelectorFromReadableState = <TState = StoreState, ARGS extend
         return cachedSelector(storeState as TState, ...(args as ARGS));
       });
       return createThrottledReadable(derivedStore, getSelectorFlushManager());
-    });
+    }, traceReporter && shouldTraceSelectorCache?.() ? { traceReporter } : undefined);
   };
 
   const readableSelector = ((...restArgs: ReadableArgs<ARGS>) => {
