@@ -8,7 +8,6 @@ description: >-
 type: sub-skill
 requires:
   - core
-  - svelte/selectors
   - core/sagas
 triggers:
   - waitFor selector
@@ -25,7 +24,7 @@ Use this skill for one-shot saga waits on selector state. Keep conceptual/API pr
 - Human guide: `docs/WAITFOR.md`
 - Public API: `waitFor` from `@augmentcode/themis/saga`.
 - Channel helpers: `@augmentcode/themis/utils/sagas/selector-channel-effects` or aggregate `@augmentcode/themis/saga`.
-- Related skills: `core/sagas`, `svelte/selectors`, `core/selector-channels`, `core/testing`
+- Related skills: `core/sagas`, `core/selector-channels`, `core/testing`, plus the selected Store family selector skill for family-specific selector authoring.
 
 ## Use when
 
@@ -168,4 +167,4 @@ function* publishAfterRealStatusChange(documentId: string) {
 - `docs/WAITFOR.md` — full signature, behavior walkthrough, and examples.
 - `docs/SAGAS.md` — selector-channel and saga orchestration context.
 - `core/selector-channels` — continuous selector watchers.
-- `svelte/selector-lifecycle` — selector call modes.
+- Selected Store family selector lifecycle skill — selector call modes.
