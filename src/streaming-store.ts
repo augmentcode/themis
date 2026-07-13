@@ -69,10 +69,11 @@ export class StreamingStore<
     selectorFunc: StoreSelectorCallback<R, ARGS, StoreBoundState<TStateMap>>
   ): StoreStreamingSelector<R, ARGS, StoreBoundState<TStateMap>> {
     return createSelectorFromStreamState<StoreBoundState<TStateMap>, ARGS, R>(
-      this.getStreamState(),
+      () => this.getStreamState(),
       selectorFunc,
       () => this.getSelectorFlushManager(),
-      this.getSelectorTraceReporter<StoreBoundState<TStateMap>, R, ARGS>()
+      this.getSelectorTraceReporter<StoreBoundState<TStateMap>, R, ARGS>(),
+      this
     );
   }
 

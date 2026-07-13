@@ -157,13 +157,14 @@ describe('StreamingStore', () => {
     expect(doubleValues).toEqual([0, 4]);
   });
 
-  it('throws when stream state is read before initialization', () => {
+  it('throws when a stream selector output is requested before initialization', () => {
     const store = new StreamingStore({ counter: counterReducer });
 
     expect(() => store.getStreamState()).toThrow(
       'Cannot access StreamingStore.getStreamState() before Store.init() has been called.'
     );
-    expect(() => store.createSelector((state) => state.counter.count)).toThrow(
+    const selectCount = store.createSelector((state) => state.counter.count);
+    expect(() => selectCount()).toThrow(
       'Cannot access StreamingStore.getStreamState() before Store.init() has been called.'
     );
   });

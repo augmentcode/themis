@@ -94,6 +94,18 @@ describe("streaming createSelector", () => {
     expect(mocks.select).toHaveBeenCalledWith(selectorFn, "u1");
   });
 
+  it("does not resolve stream state until a direct selector output is requested", () => {
+    const state = createMutableProperty<CounterState>(withUtility({ counter: { count: 2 } }));
+    const selectorStore = createMockStoreBinding(state.stream);
+    const selectCount = createSelector(selectorStore, (state) => state.counter.count);
+
+    expect(selectorStore.getStreamState).not.toHaveBeenCalled();
+    const selected = selectCount();
+
+    expect(selected).toBeInstanceOf(Kefir.Observable);
+    expect(selectorStore.getStreamState).toHaveBeenCalledTimes(1);
+  });
+
   it("returns a Kefir stream from direct selector invocation and emits selected values", () => {
     const state = createMutableProperty<CounterState>(withUtility({ counter: { count: 2 } }));
     const multiplier = createMutableProperty(3);
@@ -208,8 +220,10 @@ describe("streaming createSelector", () => {
     const values: number[] = [];
 
     const boundSelector = selectCount.withStore(overrideStore);
-    expectTypeOf(boundSelector()).toEqualTypeOf<Observable<number, any>>();
-    const subscription = boundSelector().observe((value) => values.push(value));
+    expect(overrideStore.getStreamState).not.toHaveBeenCalled();
+    const selected = boundSelector();
+    expectTypeOf(selected).toEqualTypeOf<Observable<number, any>>();
+    const subscription = selected.observe((value) => values.push(value));
     defaultState.set(withUtility({ counter: { count: 3 } }));
     overrideState.set(withUtility({ counter: { count: 6 } }));
     vi.advanceTimersByTime(0);
