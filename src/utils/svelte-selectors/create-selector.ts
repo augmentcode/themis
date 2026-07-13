@@ -21,6 +21,7 @@ import { areStoreUpdatesLocked } from "../selector-core/store-update-lock";
 import {
   DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
   resolveSelectorFlushManager,
+  type SelectorFlushManager,
   type SelectorFlushManagerSource,
 } from "../selector-core/throttled-selector-options";
 
@@ -57,6 +58,39 @@ const isReadableStateSource = <TState = StoreState>(arg: unknown): arg is StoreR
   return "getReadableState" in arg && typeof arg.getReadableState === "function";
 };
 
+type StoreSelectorRuntimeSource<TState, R, ARGS extends unknown[]> = {
+  getSelectorFlushManager?: () => SelectorFlushManager;
+  getSelectorTraceReporter?: <STATE = TState, RESULT = R, SELECTOR_ARGS extends unknown[] = ARGS>() => SelectorTraceReporter<STATE, RESULT, SELECTOR_ARGS>;
+  shouldTraceSelectorCache?: () => boolean;
+};
+
+const getStoreSelectorFlushManagerSource = <TState, R, ARGS extends unknown[]>(
+  stateSource: StoreReadableStateSource<TState> | ReduxStore | Readable<TState>
+): SelectorFlushManagerSource | undefined => {
+  const getSelectorFlushManager = (stateSource as StoreSelectorRuntimeSource<TState, R, ARGS>).getSelectorFlushManager;
+  return typeof getSelectorFlushManager === "function"
+    ? () => getSelectorFlushManager.call(stateSource)
+    : undefined;
+};
+
+const getStoreSelectorTraceReporter = <TState, R, ARGS extends unknown[]>(
+  stateSource: StoreReadableStateSource<TState> | ReduxStore | Readable<TState>
+): SelectorTraceReporter<TState, R, ARGS> | undefined => {
+  const getSelectorTraceReporter = (stateSource as StoreSelectorRuntimeSource<TState, R, ARGS>).getSelectorTraceReporter;
+  return typeof getSelectorTraceReporter === "function"
+    ? getSelectorTraceReporter.call(stateSource) as SelectorTraceReporter<TState, R, ARGS>
+    : undefined;
+};
+
+const getStoreSelectorCacheTracePredicate = <TState, R, ARGS extends unknown[]>(
+  stateSource: StoreReadableStateSource<TState> | ReduxStore | Readable<TState>
+): (() => boolean) | undefined => {
+  const shouldTraceSelectorCache = (stateSource as StoreSelectorRuntimeSource<TState, R, ARGS>).shouldTraceSelectorCache;
+  return typeof shouldTraceSelectorCache === "function"
+    ? () => shouldTraceSelectorCache.call(stateSource)
+    : undefined;
+};
+
 const resolveReadableState = <TState>(
   stateSource: StoreReadableStateSource<TState> | ReduxStore | Readable<TState>
 ): Readable<TState> => {
@@ -72,18 +106,32 @@ const resolveReadableState = <TState>(
 };
 
 export const createSelectorFromReadableState = <TState = StoreState, ARGS extends any[] = [], R = unknown>(
-  getReadableState: () => Readable<TState>,
+  stateSourceOrGetReadableState: StoreReadableStateSource<TState> | (() => Readable<TState>),
   selectorFunc: StoreSelectorCallback<R, ARGS, TState>,
   selectorFlushManagerOrFrequency: SelectorFlushManagerSource = DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
   traceReporter?: SelectorTraceReporter<TState, R, ARGS>,
   stateSource?: StoreReadableStateSource<TState> | ReduxStore | Readable<TState>,
   shouldTraceSelectorCache?: () => boolean
 ): StoreSelector<R, ARGS, TState> => {
-  const selectorFlushManager = typeof selectorFlushManagerOrFrequency === "function"
+  const sourceBoundSelector = typeof stateSourceOrGetReadableState === "function" ? undefined : stateSourceOrGetReadableState;
+  const getReadableState = typeof stateSourceOrGetReadableState === "function"
+    ? stateSourceOrGetReadableState
+    : () => resolveReadableState(stateSourceOrGetReadableState);
+  const defaultStateSource = sourceBoundSelector ?? stateSource;
+  const effectiveSelectorFlushManagerOrFrequency = defaultStateSource
+    ? getStoreSelectorFlushManagerSource<TState, R, ARGS>(defaultStateSource) ?? selectorFlushManagerOrFrequency
+    : selectorFlushManagerOrFrequency;
+  const effectiveTraceReporter = traceReporter ?? (defaultStateSource
+    ? getStoreSelectorTraceReporter<TState, R, ARGS>(defaultStateSource)
+    : undefined);
+  const effectiveShouldTraceSelectorCache = shouldTraceSelectorCache ?? (defaultStateSource
+    ? getStoreSelectorCacheTracePredicate<TState, R, ARGS>(defaultStateSource)
+    : undefined);
+  const selectorFlushManager = typeof effectiveSelectorFlushManagerOrFrequency === "function"
     ? undefined
-    : resolveSelectorFlushManager(selectorFlushManagerOrFrequency);
+    : resolveSelectorFlushManager(effectiveSelectorFlushManagerOrFrequency);
   const getSelectorFlushManager = () =>
-    selectorFlushManager ?? resolveSelectorFlushManager(selectorFlushManagerOrFrequency);
+    selectorFlushManager ?? resolveSelectorFlushManager(effectiveSelectorFlushManagerOrFrequency);
   const boundSelector = (
     stateSource: StoreReadableStateSource<TState> | ReduxStore | Readable<TState>,
     ...restArgs: ReadableArgs<ARGS>
@@ -93,7 +141,7 @@ export const createSelectorFromReadableState = <TState = StoreState, ARGS extend
     return getOrCreate(stateSource, selectorFunc, restArgs, () => {
       const cachedSelector = createCachedSelector<TState, ARGS, R>(selectorFunc, {
         lockUpdatesPredicate: areStoreUpdatesLocked,
-        traceReporter,
+        traceReporter: effectiveTraceReporter,
       });
       const readableArgs = restArgs.map((arg) => {
         if (isReadable(arg)) {
@@ -105,11 +153,11 @@ export const createSelectorFromReadableState = <TState = StoreState, ARGS extend
         return cachedSelector(storeState as TState, ...(args as ARGS));
       });
       return createThrottledReadable(derivedStore, getSelectorFlushManager());
-    }, traceReporter && shouldTraceSelectorCache?.() ? { traceReporter } : undefined);
+    }, effectiveTraceReporter && effectiveShouldTraceSelectorCache?.() ? { traceReporter: effectiveTraceReporter } : undefined);
   };
 
   const readableSelector = ((...restArgs: ReadableArgs<ARGS>) => {
-    return boundSelector(stateSource ?? getReadableState(), ...restArgs);
+    return boundSelector(defaultStateSource ?? getReadableState(), ...restArgs);
   }) as StoreSelector<R, ARGS, TState>;
 
   readableSelector.withStore =
@@ -139,11 +187,8 @@ const createSelectorImpl = <TStore extends StoreReadableStateSource<any>, ARGS e
   }
 
   return createSelectorFromReadableState(
-    () => store.getReadableState(),
-    selectorFunc,
-    DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
-    undefined,
-    store
+    store,
+    selectorFunc
   );
 };
 

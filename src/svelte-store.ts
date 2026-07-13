@@ -70,11 +70,8 @@ export class Store<
     selectorFunc: StoreSelectorCallback<R, ARGS, StoreBoundState<TStateMap>>
   ): StoreSelector<R, ARGS, StoreBoundState<TStateMap>> {
     return createSelectorFromReadableState<StoreBoundState<TStateMap>, ARGS, R>(
-      () => this.getReadableState(),
-      selectorFunc,
-      () => this.getSelectorFlushManager(),
-      this.getSelectorTraceReporter<StoreBoundState<TStateMap>, R, ARGS>(),
-      this
+      this,
+      selectorFunc
     );
   }
 
