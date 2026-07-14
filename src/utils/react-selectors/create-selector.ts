@@ -1,4 +1,4 @@
-import { computed, signal, type ReadonlySignal, type Signal } from "@preact/signals-react";
+import { signal, type ReadonlySignal, type Signal } from "@preact/signals-react";
 import type { Observable, Subscription } from "kefir";
 import { useSignals } from "@preact/signals-react/runtime";
 import { select } from "typed-redux-saga";
@@ -9,7 +9,6 @@ import {
   type SelectorTraceReporter,
 } from "../selector-core/create-cached-selector";
 import { getOrCreate } from "../selector-core/selector-output-cache";
-import { areStoreUpdatesLocked } from "../selector-core/store-update-lock";
 import {
   createConstantKefirProperty,
   createKefirPropertyFromSubscribe,
@@ -168,32 +167,22 @@ export const createSelectorFromSignalState = <TState = StoreState, ARGS extends 
     store: StoreSignalStateSource<TState>,
     ...restArgs: SignalArgs<ARGS>
   ): ReadonlySignal<R> => {
-    const signalState = store.getStateObservable();
+    void store.getStateObservable();
     const runtimeStateSource = getRuntimeKefirStateSource<TState>(store);
+    if (!runtimeStateSource) {
+      throw new TypeError("createSelectorFromSignalState requires a StoreRuntime-backed state source.");
+    }
 
     return getOrCreate(store, selectorFunc, restArgs, () => {
-      if (runtimeStateSource) {
-        const argProperties = restArgs.map(signalArgToKefirProperty);
-        const selected = createKefirSelectorProperty<TState, ARGS, R>(
-          runtimeStateSource,
-          selectorFunc,
-          argProperties,
-          () => restArgs.map(readSignalArg) as ARGS,
-          effectiveTraceReporter
-        );
-        return kefirSelectorPropertyToSignal(selected);
-      }
-
-      const cachedSelector = createCachedSelector<TState, ARGS, R>(selectorFunc, {
-        lockUpdatesPredicate: areStoreUpdatesLocked,
-        traceReporter: effectiveTraceReporter,
-      });
-      const selected = computed(() => {
-        const args = restArgs.map(readSignalArg) as ARGS;
-        return cachedSelector(signalState.value, ...args);
-      });
-
-      return selected;
+      const argProperties = restArgs.map(signalArgToKefirProperty);
+      const selected = createKefirSelectorProperty<TState, ARGS, R>(
+        runtimeStateSource,
+        selectorFunc,
+        argProperties,
+        () => restArgs.map(readSignalArg) as ARGS,
+        effectiveTraceReporter
+      );
+      return kefirSelectorPropertyToSignal(selected);
     }, effectiveTraceReporter && effectiveShouldTraceSelectorCache?.() ? { traceReporter: effectiveTraceReporter } : undefined);
   };
 

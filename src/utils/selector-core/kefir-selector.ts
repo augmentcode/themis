@@ -70,7 +70,7 @@ export const createKefirSelectorProperty = <TState, ARGS extends any[], R>(
   stateSource: RuntimeKefirStateSource<TState>,
   selectorFunc: StoreSelectorCallback<R, ARGS, TState>,
   argProperties: Array<Observable<any, any>>,
-  getArgsSnapshot: () => ARGS,
+  getArgsSnapshot: (() => ARGS) | undefined,
   traceReporter?: SelectorTraceReporter<TState, R, ARGS>
 ): KefirSelectorProperty<R> => {
   const cachedSelector = createCachedSelector<TState, ARGS, R>(selectorFunc, {
@@ -78,15 +78,20 @@ export const createKefirSelectorProperty = <TState, ARGS extends any[], R>(
     traceReporter,
   });
   const getSnapshot = () => {
+    if (!getArgsSnapshot) {
+      throw new Error("Cannot synchronously snapshot selector observable arguments.");
+    }
     return cachedSelector(stateSource.getSnapshot(), ...getArgsSnapshot());
   };
   const combinedInputs = [stateSource.stream, ...argProperties] as Array<Observable<any, any>>;
-  const property = (Kefir.combine(combinedInputs as any) as Observable<any[], any>)
+  const selected = (Kefir.combine(combinedInputs as any) as Observable<any[], any>)
     .map(([storeState, ...args]) => {
       return cachedSelector(storeState as TState, ...(args as ARGS));
     })
-    .skipDuplicates()
-    .toProperty(getSnapshot) as Property<R, any>;
+    .skipDuplicates();
+  const property = (getArgsSnapshot
+    ? selected.toProperty(getSnapshot)
+    : selected.toProperty()) as Property<R, any>;
 
   return { property, getSnapshot };
 };
