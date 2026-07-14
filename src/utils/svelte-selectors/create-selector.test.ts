@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { get, writable, type Writable } from "svelte/store";
-import type { Observable as ReduxObservable, UnknownAction } from "redux";
 import type { Observable as KefirObservable } from "kefir";
-import type { ReduxStore } from "../../internal-types";
 import type { StoreReadableStateSource, StoreState } from "../../types";
 import type { Collection } from "../collections/collection-utils";
 import { INTERNAL_STORE_UTILITY_DOMAIN } from "../store/store-runtime-constants";
@@ -17,14 +15,12 @@ vi.mock("typed-redux-saga", () => ({
 
 import { createCollection } from "../collections/collection-utils";
 import { createKefirPropertyFromSubscribe } from "../selector-core/kefir-selector";
-import type { SelectorCadenceSource } from "../selector-core/throttled-selector-options";
 import {
   createCollectionItemSelector,
   createCollectionItemsListSelector,
   createSelector,
   createSelectorFromReadableState,
 } from "./create-selector";
-import { createStoreStateReadable } from "./create-readable-store-state";
 
 type CounterState = StoreState & {
   counter: { count: number };
@@ -46,37 +42,6 @@ type RuntimeReadableStateSource<TState> = StoreReadableStateSource<TState> & {
   getStoreStateSnapshot(): TState;
 };
 
-const createMockObservable = (): ReduxObservable<StoreState> => ({
-  subscribe: vi.fn(() => ({ unsubscribe: vi.fn() })),
-  [Symbol.observable]() {
-    return this;
-  },
-});
-const mockDispatch: ReduxStore["dispatch"] = <T extends UnknownAction>(action: T) => action;
-
-const createMockStore = (initialState: StoreState) => {
-  let state = initialState;
-  const listeners = new Set<() => void>();
-  const store = {
-    dispatch: mockDispatch,
-    getState: vi.fn(() => state),
-    subscribe: vi.fn((listener: () => void) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    }),
-    replaceReducer: vi.fn(),
-    [Symbol.observable]: vi.fn(createMockObservable),
-  } satisfies ReduxStore;
-
-  return {
-    store,
-    setState(nextState: StoreState) {
-      state = nextState;
-      listeners.forEach((listener) => listener());
-    },
-  };
-};
-
 const createMockStoreBinding = <TState extends StoreState>(
   storeState: Writable<TState>
 ): RuntimeReadableStateSource<TState> => {
@@ -86,30 +51,11 @@ const createMockStoreBinding = <TState extends StoreState>(
   );
 
   return {
-    getStateObservable: vi.fn(() => storeState),
+    get state() {
+      return get(storeState);
+    },
     getStoreStateStream: vi.fn(() => stateStream),
     getStoreStateSnapshot: vi.fn(() => get(storeState)),
-  };
-};
-
-const createManualCadenceSource = () => {
-  let cadenceListener: ((timestamp: number) => void) | null = null;
-  const cadenceSource: SelectorCadenceSource = {
-    frequency: 64,
-    frameIntervalMs: 1000 / 64,
-    getSnapshot: () => 0,
-    subscribe: vi.fn((listener) => {
-      cadenceListener = listener;
-      return () => {
-        cadenceListener = null;
-      };
-    }),
-    dispose: vi.fn(),
-  };
-
-  return {
-    cadenceSource,
-    tick: (timestamp = 0) => cadenceListener?.(timestamp),
   };
 };
 
@@ -148,7 +94,7 @@ describe("createSelector", () => {
     expect(mocks.select).toHaveBeenCalledWith(selectorFn, "u1");
   });
 
-  it("creates readable selectors from the supplied Store.getStateObservable()", () => {
+  it("creates readable selectors from the StoreRuntime Kefir state source", () => {
     const storeState = writable<CounterState>(withUtility({ counter: { count: 2 } }));
     const selectorStore = createMockStoreBinding(storeState);
     const multiplier = writable(3);
@@ -221,9 +167,9 @@ describe("createSelector", () => {
 
   it("propagates StoreRuntime state stream initialization guard errors", () => {
     const selectorStore: RuntimeReadableStateSource<CounterState> = {
-      getStateObservable: vi.fn(() => {
-        throw new Error("Cannot access Store.getStateObservable() before Store.init() has been called.");
-      }),
+      get state() {
+        return withUtility({ counter: { count: 0 } });
+      },
       getStoreStateStream: vi.fn(() => {
         throw new Error("Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.");
       }),
@@ -284,25 +230,6 @@ describe("createSelector", () => {
 
     expect(selectCountFromA()).toBe(selectCountFromA());
     expect(selectCountFromA()).not.toBe(selectCountFromB());
-  });
-});
-
-describe("createStoreStateReadable", () => {
-  it("initializes from getState and emits subscribed store updates on cadence ticks", () => {
-    const initialState = withUtility({ counter: { count: 10 } });
-    const { store, setState } = createMockStore(initialState);
-    const { cadenceSource, tick } = createManualCadenceSource();
-    const readableState = createStoreStateReadable(store, cadenceSource);
-    const values: number[] = [];
-
-    const unsubscribe = readableState.subscribe((state) => values.push(state.counter.count));
-    setState(withUtility({ counter: { count: 11 } }));
-    expect(values).toEqual([10]);
-    tick(0);
-    unsubscribe();
-    setState(withUtility({ counter: { count: 12 } }));
-
-    expect(values).toEqual([10, 11]);
   });
 });
 
