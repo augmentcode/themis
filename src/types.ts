@@ -2,6 +2,7 @@ import type { Middleware, Store, UnknownAction } from 'redux';
 import type { Observable } from 'kefir';
 import type { Readable } from 'svelte/store';
 import type { SagaGenerator } from 'typed-redux-saga';
+import type { StoreRuntime } from './store-runtime';
 
 // ============================================================================
 // Saga Status Types
@@ -131,7 +132,7 @@ export type StoreReadableStateSource<TState = StoreState> = {
   readonly state: TState;
 };
 
-export type StoreRuntimeSelectorSource<TState = StoreState> = StoreReadableStateSource<TState> & {
+export type StoreRuntimeSelectorSource<TState = StoreState> = StoreRuntime<any, any> & StoreReadableStateSource<TState> & {
   getStoreStateStream(): Observable<TState, any>;
   getStoreStateSnapshot(): TState;
 };

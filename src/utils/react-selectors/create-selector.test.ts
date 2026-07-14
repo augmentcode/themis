@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "v
 import type { StoreState } from "../../types";
 import type { Collection } from "../collections/collection-utils";
 import { INTERNAL_STORE_UTILITY_DOMAIN } from "../store/store-runtime-constants";
+import { StoreRuntime } from "../../store-runtime";
 
 const mocks = vi.hoisted(() => ({
   select: vi.fn((selector: unknown, ...args: unknown[]) => ({ kind: "select", selector, args })),
@@ -41,26 +42,45 @@ const withUtility = <T extends StoreState>(state: T): T & InternalUtilityTestSta
   [INTERNAL_STORE_UTILITY_DOMAIN]: { updatesLocked: false },
 });
 
-type RuntimeSignalStateSource<TState> = StoreSignalStateSource<TState> & {
-  getStoreStateStream(): Observable<TState, any>;
-  getStoreStateSnapshot(): TState;
-};
+class MockSignalRuntimeStore<TState extends StoreState> extends StoreRuntime<any, any> {
+  readonly getStoreStateStreamMock = vi.fn();
+  readonly getStoreStateSnapshotMock = vi.fn();
+
+  constructor(
+    private readonly readState: () => TState,
+    private readonly stateStream: Observable<TState, any>,
+    private readonly streamError?: Error
+  ) {
+    super();
+  }
+
+  override get state(): TState {
+    return this.readState();
+  }
+
+  override getStoreStateStream(): Observable<TState, any> {
+    this.getStoreStateStreamMock();
+    if (this.streamError) {
+      throw this.streamError;
+    }
+    return this.stateStream;
+  }
+
+  override getStoreStateSnapshot(): TState {
+    this.getStoreStateSnapshotMock();
+    return this.readState();
+  }
+}
 
 const createMockStoreBinding = <TState extends StoreState>(
   signalState: ReadonlySignal<TState>
-): RuntimeSignalStateSource<TState> => {
+): MockSignalRuntimeStore<TState> => {
   const stateStream = createKefirPropertyFromSubscribe(
     () => signalState.value,
     (listener) => signalState.subscribe(listener)
   );
 
-  return {
-    get state() {
-      return signalState.value;
-    },
-    getStoreStateStream: vi.fn(() => stateStream),
-    getStoreStateSnapshot: vi.fn(() => signalState.value),
-  };
+  return new MockSignalRuntimeStore(() => signalState.value, stateStream);
 };
 
 describe("react createSelector", () => {
@@ -170,7 +190,7 @@ describe("react createSelector", () => {
     vi.advanceTimersByTime(0);
     unsubscribe();
 
-    expect(overrideStore.getStoreStateStream).toHaveBeenCalledTimes(1);
+    expect(overrideStore.getStoreStateStreamMock).toHaveBeenCalledTimes(1);
     expect(values).toEqual([5, 6]);
   });
 
@@ -235,15 +255,12 @@ describe("react createSelector", () => {
   });
 
   it("propagates StoreRuntime state stream initialization guard errors", () => {
-    const selectorStore: RuntimeSignalStateSource<CounterState> = {
-      get state() {
-        return withUtility({ counter: { count: 0 } });
-      },
-      getStoreStateStream: vi.fn(() => {
-        throw new Error("Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.");
-      }),
-      getStoreStateSnapshot: vi.fn(() => withUtility({ counter: { count: 0 } })),
-    };
+    const state = withUtility({ counter: { count: 0 } });
+    const selectorStore = new MockSignalRuntimeStore(
+      () => state,
+      createKefirPropertyFromSubscribe(() => state, () => () => {}),
+      new Error("Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.")
+    );
     const selectCount = createSelector(selectorStore, (state) => state.counter.count);
 
     expect(() => selectCount()).toThrow(
