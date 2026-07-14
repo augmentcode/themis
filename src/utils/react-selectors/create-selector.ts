@@ -2,7 +2,7 @@ import { signal, type ReadonlySignal, type Signal } from "@preact/signals-react"
 import type { Observable, Subscription } from "kefir";
 import { useSignals } from "@preact/signals-react/runtime";
 import { select } from "typed-redux-saga";
-import type { StoreSelectorCallback, StoreSelectorEffect, StoreState } from "../../types";
+import type { StoreRuntimeSelectorSource, StoreSelectorCallback, StoreSelectorEffect, StoreState } from "../../types";
 import type { Collection } from "../collections/collection-utils";
 import {
   createCachedSelector,
@@ -13,9 +13,7 @@ import {
   createConstantKefirProperty,
   createKefirPropertyFromSubscribe,
   createKefirSelectorProperty,
-  getRuntimeKefirStateSource,
   type KefirSelectorProperty,
-  type StoreRuntimeKefirStateSource,
 } from "../selector-core/kefir-selector";
 import {
   DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
@@ -24,9 +22,7 @@ import {
 
 export { createCachedSelector };
 
-export type StoreSignalStateSource<TState = StoreState> = {
-  readonly state: TState;
-};
+export type StoreSignalStateSource<TState = StoreState> = StoreRuntimeSelectorSource<TState>;
 
 type SignalState<TStore> = StoreState<TStore>;
 
@@ -72,7 +68,13 @@ const isSignalStateSource = <TState = StoreState>(arg: unknown): arg is StoreSig
     return false;
   }
 
-  return "state" in arg;
+  const maybeRuntimeSource = arg as {
+    getStoreStateStream?: unknown;
+    getStoreStateSnapshot?: unknown;
+  };
+  return "state" in arg
+    && typeof maybeRuntimeSource.getStoreStateStream === "function"
+    && typeof maybeRuntimeSource.getStoreStateSnapshot === "function";
 };
 
 const getStoreSelectorTraceReporter = <TState, R, ARGS extends unknown[]>(
@@ -168,14 +170,10 @@ export const createSelectorFromSignalState = <TState = StoreState, ARGS extends 
     store: StoreSignalStateSource<TState>,
     ...restArgs: SignalArgs<ARGS>
   ): ReadonlySignal<R> => {
-    const runtimeStateSource = getRuntimeKefirStateSource<TState>(
-      store as unknown as StoreRuntimeKefirStateSource<TState>
-    );
-
     return getOrCreate(store, selectorFunc, restArgs, () => {
       const argProperties = restArgs.map(signalArgToKefirProperty);
       const selected = createKefirSelectorProperty<TState, ARGS, R>(
-        runtimeStateSource,
+        store,
         selectorFunc,
         argProperties,
         () => restArgs.map(readSignalArg) as ARGS,

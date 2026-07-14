@@ -2,6 +2,7 @@ import type {
   CreateSelector,
   StoreState,
   StoreReadableStateSource,
+  StoreRuntimeSelectorSource,
   StoreSelector,
   ReadableArgs,
   StoreSelectorCallback,
@@ -19,7 +20,6 @@ import {
   createConstantKefirProperty,
   createKefirPropertyFromSubscribe,
   createKefirSelectorProperty,
-  getRuntimeKefirStateSource,
   type KefirSelectorProperty,
 } from "../selector-core/kefir-selector";
 import {
@@ -66,7 +66,7 @@ const kefirSelectorPropertyToReadable = <R>(
   });
 };
 
-const isReadableStateSource = <TState = StoreState>(arg: unknown): arg is StoreReadableStateSource<TState> => {
+const isReadableStateSource = <TState = StoreState>(arg: unknown): arg is StoreRuntimeSelectorSource<TState> => {
   if (!arg || typeof arg !== "object") {
     return false;
   }
@@ -75,7 +75,8 @@ const isReadableStateSource = <TState = StoreState>(arg: unknown): arg is StoreR
     getStoreStateStream?: unknown;
     getStoreStateSnapshot?: unknown;
   };
-  return typeof maybeRuntimeSource.getStoreStateStream === "function"
+  return "state" in arg
+    && typeof maybeRuntimeSource.getStoreStateStream === "function"
     && typeof maybeRuntimeSource.getStoreStateSnapshot === "function";
 };
 
@@ -103,7 +104,7 @@ const getStoreSelectorCacheTracePredicate = <TState, R, ARGS extends unknown[]>(
 };
 
 export const createSelectorFromReadableState = <TState = StoreState, ARGS extends any[] = [], R = unknown>(
-  store: StoreReadableStateSource<TState>,
+  store: StoreRuntimeSelectorSource<TState>,
   selectorFunc: StoreSelectorCallback<R, ARGS, TState>,
   selectorCadenceSourceOrFrequency: SelectorCadenceSourceSource = DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
   traceReporter?: SelectorTraceReporter<TState, R, ARGS>,
@@ -118,18 +119,13 @@ export const createSelectorFromReadableState = <TState = StoreState, ARGS extend
     shouldTraceSelectorCache ?? getStoreSelectorCacheTracePredicate<TState, R, ARGS>(store);
   void selectorCadenceSourceOrFrequency;
   const boundSelector = (
-    store: StoreReadableStateSource<TState>,
+    store: StoreRuntimeSelectorSource<TState>,
     ...restArgs: ReadableArgs<ARGS>
   ): Readable<R> => {
-    const runtimeStateSource = getRuntimeKefirStateSource<TState>(store);
-    if (!runtimeStateSource) {
-      throw new TypeError("Store-created selectors require a StoreRuntime Kefir state source.");
-    }
-
     return getOrCreate(store, selectorFunc, restArgs, () => {
       const argProperties = restArgs.map(readableArgToKefirProperty);
       const selected = createKefirSelectorProperty<TState, ARGS, R>(
-        runtimeStateSource,
+        store,
         selectorFunc,
         argProperties,
         () => restArgs.map(readReadableArg) as ARGS,
@@ -144,7 +140,7 @@ export const createSelectorFromReadableState = <TState = StoreState, ARGS extend
   }) as StoreSelector<R, ARGS, TState>;
 
   readableSelector.withStore =
-    (store: StoreReadableStateSource<TState>) =>
+    (store: StoreRuntimeSelectorSource<TState>) =>
     (...args: ReadableArgs<ARGS>) => {
       return boundSelector(store, ...args);
     };
@@ -157,7 +153,7 @@ export const createSelectorFromReadableState = <TState = StoreState, ARGS extend
   return readableSelector;
 };
 
-const createSelectorImpl = <TStore extends StoreReadableStateSource<any>, ARGS extends any[] = [], R = unknown>(
+const createSelectorImpl = <TStore extends StoreRuntimeSelectorSource<any>, ARGS extends any[] = [], R = unknown>(
   store: TStore,
   selectorFunc: StoreSelectorCallback<R, ARGS, StoreState<TStore>>
 ): StoreSelector<R, ARGS, StoreState<TStore>> => {
@@ -180,7 +176,7 @@ export const createSelector = createSelectorImpl as CreateSelector;
 export const createCollectionItemSelector = <
   ITEM extends object,
   K extends keyof ITEM & string,
-  TStore extends StoreReadableStateSource<any> = StoreReadableStateSource<StoreState>,
+  TStore extends StoreRuntimeSelectorSource<any> = StoreRuntimeSelectorSource<StoreState>,
 >(
   store: TStore,
   collectionSelector: StoreSelectorCallback<Collection<ITEM, K>, any[], StoreState<TStore>>
@@ -199,7 +195,7 @@ export const createCollectionItemsListSelector = <
   ITEM extends object,
   K extends keyof ITEM & string,
   F extends (...args: any) => boolean,
-  TStore extends StoreReadableStateSource<any> = StoreReadableStateSource<StoreState>,
+  TStore extends StoreRuntimeSelectorSource<any> = StoreRuntimeSelectorSource<StoreState>,
 >(
   store: TStore,
   collectionSelector: StoreSelectorCallback<Collection<ITEM, K>, any[], StoreState<TStore>>,

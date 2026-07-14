@@ -55,7 +55,9 @@ const createMockStoreBinding = <TState extends StoreState>(
   );
 
   return {
-    getStateObservable: vi.fn(() => signalState),
+    get state() {
+      return signalState.value;
+    },
     getStoreStateStream: vi.fn(() => stateStream),
     getStoreStateSnapshot: vi.fn(() => signalState.value),
   };
@@ -168,7 +170,7 @@ describe("react createSelector", () => {
     vi.advanceTimersByTime(0);
     unsubscribe();
 
-    expect(overrideStore.getStoreStateStream).toHaveBeenCalledTimes(2);
+    expect(overrideStore.getStoreStateStream).toHaveBeenCalledTimes(1);
     expect(values).toEqual([5, 6]);
   });
 
@@ -234,9 +236,9 @@ describe("react createSelector", () => {
 
   it("propagates StoreRuntime state stream initialization guard errors", () => {
     const selectorStore: RuntimeSignalStateSource<CounterState> = {
-      getStateObservable: vi.fn(() => {
-        throw new Error("Cannot access ReactStore.getStateObservable() before Store.init() has been called.");
-      }),
+      get state() {
+        return withUtility({ counter: { count: 0 } });
+      },
       getStoreStateStream: vi.fn(() => {
         throw new Error("Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.");
       }),
