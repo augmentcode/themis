@@ -1,5 +1,4 @@
-import type { Middleware, Store, UnknownAction } from 'redux';
-import type { Observable } from 'kefir';
+import type { Middleware, Store as ReduxStoreBase, UnknownAction } from 'redux';
 import type { Readable } from 'svelte/store';
 import type { SagaGenerator } from 'typed-redux-saga';
 import type { StoreRuntime } from './store-runtime';
@@ -128,18 +127,9 @@ export type StoreState<TStore = unknown> = TStore extends { readonly state: infe
  */
 export type StoreInstanceState<TStore = unknown> = StoreState<TStore>;
 
-export type StoreReadableStateSource<TState = StoreState> = {
-  readonly state: TState;
-};
-
-export type StoreRuntimeSelectorSource<TState = StoreState> = StoreRuntime<any, any> & StoreReadableStateSource<TState> & {
-  getStoreStateStream(): Observable<TState, any>;
-  getStoreStateSnapshot(): TState;
-};
-
 export type PreloadedStoreState<TState = StoreState> = Partial<TState>;
 
-type ReduxStore = Store<StoreState, UnknownAction>;
+type ReduxStore = ReduxStoreBase<StoreState, UnknownAction>;
 
 // ============================================================================
 // Selector Types
@@ -166,18 +156,27 @@ export type StoreSelectorSelect<R, ARGS extends any[] = [], TState = StoreState>
 
 export type StoreSelectorEffect<R, ARGS extends any[] = []> = (...args: ARGS) => SagaGenerator<R>;
 
-type StoreSelectorWithStore<R, ARGS extends any[] = [], TState = StoreState> = (
-  store: StoreRuntimeSelectorSource<TState>
+type StoreSelectorWithStore<
+  R,
+  ARGS extends any[] = [],
+  TStore extends StoreRuntime<any, any> = StoreRuntime<any, any>,
+> = (
+  store: TStore
 ) => StoreSelectorReadable<R, ARGS>;
 
-export type StoreSelector<R, ARGS extends any[] = [], TState = StoreState> = StoreSelectorReadable<R, ARGS> & {
-  withStore: StoreSelectorWithStore<R, ARGS, TState>;
+export type StoreSelector<
+  R,
+  ARGS extends any[] = [],
+  TState = StoreState,
+  TStore extends StoreRuntime<any, any> = StoreRuntime<any, any>,
+> = StoreSelectorReadable<R, ARGS> & {
+  withStore: StoreSelectorWithStore<R, ARGS, TStore>;
   select: StoreSelectorSelect<R, ARGS, TState>;
   effect: StoreSelectorEffect<R, ARGS>;
 };
 
-export type CreateSelector = <TStore extends StoreRuntimeSelectorSource<any>, ARGS extends any[] = [], R = unknown>(
+export type CreateSelector = <TStore extends StoreRuntime<any, any>, ARGS extends any[] = [], R = unknown>(
   store: TStore,
   selectorFunc: StoreSelectorCallback<R, ARGS, StoreState<TStore>>
-) => StoreSelector<R, ARGS, StoreState<TStore>>;
+) => StoreSelector<R, ARGS, StoreState<TStore>, TStore>;
 

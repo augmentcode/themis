@@ -1,5 +1,3 @@
-import { readable, type Readable } from 'svelte/store';
-import type { Observable, Subscription } from 'kefir';
 import {
   type PreloadedStoreState,
   type StoreOptions,
@@ -20,22 +18,6 @@ import { createSelectorFromReadableState } from './utils/svelte-selectors/create
 export type { StoreOptions } from './types';
 export { getDispatch } from './utils/runtime-svelte/utils';
 
-const createReadableFromStoreStateStream = <TState>(
-  storeStateStream: Observable<TState, any>,
-  getSnapshot: () => TState
-): Readable<TState> => {
-  return readable(getSnapshot(), (set) => {
-    set(getSnapshot());
-    const subscription: Subscription = storeStateStream.observe((state) => {
-      set(state);
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  });
-};
-
 /**
  * Canonical Svelte-readable Store. Its selectors return Svelte Readable values
  * when called and keep .select/.effect escape hatches for tests and sagas.
@@ -44,8 +26,6 @@ export class Store<
   TStateMap extends StoreStateMap = {},
   TReducers extends StoreReducersInput<TStateMap> = StoreReducersInput<TStateMap>,
 > extends StoreRuntime<TStateMap, TReducers> {
-  private readableState: Readable<StoreBoundState<TStateMap>> | undefined;
-
   /**
    * Create a Svelte-readable Store with app-owned reducers and middlewares.
    * Throws if any reducer uses a package-reserved internal key.
@@ -72,10 +52,6 @@ export class Store<
       return () => {};
     }
 
-    this.readableState = createReadableFromStoreStateStream<StoreBoundState<TStateMap>>(
-      this.getStoreStateStream(),
-      () => this.getStoreStateSnapshot()
-    );
     this.startSagaManager(storeContext);
 
     return () => {
@@ -85,25 +61,10 @@ export class Store<
 
   createSelector<ARGS extends any[] = [], R = unknown>(
     selectorFunc: StoreSelectorCallback<R, ARGS, StoreBoundState<TStateMap>>
-  ): StoreSelector<R, ARGS, StoreBoundState<TStateMap>> {
-    return createSelectorFromReadableState<StoreBoundState<TStateMap>, ARGS, R>(
+  ): StoreSelector<R, ARGS, StoreBoundState<TStateMap>, Store<TStateMap, TReducers>> {
+    return createSelectorFromReadableState<Store<TStateMap, TReducers>, ARGS, R>(
       this,
       selectorFunc
     );
-  }
-
-  getStateObservable(): Readable<StoreBoundState<TStateMap>> {
-    if (!this.readableState) {
-      throw new Error(
-        'Cannot access Store.getStateObservable() before Store.init() has been called.'
-      );
-    }
-
-    return this.readableState;
-  }
-
-  dispose(): void {
-    super.dispose();
-    this.readableState = undefined;
   }
 }
