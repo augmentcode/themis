@@ -95,6 +95,7 @@ export type SelectorCadenceSource = {
   readonly frequency: number;
   readonly frameIntervalMs: number;
   getSnapshot(): number;
+  requestTick(): void;
   subscribe(listener: SelectorCadenceTickListener): () => void;
   dispose(): void;
 };
