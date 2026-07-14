@@ -6,10 +6,8 @@ import type {
   ReadableArgs,
   StoreSelectorCallback,
 } from "../../types";
-import type { ReduxStore } from "../../internal-types";
 import type { Collection } from "../collections/collection-utils";
 import { readable, derived, type Readable } from "svelte/store";
-import { createStoreStateReadable } from "./create-readable-store-state";
 import { createThrottledReadable } from "./selector-scheduler";
 import { select } from "typed-redux-saga";
 import {
@@ -27,27 +25,12 @@ import {
 
 export { createCachedSelector };
 
-const isReduxStore = (arg: unknown): arg is ReduxStore => {
-  if (!arg || typeof arg !== "object") {
-    return false;
-  }
-
-  return (
-    "dispatch" in arg &&
-    typeof arg.dispatch === "function" &&
-    "getState" in arg &&
-    typeof arg.getState === "function" &&
-    "subscribe" in arg &&
-    typeof arg.subscribe === "function"
-  );
-};
-
 const isReadable = <T = any>(arg: unknown): arg is Readable<T> => {
   if (!arg || typeof arg !== "object") {
     return false;
   }
 
-  return "subscribe" in arg && typeof arg.subscribe === "function" && !isReduxStore(arg);
+  return "subscribe" in arg && typeof arg.subscribe === "function";
 };
 
 const isReadableStateSource = <TState = StoreState>(arg: unknown): arg is StoreReadableStateSource<TState> => {
@@ -65,7 +48,7 @@ type StoreSelectorRuntimeSource<TState, R, ARGS extends unknown[]> = {
 };
 
 const getStoreSelectorFlushManagerSource = <TState, R, ARGS extends unknown[]>(
-  stateSource: StoreReadableStateSource<TState> | ReduxStore | Readable<TState>
+  stateSource: StoreReadableStateSource<TState>
 ): SelectorFlushManagerSource | undefined => {
   const getSelectorFlushManager = (stateSource as StoreSelectorRuntimeSource<TState, R, ARGS>).getSelectorFlushManager;
   return typeof getSelectorFlushManager === "function"
@@ -74,7 +57,7 @@ const getStoreSelectorFlushManagerSource = <TState, R, ARGS extends unknown[]>(
 };
 
 const getStoreSelectorTraceReporter = <TState, R, ARGS extends unknown[]>(
-  stateSource: StoreReadableStateSource<TState> | ReduxStore | Readable<TState>
+  stateSource: StoreReadableStateSource<TState>
 ): SelectorTraceReporter<TState, R, ARGS> | undefined => {
   const getSelectorTraceReporter = (stateSource as StoreSelectorRuntimeSource<TState, R, ARGS>).getSelectorTraceReporter;
   return typeof getSelectorTraceReporter === "function"
@@ -83,7 +66,7 @@ const getStoreSelectorTraceReporter = <TState, R, ARGS extends unknown[]>(
 };
 
 const getStoreSelectorCacheTracePredicate = <TState, R, ARGS extends unknown[]>(
-  stateSource: StoreReadableStateSource<TState> | ReduxStore | Readable<TState>
+  stateSource: StoreReadableStateSource<TState>
 ): (() => boolean) | undefined => {
   const shouldTraceSelectorCache = (stateSource as StoreSelectorRuntimeSource<TState, R, ARGS>).shouldTraceSelectorCache;
   return typeof shouldTraceSelectorCache === "function"
@@ -91,54 +74,34 @@ const getStoreSelectorCacheTracePredicate = <TState, R, ARGS extends unknown[]>(
     : undefined;
 };
 
-const resolveReadableState = <TState>(
-  stateSource: StoreReadableStateSource<TState> | ReduxStore | Readable<TState>
-): Readable<TState> => {
-  if (isReadable<TState>(stateSource)) {
-    return stateSource;
-  }
-
-  if (isReadableStateSource<TState>(stateSource)) {
-    return stateSource.getStateObservable();
-  }
-
-  return createStoreStateReadable(stateSource) as Readable<TState>;
-};
-
 export const createSelectorFromReadableState = <TState = StoreState, ARGS extends any[] = [], R = unknown>(
-  stateSourceOrGetStateObservable: StoreReadableStateSource<TState> | (() => Readable<TState>),
+  store: StoreReadableStateSource<TState>,
   selectorFunc: StoreSelectorCallback<R, ARGS, TState>,
   selectorFlushManagerOrFrequency: SelectorFlushManagerSource = DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
   traceReporter?: SelectorTraceReporter<TState, R, ARGS>,
-  stateSource?: StoreReadableStateSource<TState> | ReduxStore | Readable<TState>,
   shouldTraceSelectorCache?: () => boolean
 ): StoreSelector<R, ARGS, TState> => {
-  const sourceBoundSelector = typeof stateSourceOrGetStateObservable === "function" ? undefined : stateSourceOrGetStateObservable;
-  const getStateObservable = typeof stateSourceOrGetStateObservable === "function"
-    ? stateSourceOrGetStateObservable
-    : () => resolveReadableState(stateSourceOrGetStateObservable);
-  const defaultStateSource = sourceBoundSelector ?? stateSource;
-  const effectiveSelectorFlushManagerOrFrequency = defaultStateSource
-    ? getStoreSelectorFlushManagerSource<TState, R, ARGS>(defaultStateSource) ?? selectorFlushManagerOrFrequency
-    : selectorFlushManagerOrFrequency;
-  const effectiveTraceReporter = traceReporter ?? (defaultStateSource
-    ? getStoreSelectorTraceReporter<TState, R, ARGS>(defaultStateSource)
-    : undefined);
-  const effectiveShouldTraceSelectorCache = shouldTraceSelectorCache ?? (defaultStateSource
-    ? getStoreSelectorCacheTracePredicate<TState, R, ARGS>(defaultStateSource)
-    : undefined);
+  if (!isReadableStateSource(store)) {
+    throw new TypeError("createSelectorFromReadableState requires a Store-like state source as the first argument.");
+  }
+
+  const effectiveSelectorFlushManagerOrFrequency =
+    getStoreSelectorFlushManagerSource<TState, R, ARGS>(store) ?? selectorFlushManagerOrFrequency;
+  const effectiveTraceReporter = traceReporter ?? getStoreSelectorTraceReporter<TState, R, ARGS>(store);
+  const effectiveShouldTraceSelectorCache =
+    shouldTraceSelectorCache ?? getStoreSelectorCacheTracePredicate<TState, R, ARGS>(store);
   const selectorFlushManager = typeof effectiveSelectorFlushManagerOrFrequency === "function"
     ? undefined
     : resolveSelectorFlushManager(effectiveSelectorFlushManagerOrFrequency);
   const getSelectorFlushManager = () =>
     selectorFlushManager ?? resolveSelectorFlushManager(effectiveSelectorFlushManagerOrFrequency);
   const boundSelector = (
-    stateSource: StoreReadableStateSource<TState> | ReduxStore | Readable<TState>,
+    store: StoreReadableStateSource<TState>,
     ...restArgs: ReadableArgs<ARGS>
   ): Readable<R> => {
-    const readableStoreState = resolveReadableState(stateSource);
+    const readableStoreState = store.getStateObservable();
 
-    return getOrCreate(stateSource, selectorFunc, restArgs, () => {
+    return getOrCreate(store, selectorFunc, restArgs, () => {
       const cachedSelector = createCachedSelector<TState, ARGS, R>(selectorFunc, {
         lockUpdatesPredicate: areStoreUpdatesLocked,
         traceReporter: effectiveTraceReporter,
@@ -157,11 +120,11 @@ export const createSelectorFromReadableState = <TState = StoreState, ARGS extend
   };
 
   const readableSelector = ((...restArgs: ReadableArgs<ARGS>) => {
-    return boundSelector(defaultStateSource ?? getStateObservable(), ...restArgs);
+    return boundSelector(store, ...restArgs);
   }) as StoreSelector<R, ARGS, TState>;
 
   readableSelector.withStore =
-    (store: StoreReadableStateSource<TState> | ReduxStore) =>
+    (store: StoreReadableStateSource<TState>) =>
     (...args: ReadableArgs<ARGS>) => {
       return boundSelector(store, ...args);
     };
