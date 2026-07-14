@@ -284,10 +284,6 @@ export abstract class StoreRuntime<
     this.cadencedStoreStateStream = undefined;
   }
 
-  protected getSelectorCadenceSource(): SelectorCadenceSource {
-    return this.getOrCreateSelectorCadenceSource();
-  }
-
   protected getStoreStateStream(): Observable<StoreBoundState<TStateMap>, any> {
     if (!this.cadencedStoreStateStream) {
       throw new Error(
