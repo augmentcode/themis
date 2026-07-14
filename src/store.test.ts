@@ -252,9 +252,9 @@ describe('Store', () => {
       vi.advanceTimersByTime(0);
       unsubscribe();
 
-      expect(consoleInfo).toHaveBeenCalledWith('REQUEST FLUSH', expect.any(Function));
-      expect(consoleInfo).toHaveBeenCalledWith('START FLUSHING', expect.any(Number));
-      expect(consoleInfo).toHaveBeenCalledWith('FLUSHED', expect.any(Number), 1);
+      expect(consoleInfo).toHaveBeenCalledWith('SUBSCRIBE SELECTOR CADENCE', 1);
+      expect(consoleInfo).toHaveBeenCalledWith('SELECTOR CADENCE TICK', 0, 1);
+      expect(consoleInfo).toHaveBeenCalledTimes(2);
       consoleInfo.mockRestore();
     });
     
