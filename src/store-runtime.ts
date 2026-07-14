@@ -113,7 +113,8 @@ const createCadencedStoreStateStream = <TState>(
     lastEmitted = currentState;
     activeEmitter = emitter;
     const unsubscribeStore = store.subscribe(() => {
-      currentState = store.getState() as TState;
+      readCurrentState();
+      selectorCadenceSource.requestTick();
     });
     const unsubscribeCadence = selectorCadenceSource.subscribe(emitLatest);
 

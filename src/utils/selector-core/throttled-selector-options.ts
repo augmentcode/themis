@@ -171,7 +171,6 @@ export const createSelectorCadenceSource = (
         listener(timestamp);
       }
     }
-    scheduleTick();
   };
 
   const unsubscribe = (listener: SelectorCadenceTickListener): void => {
@@ -187,6 +186,9 @@ export const createSelectorCadenceSource = (
     getSnapshot() {
       return latestTimestamp;
     },
+    requestTick() {
+      scheduleTick();
+    },
     subscribe(listener) {
       if (disposed) {
         return () => undefined;
@@ -194,9 +196,6 @@ export const createSelectorCadenceSource = (
       listeners.add(listener);
       if (traceSelectors) {
         console.info('SUBSCRIBE SELECTOR CADENCE', listeners.size);
-      }
-      if (canScheduleTick()) {
-        scheduleTick();
       }
       return () => unsubscribe(listener);
     },

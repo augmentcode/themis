@@ -173,24 +173,36 @@ describe('ReactStore', () => {
     const doubleSignal = selectDoubleCount();
     const unsubscribeCount = countSignal.subscribe((value) => countValues.push(value));
     const unsubscribeDouble = doubleSignal.subscribe((value) => doubleValues.push(value));
+
+    expect(vi.getTimerCount()).toBe(0);
+    expect(countValues).toEqual([0]);
+    expect(doubleValues).toEqual([0]);
+
     store.dispatch({ type: 'counter/set', payload: 1 });
     store.dispatch({ type: 'counter/set', payload: 2 });
 
     expect(vi.getTimerCount()).toBe(1);
-    expect(countValues).toEqual([0]);
-    expect(doubleValues).toEqual([0]);
 
     vi.advanceTimersByTime(0);
     expect(countValues).toEqual([0, 2]);
     expect(doubleValues).toEqual([0, 4]);
-    expect(vi.getTimerCount()).toBe(1);
-
-    vi.advanceTimersByTime(500);
-    expect(countValues).toEqual([0, 2]);
-    expect(doubleValues).toEqual([0, 4]);
-    expect(vi.getTimerCount()).toBe(1);
+    expect(vi.getTimerCount()).toBe(0);
 
     store.dispatch({ type: 'counter/set', payload: 3 });
+    store.dispatch({ type: 'counter/set', payload: 4 });
+    expect(vi.getTimerCount()).toBe(1);
+    vi.advanceTimersByTime(99);
+    expect(countValues).toEqual([0, 2]);
+    expect(doubleValues).toEqual([0, 4]);
+    vi.advanceTimersByTime(1);
+    expect(countValues).toEqual([0, 2, 4]);
+    expect(doubleValues).toEqual([0, 4, 8]);
+    expect(vi.getTimerCount()).toBe(0);
+
+    vi.advanceTimersByTime(500);
+    expect(vi.getTimerCount()).toBe(0);
+
+    store.dispatch({ type: 'counter/set', payload: 5 });
     expect(vi.getTimerCount()).toBe(1);
     store.dispose();
     expect(vi.getTimerCount()).toBe(0);
@@ -198,8 +210,8 @@ describe('ReactStore', () => {
     unsubscribeCount();
     unsubscribeDouble();
 
-    expect(countValues).toEqual([0, 2]);
-    expect(doubleValues).toEqual([0, 4]);
+    expect(countValues).toEqual([0, 2, 4]);
+    expect(doubleValues).toEqual([0, 4, 8]);
   });
 
   it('throws when signal state is read before initialization', () => {
