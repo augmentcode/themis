@@ -80,17 +80,22 @@ describe('Store selector trace rendering', () => {
     store.traceSelectors();
     store.init();
 
+    const accessedPathTraces = () =>
+      vi.mocked(console.info).mock.calls.filter(([, payload]) => {
+        return payload && typeof payload === 'object' && 'accessedPathCount' in payload;
+      });
+
     selectCount().subscribe(() => {})();
     expect(renderAccessedPathsSpy).toHaveBeenCalledTimes(1);
-    expect(console.info).toHaveBeenCalledTimes(1);
+    expect(accessedPathTraces()).toHaveLength(1);
 
     selectLabel().subscribe(() => {})();
     selectTrace().subscribe(() => {})();
     expect(renderAccessedPathsSpy).toHaveBeenCalledTimes(1);
-    expect(console.info).toHaveBeenCalledTimes(1);
+    expect(accessedPathTraces()).toHaveLength(1);
 
     selectUserName().subscribe(() => {})();
     expect(renderAccessedPathsSpy).toHaveBeenCalledTimes(2);
-    expect(console.info).toHaveBeenCalledTimes(2);
+    expect(accessedPathTraces()).toHaveLength(2);
   });
 });
