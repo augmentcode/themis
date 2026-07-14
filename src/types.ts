@@ -162,7 +162,7 @@ export type StoreSelectorSelect<R, ARGS extends any[] = [], TState = StoreState>
 export type StoreSelectorEffect<R, ARGS extends any[] = []> = (...args: ARGS) => SagaGenerator<R>;
 
 type StoreSelectorWithStore<R, ARGS extends any[] = [], TState = StoreState> = (
-  store: StoreReadableStateSource<TState> | ReduxStore
+  store: StoreReadableStateSource<TState>
 ) => StoreSelectorReadable<R, ARGS>;
 
 export type StoreSelector<R, ARGS extends any[] = [], TState = StoreState> = StoreSelectorReadable<R, ARGS> & {

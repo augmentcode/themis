@@ -140,13 +140,13 @@ describe("createSelector", () => {
     expect(selectScaledCount(3)).not.toBe(selectScaledCount(4));
   });
 
-  it("reuses direct selector readables without a selector-argument cache key", () => {
+  it("reuses helper-created selector readables by Store-like source identity", () => {
     const storeState = writable<CounterState>(withUtility({ counter: { count: 2 } }));
-    const getStateObservable = vi.fn(() => storeState);
-    const selectCount = createSelectorFromReadableState(getStateObservable, (state) => state.counter.count);
+    const selectorStore = createMockStoreBinding(storeState);
+    const selectCount = createSelectorFromReadableState(selectorStore, (state) => state.counter.count);
 
     expect(selectCount()).toBe(selectCount());
-    expect(getStateObservable).toHaveBeenCalledTimes(2);
+    expect(selectorStore.getStateObservable).toHaveBeenCalledTimes(2);
   });
 
   it("keys cached selector readables by object identity and argument order", () => {
@@ -202,28 +202,27 @@ describe("createSelector", () => {
     );
   });
 
-  it("creates readable selectors bound to an explicit redux store with .withStore()", () => {
-    const initialState = withUtility({ counter: { count: 1 } });
-    const { store, setState } = createMockStore(initialState);
-    const selectorStore = createMockStoreBinding(writable<CounterState>(initialState));
+  it("creates readable selectors bound to an explicit Store-like source with .withStore()", () => {
+    const selectorStore = createMockStoreBinding(writable<CounterState>(withUtility({ counter: { count: 1 } })));
+    const overrideState = writable<CounterState>(withUtility({ counter: { count: 5 } }));
+    const overrideStore = createMockStoreBinding(overrideState);
     const selectCount = createSelector(selectorStore, (state) => state.counter.count);
     const values: number[] = [];
 
-    const unsubscribe = selectCount.withStore(store)().subscribe((value) => values.push(value));
-    setState(withUtility({ counter: { count: 7 } }));
+    const unsubscribe = selectCount.withStore(overrideStore)().subscribe((value) => values.push(value));
+    overrideState.set(withUtility({ counter: { count: 7 } }));
     vi.advanceTimersByTime(16);
     unsubscribe();
-    setState(withUtility({ counter: { count: 9 } }));
 
-    expect(store.subscribe).toHaveBeenCalledTimes(1);
-    expect(values).toEqual([1, 7]);
+    expect(overrideStore.getStateObservable).toHaveBeenCalledTimes(1);
+    expect(values).toEqual([5, 7]);
   });
 
-  it("does not share cached selector readables across explicit redux stores", () => {
+  it("does not share cached selector readables across explicit Store-like sources", () => {
     const initialStateA = withUtility({ counter: { count: 1 } });
     const initialStateB = withUtility({ counter: { count: 5 } });
-    const { store: storeA } = createMockStore(initialStateA);
-    const { store: storeB } = createMockStore(initialStateB);
+    const storeA = createMockStoreBinding(writable<CounterState>(initialStateA));
+    const storeB = createMockStoreBinding(writable<CounterState>(initialStateB));
     const selectorStore = createMockStoreBinding(writable<CounterState>(initialStateA));
     const selectCount = createSelector(selectorStore, (state) => state.counter.count);
     const selectCountFromA = selectCount.withStore(storeA);
@@ -233,7 +232,7 @@ describe("createSelector", () => {
     expect(selectCountFromA()).not.toBe(selectCountFromB());
   });
 
-  it("does not share cached selector readables across explicit readable state sources", () => {
+  it("does not share cached selector readables across Store-like wrappers around shared state", () => {
     const sharedStoreState = writable<CounterState>(withUtility({ counter: { count: 1 } }));
     const sourceA = createMockStoreBinding(sharedStoreState);
     const sourceB = createMockStoreBinding(sharedStoreState);
@@ -243,7 +242,6 @@ describe("createSelector", () => {
 
     expect(selectCountFromA()).toBe(selectCountFromA());
     expect(selectCountFromA()).not.toBe(selectCountFromB());
-    expect(selectCountFromA()).not.toBe(selectCount.withStore(sharedStoreState)());
   });
 });
 

@@ -214,7 +214,6 @@ describe("react createSelector", () => {
 
     expect(selectCount.withStore(overrideStoreA)("count")).toBe(selectCount.withStore(overrideStoreA)("count"));
     expect(selectCount.withStore(overrideStoreA)("count")).not.toBe(selectCount.withStore(overrideStoreB)("count"));
-    expect(selectCount.withStore(overrideStoreA)("count")).not.toBe(selectCount.withStore(sharedOverrideState)("count"));
   });
 
   it("propagates Store.getStateObservable() initialization guard errors", () => {

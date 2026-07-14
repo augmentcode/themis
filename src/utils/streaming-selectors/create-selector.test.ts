@@ -175,7 +175,7 @@ describe("streaming createSelector", () => {
     expect(selectOrderedArgs(objectArg, "suffix")).not.toBe(selectOrderedArgs("suffix", objectArg));
   });
 
-  it("keys cached selector observables by the resolved explicit stream observable", () => {
+  it("keys cached selector observables by explicit Store-like source identity", () => {
     const defaultState = createMutableProperty<CounterState>(withUtility({ counter: { count: 1 } }));
     const sharedOverrideState = createMutableProperty<CounterState>(withUtility({ counter: { count: 5 } }));
     const separateOverrideState = createMutableProperty<CounterState>(withUtility({ counter: { count: 5 } }));
@@ -189,8 +189,7 @@ describe("streaming createSelector", () => {
     const selectCountFromC = selectCount.withStore(overrideStoreC);
 
     expect(selectCountFromA()).toBe(selectCountFromA());
-    expect(selectCountFromA()).toBe(selectCountFromB());
-    expect(selectCountFromA()).toBe(selectCount.withStore(sharedOverrideState.stream)());
+    expect(selectCountFromA()).not.toBe(selectCountFromB());
     expect(selectCount()).not.toBe(selectCountFromA());
     expect(selectCountFromA()).not.toBe(selectCountFromC());
   });
