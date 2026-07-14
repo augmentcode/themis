@@ -115,14 +115,4 @@ export const createSelectorFromReadableState = <TStore extends Store<any, any>, 
   return readableSelector;
 };
 
-const createSelectorImpl = <TStore extends Store<any, any>, ARGS extends any[] = [], R = unknown>(
-  store: TStore,
-  selectorFunc: StoreSelectorCallback<R, ARGS, SvelteState<TStore>>
-): StoreSelector<R, ARGS, SvelteState<TStore>, TStore> => {
-  return createSelectorFromReadableState(
-    store,
-    selectorFunc
-  );
-};
-
-export const createSelector = createSelectorImpl as CreateSvelteSelector;
+export const createSelector = createSelectorFromReadableState as CreateSvelteSelector;
