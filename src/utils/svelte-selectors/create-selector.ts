@@ -9,10 +9,7 @@ import type { Store } from "../../svelte-store";
 import { readable, get, type Readable } from "svelte/store";
 import type { Observable } from "kefir";
 import { select } from "typed-redux-saga";
-import {
-  createCachedSelector,
-  type SelectorTraceReporter,
-} from "../selector-core/create-cached-selector";
+import { createCachedSelector } from "../selector-core/create-cached-selector";
 import { getOrCreate } from "../selector-core/selector-output-cache";
 import {
   createConstantKefirProperty,
@@ -20,10 +17,6 @@ import {
   createKefirSelectorProperty,
   type KefirSelectorProperty,
 } from "../selector-core/kefir-selector";
-import {
-  DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
-  type SelectorCadenceSourceSource,
-} from "../selector-core/throttled-selector-options";
 
 export { createCachedSelector };
 
@@ -79,23 +72,18 @@ const isStoreRuntime = (arg: unknown): arg is StoreRuntime<any, any> => arg inst
 
 export const createSelectorFromReadableState = <TStore extends Store<any, any>, ARGS extends any[] = [], R = unknown>(
   store: TStore,
-  selectorFunc: StoreSelectorCallback<R, ARGS, SvelteState<TStore>>,
-  selectorCadenceSourceOrFrequency: SelectorCadenceSourceSource = DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
-  traceReporter?: SelectorTraceReporter<SvelteState<TStore>, R, ARGS>,
-  shouldTraceSelectorCache?: () => boolean
+  selectorFunc: StoreSelectorCallback<R, ARGS, SvelteState<TStore>>
 ): StoreSelector<R, ARGS, SvelteState<TStore>, TStore> => {
   if (!isStoreRuntime(store)) {
     throw new TypeError("createSelectorFromReadableState requires a Store-like state source as the first argument.");
   }
 
-  const effectiveTraceReporter = traceReporter ?? store.getSelectorTraceReporter<SvelteState<TStore>, R, ARGS>();
-  const effectiveShouldTraceSelectorCache =
-    shouldTraceSelectorCache ?? (() => store.shouldTraceSelectorCache());
-  void selectorCadenceSourceOrFrequency;
   const boundSelector = (
     store: TStore,
     ...restArgs: ReadableArgs<ARGS>
   ): Readable<R> => {
+    const traceReporter = store.getSelectorTraceReporter<SvelteState<TStore>, R, ARGS>();
+
     return getOrCreate(store, selectorFunc, restArgs, () => {
       const argProperties = restArgs.map(readableArgToKefirProperty);
       const selected = createKefirSelectorProperty<TStore, ARGS, R>(
@@ -103,10 +91,10 @@ export const createSelectorFromReadableState = <TStore extends Store<any, any>, 
         selectorFunc,
         argProperties,
         () => restArgs.map(readReadableArg) as ARGS,
-        effectiveTraceReporter
+        traceReporter
       );
       return kefirSelectorPropertyToReadable(selected);
-    }, effectiveShouldTraceSelectorCache() ? { traceReporter: effectiveTraceReporter } : undefined);
+    }, store.shouldTraceSelectorCache() ? { traceReporter } : undefined);
   };
 
   const readableSelector = ((...restArgs: ReadableArgs<ARGS>) => {
