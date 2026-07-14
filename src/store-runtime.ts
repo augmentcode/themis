@@ -38,16 +38,16 @@ import type { StoreUtilityState } from './slices/store-utility/store-utility-sli
 import { registerGlobalDevTools } from './global-dev-tools';
 import { deriveSagaName } from './utils/sagas/derive-saga-name';
 import { normalizeStoreOptions } from './store-options';
-import {
-  createSelectorCadenceSource,
-  type SelectorCadenceSource,
-} from './utils/selector-core/throttled-selector-options';
+import { createSelectorCadenceSource } from './utils/selector-core/throttled-selector-options';
 import {
   renderAccessedPaths,
-  type CachedSelector,
-  type SelectorTrace,
-  type SelectorTraceReporter,
 } from './utils/selector-core/create-cached-selector';
+import type {
+  CachedSelector,
+  SelectorCadenceSource,
+  SelectorTrace,
+  SelectorTraceReporter,
+} from './utils/types';
 
 const MAX_SELECTOR_SOURCE_SNIPPET_LINES = 5;
 const MAX_SELECTOR_SOURCE_SNIPPET_LENGTH = 500;

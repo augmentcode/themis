@@ -15,8 +15,8 @@ import {
   createConstantKefirProperty,
   createKefirPropertyFromSubscribe,
   createKefirSelectorProperty,
-  type KefirSelectorProperty,
 } from "../selector-core/kefir-selector";
+import type { KefirSelectorProperty } from "../types";
 
 export { createCachedSelector };
 
