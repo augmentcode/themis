@@ -33,6 +33,15 @@ export const getRuntimeKefirStateSource = <TState>(
   };
 };
 
+export const requireRuntimeKefirStateSource = <TState>(source: unknown): RuntimeKefirStateSource<TState> => {
+  const runtimeStateSource = getRuntimeKefirStateSource<TState>(source);
+  if (!runtimeStateSource) {
+    throw new TypeError("Store-created selectors require a StoreRuntime Kefir state source.");
+  }
+
+  return runtimeStateSource;
+};
+
 export const createKefirPropertyFromSubscribe = <T>(
   getSnapshot: () => T,
   subscribe: (listener: (value: T) => void) => (() => void) | { unsubscribe(): void }

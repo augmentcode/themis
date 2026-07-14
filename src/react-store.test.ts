@@ -210,7 +210,7 @@ describe('ReactStore', () => {
       'Cannot access ReactStore.getStateObservable() before Store.init() has been called.'
     );
     expect(() => selectCount()).toThrow(
-      'Cannot access ReactStore.getStateObservable() before Store.init() has been called.'
+      'Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.'
     );
   });
 

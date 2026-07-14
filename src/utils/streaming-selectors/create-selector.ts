@@ -1,4 +1,4 @@
-import Kefir, { type Observable } from "kefir";
+import type { Observable } from "kefir";
 import { select } from "typed-redux-saga";
 import type { StoreSelectorCallback, StoreSelectorEffect, StoreState } from "../../types";
 import type { Collection } from "../collections/collection-utils";
@@ -7,12 +7,11 @@ import {
   type SelectorTraceReporter,
 } from "../selector-core/create-cached-selector";
 import { getOrCreate } from "../selector-core/selector-output-cache";
-import { areStoreUpdatesLocked } from "../selector-core/store-update-lock";
 import {
   createConstantKefirProperty,
   createKefirSelectorProperty,
-  getRuntimeKefirStateSource,
   isKefirObservable,
+  requireRuntimeKefirStateSource,
 } from "../selector-core/kefir-selector";
 import {
   DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
@@ -110,35 +109,18 @@ export const createSelectorFromStreamState = <TState = StoreState, ARGS extends 
     store: StoreStreamingStateSource<TState>,
     ...restArgs: StreamingArgs<ARGS>
   ): Observable<R, any> => {
-    const streamStoreState = store.getStateObservable();
-    const runtimeStateSource = getRuntimeKefirStateSource<TState>(store);
+    const runtimeStateSource = requireRuntimeKefirStateSource<TState>(store);
 
     return getOrCreate(store, selectorFunc, restArgs, () => {
-      if (runtimeStateSource && !hasObservableArgs(restArgs)) {
-        const selected = createKefirSelectorProperty<TState, ARGS, R>(
-          runtimeStateSource,
-          selectorFunc,
-          restArgs.map(createConstantKefirProperty),
-          () => restArgs as ARGS,
-          effectiveTraceReporter
-        );
-        return selected.property;
-      }
-
-      const cachedSelector = createCachedSelector<TState, ARGS, R>(selectorFunc, {
-        lockUpdatesPredicate: areStoreUpdatesLocked,
-        traceReporter: effectiveTraceReporter,
-      });
-      const streamArgs = restArgs.map(toKefirObservable);
-      const combinedArgs = [streamStoreState, ...streamArgs] as Array<Observable<any, any>>;
-
-      const combined = Kefir.combine(combinedArgs as any) as Observable<any[], any>;
-
-      const selected = combined.map(([storeState, ...args]) => {
-        return cachedSelector(storeState as TState, ...(args as ARGS));
-      });
-
-      return selected.skipDuplicates().toProperty();
+      const hasObservableSelectorArgs = hasObservableArgs(restArgs);
+      const selected = createKefirSelectorProperty<TState, ARGS, R>(
+        runtimeStateSource,
+        selectorFunc,
+        restArgs.map(toKefirObservable),
+        hasObservableSelectorArgs ? undefined : () => restArgs as ARGS,
+        effectiveTraceReporter
+      );
+      return selected.property;
     }, effectiveTraceReporter && effectiveShouldTraceSelectorCache?.() ? { traceReporter: effectiveTraceReporter } : undefined);
   };
 

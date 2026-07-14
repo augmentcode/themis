@@ -13,7 +13,7 @@ import {
   createConstantKefirProperty,
   createKefirPropertyFromSubscribe,
   createKefirSelectorProperty,
-  getRuntimeKefirStateSource,
+  requireRuntimeKefirStateSource,
   type KefirSelectorProperty,
 } from "../selector-core/kefir-selector";
 import {
@@ -167,11 +167,7 @@ export const createSelectorFromSignalState = <TState = StoreState, ARGS extends 
     store: StoreSignalStateSource<TState>,
     ...restArgs: SignalArgs<ARGS>
   ): ReadonlySignal<R> => {
-    void store.getStateObservable();
-    const runtimeStateSource = getRuntimeKefirStateSource<TState>(store);
-    if (!runtimeStateSource) {
-      throw new TypeError("createSelectorFromSignalState requires a StoreRuntime-backed state source.");
-    }
+    const runtimeStateSource = requireRuntimeKefirStateSource<TState>(store);
 
     return getOrCreate(store, selectorFunc, restArgs, () => {
       const argProperties = restArgs.map(signalArgToKefirProperty);

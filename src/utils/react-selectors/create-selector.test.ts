@@ -1,4 +1,5 @@
 import { signal, type ReadonlySignal } from "@preact/signals-react";
+import type { Observable } from "kefir";
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import type { StoreState } from "../../types";
 import type { Collection } from "../collections/collection-utils";
@@ -23,6 +24,7 @@ import {
   createSelector,
   type StoreSignalStateSource,
 } from "./create-selector";
+import { createKefirPropertyFromSubscribe } from "../selector-core/kefir-selector";
 
 type CounterState = StoreState & {
   counter: { count: number };
@@ -39,11 +41,25 @@ const withUtility = <T extends StoreState>(state: T): T & InternalUtilityTestSta
   [INTERNAL_STORE_UTILITY_DOMAIN]: { updatesLocked: false },
 });
 
+type RuntimeSignalStateSource<TState> = StoreSignalStateSource<TState> & {
+  getStoreStateStream(): Observable<TState, any>;
+  getStoreStateSnapshot(): TState;
+};
+
 const createMockStoreBinding = <TState extends StoreState>(
   signalState: ReadonlySignal<TState>
-): StoreSignalStateSource<TState> => ({
-  getStateObservable: vi.fn(() => signalState),
-});
+): RuntimeSignalStateSource<TState> => {
+  const stateStream = createKefirPropertyFromSubscribe(
+    () => signalState.value,
+    (listener) => signalState.subscribe(listener)
+  );
+
+  return {
+    getStateObservable: vi.fn(() => signalState),
+    getStoreStateStream: vi.fn(() => stateStream),
+    getStoreStateSnapshot: vi.fn(() => signalState.value),
+  };
+};
 
 describe("react createSelector", () => {
   beforeEach(() => {
@@ -94,14 +110,14 @@ describe("react createSelector", () => {
     const unsubscribe = selected.subscribe((value) => values.push(value));
     multiplier.value = 4;
     state.value = withUtility({ counter: { count: 5 } });
-    expect(values).toEqual([6]);
+    expect(values).toEqual([6, 8, 20]);
     vi.advanceTimersByTime(0);
     unsubscribe();
 
-    expect(values).toEqual([6, 20]);
+    expect(values).toEqual([6, 8, 20]);
   });
 
-  it("coalesces signal argument bursts to the latest selector result", () => {
+  it("emits signal argument changes immediately when the selector result changes", () => {
     const state = signal<CounterState>(withUtility({ counter: { count: 2 } }));
     const multiplier = signal(3);
     const selectorStore = createMockStoreBinding(state);
@@ -113,12 +129,12 @@ describe("react createSelector", () => {
     const unsubscribe = selectScaledCount(multiplier).subscribe((value) => values.push(value));
     multiplier.value = 4;
     multiplier.value = 5;
-    expect(values).toEqual([6]);
+    expect(values).toEqual([6, 8, 10]);
 
     vi.advanceTimersByTime(0);
     unsubscribe();
 
-    expect(values).toEqual([6, 10]);
+    expect(values).toEqual([6, 8, 10]);
   });
 
   it("reads selector cache locks from the internal store utility domain", () => {
@@ -152,7 +168,7 @@ describe("react createSelector", () => {
     vi.advanceTimersByTime(0);
     unsubscribe();
 
-    expect(overrideStore.getStateObservable).toHaveBeenCalledTimes(2);
+    expect(overrideStore.getStoreStateStream).toHaveBeenCalledTimes(2);
     expect(values).toEqual([5, 6]);
   });
 
@@ -216,16 +232,20 @@ describe("react createSelector", () => {
     expect(selectCount.withStore(overrideStoreA)("count")).not.toBe(selectCount.withStore(overrideStoreB)("count"));
   });
 
-  it("propagates Store.getStateObservable() initialization guard errors", () => {
-    const selectorStore: StoreSignalStateSource<CounterState> = {
+  it("propagates StoreRuntime state stream initialization guard errors", () => {
+    const selectorStore: RuntimeSignalStateSource<CounterState> = {
       getStateObservable: vi.fn(() => {
         throw new Error("Cannot access ReactStore.getStateObservable() before Store.init() has been called.");
       }),
+      getStoreStateStream: vi.fn(() => {
+        throw new Error("Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.");
+      }),
+      getStoreStateSnapshot: vi.fn(() => withUtility({ counter: { count: 0 } })),
     };
     const selectCount = createSelector(selectorStore, (state) => state.counter.count);
 
     expect(() => selectCount()).toThrow(
-      "Cannot access ReactStore.getStateObservable() before Store.init() has been called."
+      "Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called."
     );
   });
 

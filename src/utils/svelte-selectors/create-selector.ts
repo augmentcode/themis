@@ -7,7 +7,7 @@ import type {
   StoreSelectorCallback,
 } from "../../types";
 import type { Collection } from "../collections/collection-utils";
-import { readable, derived, get, type Readable } from "svelte/store";
+import { readable, get, type Readable } from "svelte/store";
 import type { Observable } from "kefir";
 import { select } from "typed-redux-saga";
 import {
@@ -15,12 +15,11 @@ import {
   type SelectorTraceReporter,
 } from "../selector-core/create-cached-selector";
 import { getOrCreate } from "../selector-core/selector-output-cache";
-import { areStoreUpdatesLocked } from "../selector-core/store-update-lock";
 import {
   createConstantKefirProperty,
   createKefirPropertyFromSubscribe,
   createKefirSelectorProperty,
-  getRuntimeKefirStateSource,
+  requireRuntimeKefirStateSource,
   type KefirSelectorProperty,
 } from "../selector-core/kefir-selector";
 import {
@@ -117,44 +116,18 @@ export const createSelectorFromReadableState = <TState = StoreState, ARGS extend
     store: StoreReadableStateSource<TState>,
     ...restArgs: ReadableArgs<ARGS>
   ): Readable<R> => {
-    const readableStoreState = store.getStateObservable();
-    const runtimeStateSource = getRuntimeKefirStateSource<TState>(store);
+    const runtimeStateSource = requireRuntimeKefirStateSource<TState>(store);
 
     return getOrCreate(store, selectorFunc, restArgs, () => {
-      if (runtimeStateSource) {
-        const argProperties = restArgs.map(readableArgToKefirProperty);
-        const selected = createKefirSelectorProperty<TState, ARGS, R>(
-          runtimeStateSource,
-          selectorFunc,
-          argProperties,
-          () => restArgs.map(readReadableArg) as ARGS,
-          effectiveTraceReporter
-        );
-        return kefirSelectorPropertyToReadable(selected);
-      }
-
-      const cachedSelector = createCachedSelector<TState, ARGS, R>(selectorFunc, {
-        lockUpdatesPredicate: areStoreUpdatesLocked,
-        traceReporter: effectiveTraceReporter,
-      });
-      const readableArgs = restArgs.map((arg) => {
-        if (isReadable(arg)) {
-          return arg;
-        }
-        return readable(arg);
-      });
-      const derivedStore = derived([readableStoreState, ...readableArgs], ([storeState, ...args]) => {
-        return cachedSelector(storeState as TState, ...(args as ARGS));
-      });
-      let hasEmitted = false;
-      let lastEmitted: R;
-      return derived(derivedStore, (value, set) => {
-        if (!hasEmitted || value !== lastEmitted) {
-          hasEmitted = true;
-          lastEmitted = value;
-          set(value);
-        }
-      });
+      const argProperties = restArgs.map(readableArgToKefirProperty);
+      const selected = createKefirSelectorProperty<TState, ARGS, R>(
+        runtimeStateSource,
+        selectorFunc,
+        argProperties,
+        () => restArgs.map(readReadableArg) as ARGS,
+        effectiveTraceReporter
+      );
+      return kefirSelectorPropertyToReadable(selected);
     }, effectiveTraceReporter && effectiveShouldTraceSelectorCache?.() ? { traceReporter: effectiveTraceReporter } : undefined);
   };
 
