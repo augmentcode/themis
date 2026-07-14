@@ -398,7 +398,7 @@ describe('Store', () => {
       expect(values).toEqual([0, 1, 2]);
     });
 
-    it('shares one store-scoped flush manager across readable selectors and disposes scheduled work', () => {
+    it('shares one store-scoped cadence source across readable selectors and disposes scheduled work', () => {
       vi.useFakeTimers();
       vi.setSystemTime(0);
       let rafCallback: FrameRequestCallback | null = null;
@@ -457,7 +457,7 @@ describe('Store', () => {
       expect(doubleValues).toEqual([0, 4]);
     });
 
-    it('recreates selector flush scheduling safely after dispose and re-init', () => {
+    it('recreates selector cadence scheduling safely after dispose and re-init', () => {
       let rafCallback: FrameRequestCallback | null = null;
       vi.stubGlobal(
         'requestAnimationFrame',

@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { writable, get } from "svelte/store";
 import {
-  createSelectorFlushManager,
-  type SelectorFlushCallback,
-  type SelectorFlushManager,
+  createSelectorCadenceSource,
+  type SelectorCadenceSource,
 } from "../selector-core/throttled-selector-options";
 import { createThrottledReadable } from "./selector-scheduler";
 
@@ -36,6 +35,29 @@ const triggerRAF = (timestamp = (rafTimestamp += 1000 / 60)) => {
   const cb = rafCallback;
   rafCallback = null;
   cb?.(timestamp);
+};
+
+const createManualCadenceSource = () => {
+  let cadenceListener: ((timestamp: number) => void) | null = null;
+  const unsubscribeCadence = vi.fn(() => {
+    cadenceListener = null;
+  });
+  const cadenceSource: SelectorCadenceSource = {
+    frequency: 64,
+    frameIntervalMs: 1000 / 64,
+    getSnapshot: () => 0,
+    subscribe: vi.fn((listener) => {
+      cadenceListener = listener;
+      return unsubscribeCadence;
+    }),
+    dispose: vi.fn(),
+  };
+
+  return {
+    cadenceSource,
+    tick: (timestamp = 0) => cadenceListener?.(timestamp),
+    unsubscribeCadence,
+  };
 };
 
 describe("createThrottledReadable", () => {
@@ -78,36 +100,27 @@ describe("createThrottledReadable", () => {
     expect(values).toEqual([0, 3]);
   });
 
-  it("requests and cancels one-shot flush callbacks", () => {
-    const requestedCallbacks: SelectorFlushCallback[] = [];
-    const selectorFlushManager: SelectorFlushManager = {
-      frequency: 64,
-      frameIntervalMs: 1000 / 64,
-      requestFlush: vi.fn((callback) => requestedCallbacks.push(callback)),
-      cancelFlush: vi.fn(),
-      dispose: vi.fn(),
-    };
+  it("subscribes to cadence ticks only while a pending value exists", () => {
+    const { cadenceSource, tick, unsubscribeCadence } = createManualCadenceSource();
     const source = writable(0);
-    const throttled = createThrottledReadable(source, selectorFlushManager);
+    const throttled = createThrottledReadable(source, cadenceSource);
     const values: number[] = [];
 
     const unsubscribe = throttled.subscribe((value) => values.push(value));
     source.set(1);
 
-    expect(selectorFlushManager.requestFlush).toHaveBeenCalledTimes(1);
+    expect(cadenceSource.subscribe).toHaveBeenCalledTimes(1);
     expect(values).toEqual([0]);
-    requestedCallbacks[0](0);
+    tick(0);
     expect(values).toEqual([0, 1]);
+    expect(unsubscribeCadence).toHaveBeenCalledTimes(1);
 
     unsubscribe();
-    expect(selectorFlushManager.cancelFlush).toHaveBeenCalledWith(
-      requestedCallbacks[0]
-    );
   });
 
-  it("uses the manager's configured fractional FPS cadence without clamping", () => {
+  it("uses the cadence source's configured fractional FPS cadence without clamping", () => {
     const source = writable(0);
-    const throttled = createThrottledReadable(source, createSelectorFlushManager(2.5));
+    const throttled = createThrottledReadable(source, createSelectorCadenceSource(2.5));
     const values: number[] = [];
     throttled.subscribe((v) => values.push(v));
 
@@ -127,7 +140,7 @@ describe("createThrottledReadable", () => {
 
   it("rejects non-finite or out-of-range FPS values", () => {
     for (const fps of [0, -1, 257, Number.POSITIVE_INFINITY, Number.NaN]) {
-      expect(() => createSelectorFlushManager(fps)).toThrow(
+      expect(() => createSelectorCadenceSource(fps)).toThrow(
         'Store option "throttledSelectorFrequency" must be a finite number in the inclusive range 1..256 FPS.'
       );
     }
@@ -148,12 +161,12 @@ describe("createThrottledReadable", () => {
     expect(values).toEqual([sharedObject]);
   });
 
-  it("batches multiple throttled readables in the same frame", () => {
-    const selectorFlushManager = createSelectorFlushManager();
+  it("batches multiple throttled readables in the same cadence tick", () => {
+    const cadenceSource = createSelectorCadenceSource();
     const sourceA = writable("a1");
     const sourceB = writable("b1");
-    const throttledA = createThrottledReadable(sourceA, selectorFlushManager);
-    const throttledB = createThrottledReadable(sourceB, selectorFlushManager);
+    const throttledA = createThrottledReadable(sourceA, cadenceSource);
+    const throttledB = createThrottledReadable(sourceB, cadenceSource);
 
     const valuesA: string[] = [];
     const valuesB: string[] = [];
@@ -175,12 +188,12 @@ describe("createThrottledReadable", () => {
     expect(valuesB).toEqual(["b1", "b2"]);
   });
 
-  it("handles re-entrant updates during flush", () => {
-    const selectorFlushManager = createSelectorFlushManager();
+  it("defers re-entrant updates during a cadence tick", () => {
+    const cadenceSource = createSelectorCadenceSource();
     const source = writable(0);
     const reentrantSource = writable("x");
-    const throttled = createThrottledReadable(source, selectorFlushManager);
-    const throttledReentrant = createThrottledReadable(reentrantSource, selectorFlushManager);
+    const throttled = createThrottledReadable(source, cadenceSource);
+    const throttledReentrant = createThrottledReadable(reentrantSource, cadenceSource);
 
     const reentrantValues: string[] = [];
     throttledReentrant.subscribe((v) => reentrantValues.push(v));
@@ -200,7 +213,7 @@ describe("createThrottledReadable", () => {
     const rafCallsAfter = (requestAnimationFrame as ReturnType<typeof vi.fn>).mock.calls.length;
     expect(rafCallsAfter).toBe(rafCallsBefore);
 
-    vi.advanceTimersByTime(selectorFlushManager.frameIntervalMs);
+    vi.advanceTimersByTime(cadenceSource.frameIntervalMs);
     triggerRAF();
     expect(reentrantValues).toEqual(["x", "y"]);
   });
@@ -224,17 +237,17 @@ describe("createThrottledReadable", () => {
     expect(values).toEqual([10]);
   });
 
-  it("schedules a cadence-limited frame if updates arrive during flush", () => {
-    const selectorFlushManager = createSelectorFlushManager();
+  it("schedules a cadence-limited frame if updates arrive during a cadence tick", () => {
+    const cadenceSource = createSelectorCadenceSource();
     const source = writable(0);
-    const throttled = createThrottledReadable(source, selectorFlushManager);
+    const throttled = createThrottledReadable(source, cadenceSource);
 
     const values: number[] = [];
-    let pushDuringFlush = true;
+    let pushDuringTick = true;
     throttled.subscribe((v) => {
       values.push(v);
-      if (v === 1 && pushDuringFlush) {
-        pushDuringFlush = false;
+      if (v === 1 && pushDuringTick) {
+        pushDuringTick = false;
         source.set(2);
       }
     });
@@ -245,7 +258,7 @@ describe("createThrottledReadable", () => {
 
     expect(rafCallback).toBeNull();
 
-    vi.advanceTimersByTime(selectorFlushManager.frameIntervalMs);
+    vi.advanceTimersByTime(cadenceSource.frameIntervalMs);
     triggerRAF();
     expect(values).toEqual([0, 1, 2]);
   });

@@ -1,11 +1,33 @@
 import { signal } from "@preact/signals-react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  createSelectorFlushManager,
-  type SelectorFlushCallback,
-  type SelectorFlushManager,
+  createSelectorCadenceSource,
+  type SelectorCadenceSource,
 } from "../selector-core/throttled-selector-options";
 import { createThrottledSignal } from "./selector-scheduler";
+
+const createManualCadenceSource = () => {
+  let cadenceListener: ((timestamp: number) => void) | null = null;
+  const unsubscribeCadence = vi.fn(() => {
+    cadenceListener = null;
+  });
+  const cadenceSource: SelectorCadenceSource = {
+    frequency: 64,
+    frameIntervalMs: 1000 / 64,
+    getSnapshot: () => 0,
+    subscribe: vi.fn((listener) => {
+      cadenceListener = listener;
+      return unsubscribeCadence;
+    }),
+    dispose: vi.fn(),
+  };
+
+  return {
+    cadenceSource,
+    tick: (timestamp = 0) => cadenceListener?.(timestamp),
+    unsubscribeCadence,
+  };
+};
 
 describe("createThrottledSignal", () => {
   beforeEach(() => {
@@ -45,39 +67,30 @@ describe("createThrottledSignal", () => {
     unsubscribe();
   });
 
-  it("requests and cancels one-shot flush callbacks", () => {
-    const requestedCallbacks: SelectorFlushCallback[] = [];
-    const selectorFlushManager: SelectorFlushManager = {
-      frequency: 64,
-      frameIntervalMs: 1000 / 64,
-      requestFlush: vi.fn((callback) => requestedCallbacks.push(callback)),
-      cancelFlush: vi.fn(),
-      dispose: vi.fn(),
-    };
+  it("subscribes to cadence ticks only while a pending value exists", () => {
+    const { cadenceSource, tick, unsubscribeCadence } = createManualCadenceSource();
     const source = signal(0);
     const values: number[] = [];
 
     const unsubscribe = createThrottledSignal(
       source,
-      selectorFlushManager
+      cadenceSource
     ).subscribe((value) => values.push(value));
     source.value = 1;
 
-    expect(selectorFlushManager.requestFlush).toHaveBeenCalledTimes(1);
+    expect(cadenceSource.subscribe).toHaveBeenCalledTimes(1);
     expect(values).toEqual([0]);
-    requestedCallbacks[0](0);
+    tick(0);
     expect(values).toEqual([0, 1]);
+    expect(unsubscribeCadence).toHaveBeenCalledTimes(1);
 
     unsubscribe();
-    expect(selectorFlushManager.cancelFlush).toHaveBeenCalledWith(
-      requestedCallbacks[0]
-    );
   });
 
-  it("uses the manager's configured FPS cadence with the timer fallback", () => {
+  it("uses the cadence source's configured FPS cadence with the timer fallback", () => {
     const source = signal(0);
     const values: number[] = [];
-    const unsubscribe = createThrottledSignal(source, createSelectorFlushManager(2.5)).subscribe((value) => values.push(value));
+    const unsubscribe = createThrottledSignal(source, createSelectorCadenceSource(2.5)).subscribe((value) => values.push(value));
 
     source.value = 1;
     vi.advanceTimersByTime(0);
@@ -92,14 +105,14 @@ describe("createThrottledSignal", () => {
     unsubscribe();
   });
 
-  it("batches multiple throttled signals from the same manager tick", () => {
-    const selectorFlushManager = createSelectorFlushManager();
+  it("batches multiple throttled signals from the same cadence tick", () => {
+    const cadenceSource = createSelectorCadenceSource();
     const sourceA = signal("a1");
     const sourceB = signal("b1");
     const valuesA: string[] = [];
     const valuesB: string[] = [];
-    const unsubscribeA = createThrottledSignal(sourceA, selectorFlushManager).subscribe((value) => valuesA.push(value));
-    const unsubscribeB = createThrottledSignal(sourceB, selectorFlushManager).subscribe((value) => valuesB.push(value));
+    const unsubscribeA = createThrottledSignal(sourceA, cadenceSource).subscribe((value) => valuesA.push(value));
+    const unsubscribeB = createThrottledSignal(sourceB, cadenceSource).subscribe((value) => valuesB.push(value));
 
     sourceA.value = "a2";
     sourceB.value = "b2";
@@ -116,7 +129,36 @@ describe("createThrottledSignal", () => {
     unsubscribeB();
   });
 
-  it("cleans up scheduled timer-backed flushes when unwatched", () => {
+  it("defers re-entrant updates to the next cadence tick", () => {
+    const cadenceSource = createSelectorCadenceSource(2.5);
+    const source = signal(0);
+    const reentrantSource = signal("x");
+    const values: number[] = [];
+    const reentrantValues: string[] = [];
+    let pushDuringTick = true;
+
+    const unsubscribeReentrant = createThrottledSignal(reentrantSource, cadenceSource).subscribe((value) => reentrantValues.push(value));
+    const unsubscribe = createThrottledSignal(source, cadenceSource).subscribe((value) => {
+      values.push(value);
+      if (value === 1 && pushDuringTick) {
+        pushDuringTick = false;
+        reentrantSource.value = "y";
+      }
+    });
+
+    source.value = 1;
+    vi.advanceTimersByTime(0);
+    expect(values).toEqual([0, 1]);
+    expect(reentrantValues).toEqual(["x"]);
+
+    vi.advanceTimersByTime(cadenceSource.frameIntervalMs);
+    expect(reentrantValues).toEqual(["x", "y"]);
+
+    unsubscribe();
+    unsubscribeReentrant();
+  });
+
+  it("cleans up scheduled timer-backed cadence ticks when unwatched", () => {
     const source = signal(0);
     const values: number[] = [];
     const unsubscribe = createThrottledSignal(source).subscribe((value) => values.push(value));
@@ -133,7 +175,7 @@ describe("createThrottledSignal", () => {
 
   it("rejects divergent FPS validation semantics", () => {
     for (const fps of [0, -1, 257, Number.POSITIVE_INFINITY, Number.NaN]) {
-      expect(() => createSelectorFlushManager(fps)).toThrow(
+      expect(() => createSelectorCadenceSource(fps)).toThrow(
         'Store option "throttledSelectorFrequency" must be a finite number in the inclusive range 1..256 FPS.'
       );
     }

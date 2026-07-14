@@ -46,7 +46,7 @@ export type AppState = StoreInstanceState<typeof store>;
 
 `StoreInstanceState<typeof store>` is the same shape available inside `store.createSelector` callbacks: each reducer domain is inferred as its state object, not as the reducer function or reducer helper object used to configure the Store.
 
-Svelte-readable, React signal, and StreamingStore selector emissions default to `64` FPS. To tune coalescing, pass Store options as the final constructor argument. The value must be finite and within the inclusive `1..256` FPS range; fractional values such as `48.5` are accepted, and invalid values throw instead of clamping.
+Svelte-readable, React signal, and StreamingStore selector emissions are driven by a Store-scoped cadence source that defaults to `64` FPS. To tune coalescing, pass Store options as the final constructor argument. The cadence is capped by `throttledSelectorFrequency`; the value must be finite and within the inclusive `1..256` FPS range. Fractional values such as `48.5` are accepted, and invalid values throw instead of clamping.
 
 ```typescript
 export const store = new Store(
@@ -148,7 +148,7 @@ function TodoTitle({ id }: { id: string }) {
 }
 ```
 
-Direct signal calls and `.useValue(...args)` are throttled by the owning `ReactStore`'s `throttledSelectorFrequency`. Selector arguments may be plain values or `ReadonlySignal` values; signal arguments are read reactively by the computed selector. Keep `.useValue(...args)` for third-party components, legacy hook boundaries, or other places that must receive plain `R`.
+Direct signal calls and `.useValue(...args)` are driven by the owning `ReactStore`'s Store-scoped cadence source and capped by `throttledSelectorFrequency`. Selector arguments may be plain values or `ReadonlySignal` values; signal arguments are read reactively by the computed selector. Keep `.useValue(...args)` for third-party components, legacy hook boundaries, or other places that must receive plain `R`.
 
 ### 3. In Sagas (`.effect()` and selector-channel helpers)
 
@@ -199,7 +199,7 @@ export const selectTodoCountStream = streamStore.createSelector((state) => state
 const todoCount$ = selectTodoCountStream(); // Returns Kefir Observable<number, any>
 ```
 
-Streaming selectors emit their first available value promptly. Subsequent rapid Store state updates or observable selector argument updates are coalesced at the Store's configured `throttledSelectorFrequency`, and only the latest pending selector result emits at the scheduled moment.
+Streaming selectors emit their first available value promptly. Subsequent rapid Store state updates or observable selector argument updates are coalesced by the Store-scoped cadence source capped by `throttledSelectorFrequency`, and only the latest pending selector result emits at the scheduled moment.
 
 ---
 
@@ -224,7 +224,7 @@ export const selectTodoById = store.createSelector((state, todoId: string) => {
 
 ### Store-Owned Update Scheduling
 
-Selector emissions are scheduled and coalesced by the Store/selector internals so rapid Redux writes do not force unnecessary UI or stream consumer work. Svelte-readable `Store` selectors, React signal `ReactStore` selectors, and Kefir-based `StreamingStore` selectors use the configured `throttledSelectorFrequency` from the Store constructor options, defaulting to `64` FPS. Selector trace output is a separate default-off diagnostic; pass `{ traceSelectors: true }` in the same final Store options object only while diagnosing selector scheduling, and omit it or pass `false` for normal silent behavior. There is no public lock/unlock action API; model batching through ordinary action design, saga orchestration, and selectors that derive the final UI value.
+Selector emissions are scheduled and coalesced by the Store/selector internals so rapid Redux writes do not force unnecessary UI or stream consumer work. Svelte-readable `Store` selectors, React signal `ReactStore` selectors, and Kefir-based `StreamingStore` selectors subscribe to a Store-scoped cadence source whose maximum tick rate comes from the configured `throttledSelectorFrequency` Store constructor option, defaulting to `64` FPS. Each selector keeps its own latest pending value and emits only that latest value on a cadence tick. Selector trace output is a separate default-off diagnostic; pass `{ traceSelectors: true }` in the same final Store options object only while diagnosing selector scheduling, and omit it or pass `false` for normal silent behavior. There is no public lock/unlock action API; model batching through ordinary action design, saga orchestration, and selectors that derive the final UI value.
 
 Because Store-created selectors already cache accessed state paths, track arguments, reuse same-source/same-selector/same-stable-args direct outputs, and coalesce emissions, do not add extra memoization, manual cache maps, debounce/throttle wrappers, `requestAnimationFrame` schedulers, or writable/signal proxies around selector callbacks or selector calls solely for performance. Use normal selector composition with `.select(state, ...args)` inside another selector, pass primitive scalar selector arguments where possible, and tune the public Store constructor options when UI/stream coalescing needs an explicit FPS.
 
@@ -348,7 +348,7 @@ const todos = selectTodos();
 const snapshot = selectTodos.select(appStore.state);
 ```
 
-If selector output is too chatty for UI or stream consumers, tune `throttledSelectorFrequency` on the owning Store instead of layering custom caches, timers, or scheduler wrappers around the selector.
+If selector output is too chatty for UI or stream consumers, tune the owning Store's `throttledSelectorFrequency` cadence cap instead of layering custom caches, timers, or scheduler wrappers around the selector.
 
 ### ❌ Calling Readable Form Outside Component Init
 
