@@ -11,35 +11,18 @@ export type RuntimeKefirStateSource<TState> = {
   getSnapshot: () => TState;
 };
 
-type MaybeRuntimeKefirStateSource<TState> = {
-  getStoreStateStream?: () => Observable<TState, any>;
-  getStoreStateSnapshot?: () => TState;
+export type StoreRuntimeKefirStateSource<TState> = {
+  getStoreStateStream: () => Observable<TState, any>;
+  getStoreStateSnapshot: () => TState;
 };
 
 export const getRuntimeKefirStateSource = <TState>(
-  source: unknown
-): RuntimeKefirStateSource<TState> | undefined => {
-  const runtimeSource = source as MaybeRuntimeKefirStateSource<TState>;
-  if (
-    typeof runtimeSource.getStoreStateStream !== "function" ||
-    typeof runtimeSource.getStoreStateSnapshot !== "function"
-  ) {
-    return undefined;
-  }
-
+  source: StoreRuntimeKefirStateSource<TState>
+): RuntimeKefirStateSource<TState> => {
   return {
-    stream: runtimeSource.getStoreStateStream.call(source),
-    getSnapshot: () => runtimeSource.getStoreStateSnapshot!.call(source),
+    stream: source.getStoreStateStream(),
+    getSnapshot: () => source.getStoreStateSnapshot(),
   };
-};
-
-export const requireRuntimeKefirStateSource = <TState>(source: unknown): RuntimeKefirStateSource<TState> => {
-  const runtimeStateSource = getRuntimeKefirStateSource<TState>(source);
-  if (!runtimeStateSource) {
-    throw new TypeError("Store-created selectors require a StoreRuntime Kefir state source.");
-  }
-
-  return runtimeStateSource;
 };
 
 export const createKefirPropertyFromSubscribe = <T>(

@@ -13,8 +13,9 @@ import {
   createConstantKefirProperty,
   createKefirPropertyFromSubscribe,
   createKefirSelectorProperty,
-  requireRuntimeKefirStateSource,
+  getRuntimeKefirStateSource,
   type KefirSelectorProperty,
+  type StoreRuntimeKefirStateSource,
 } from "../selector-core/kefir-selector";
 import {
   DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
@@ -24,10 +25,10 @@ import {
 export { createCachedSelector };
 
 export type StoreSignalStateSource<TState = StoreState> = {
-  getStateObservable(): ReadonlySignal<TState>;
+  readonly state: TState;
 };
 
-type SignalState<TStore> = TStore extends StoreSignalStateSource<infer TState> ? TState : StoreState<TStore>;
+type SignalState<TStore> = StoreState<TStore>;
 
 type StoreSelectorRuntimeSource<TState, R, ARGS extends unknown[]> = {
   getSelectorTraceReporter?: <STATE = TState, RESULT = R, SELECTOR_ARGS extends unknown[] = ARGS>() => SelectorTraceReporter<STATE, RESULT, SELECTOR_ARGS>;
@@ -71,7 +72,7 @@ const isSignalStateSource = <TState = StoreState>(arg: unknown): arg is StoreSig
     return false;
   }
 
-  return "getStateObservable" in arg && typeof arg.getStateObservable === "function";
+  return "state" in arg;
 };
 
 const getStoreSelectorTraceReporter = <TState, R, ARGS extends unknown[]>(
@@ -167,7 +168,9 @@ export const createSelectorFromSignalState = <TState = StoreState, ARGS extends 
     store: StoreSignalStateSource<TState>,
     ...restArgs: SignalArgs<ARGS>
   ): ReadonlySignal<R> => {
-    const runtimeStateSource = requireRuntimeKefirStateSource<TState>(store);
+    const runtimeStateSource = getRuntimeKefirStateSource<TState>(
+      store as unknown as StoreRuntimeKefirStateSource<TState>
+    );
 
     return getOrCreate(store, selectorFunc, restArgs, () => {
       const argProperties = restArgs.map(signalArgToKefirProperty);
