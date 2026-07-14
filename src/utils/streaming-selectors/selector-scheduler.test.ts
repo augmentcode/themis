@@ -88,7 +88,32 @@ describe("createThrottledObservable", () => {
     subscription.unsubscribe();
   });
 
-  it("subscribes to cadence ticks only while a pending value exists", () => {
+  it("emits a changed final source value on a cadence tick before ending", () => {
+    const { cadenceSource, tick } = createManualCadenceSource();
+    const source = Kefir.stream<number, never>((emitter) => {
+      emitter.value(0);
+      emitter.value(1);
+      emitter.end();
+      return () => undefined;
+    });
+    const values: number[] = [];
+    let ended = false;
+
+    createThrottledObservable(source, cadenceSource).observe({
+      value: (value) => values.push(value),
+      end: () => {
+        ended = true;
+      },
+    });
+
+    expect(values).toEqual([0]);
+    expect(ended).toBe(false);
+    tick(0);
+    expect(values).toEqual([0, 1]);
+    expect(ended).toBe(true);
+  });
+
+  it("checks current source values on cadence ticks while observed", () => {
     const { cadenceSource, tick, unsubscribeCadence } = createManualCadenceSource();
     const source = createMutableProperty(0);
     const values: number[] = [];
@@ -97,15 +122,20 @@ describe("createThrottledObservable", () => {
       source.stream,
       cadenceSource
     ).observe((value) => values.push(value));
+    expect(cadenceSource.subscribe).toHaveBeenCalledTimes(1);
+
     source.set(1);
 
     expect(cadenceSource.subscribe).toHaveBeenCalledTimes(1);
     expect(values).toEqual([0]);
     tick(0);
     expect(values).toEqual([0, 1]);
-    expect(unsubscribeCadence).toHaveBeenCalledTimes(1);
+    tick(1);
+    expect(values).toEqual([0, 1]);
+    expect(unsubscribeCadence).not.toHaveBeenCalled();
 
     subscription.unsubscribe();
+    expect(unsubscribeCadence).toHaveBeenCalledTimes(1);
   });
 
   it("uses the cadence source's configured FPS cadence with the timer fallback", () => {

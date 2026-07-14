@@ -67,7 +67,7 @@ describe("createThrottledSignal", () => {
     unsubscribe();
   });
 
-  it("subscribes to cadence ticks only while a pending value exists", () => {
+  it("checks current source values on cadence ticks while watched", () => {
     const { cadenceSource, tick, unsubscribeCadence } = createManualCadenceSource();
     const source = signal(0);
     const values: number[] = [];
@@ -76,15 +76,20 @@ describe("createThrottledSignal", () => {
       source,
       cadenceSource
     ).subscribe((value) => values.push(value));
+    expect(cadenceSource.subscribe).toHaveBeenCalledTimes(1);
+
     source.value = 1;
 
     expect(cadenceSource.subscribe).toHaveBeenCalledTimes(1);
     expect(values).toEqual([0]);
     tick(0);
     expect(values).toEqual([0, 1]);
-    expect(unsubscribeCadence).toHaveBeenCalledTimes(1);
+    tick(1);
+    expect(values).toEqual([0, 1]);
+    expect(unsubscribeCadence).not.toHaveBeenCalled();
 
     unsubscribe();
+    expect(unsubscribeCadence).toHaveBeenCalledTimes(1);
   });
 
   it("uses the cadence source's configured FPS cadence with the timer fallback", () => {

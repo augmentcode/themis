@@ -10,19 +10,21 @@ export const createThrottledObservable = <T, E = any>(
 ): Observable<T, E> => {
   return Kefir.stream<T, E>((emitter) => {
     let initialized = false;
+    // Kefir observables are push-only, so active selectors keep only the current
+    // source snapshot and compare it with the last emitted value on cadence ticks.
     let latest: { value: T } | null = null;
-    let pending: { value: T } | null = null;
+    let lastEmitted: { value: T } | null = null;
     let ended = false;
     let unsubscribeCadence: (() => void) | null = null;
 
-    const clearScheduledFlush = () => {
+    const stopCheckingOnCadence = () => {
       unsubscribeCadence?.();
       unsubscribeCadence = null;
     };
 
-    const scheduleFlush = () => {
+    const startCheckingOnCadence = () => {
       if (unsubscribeCadence === null) {
-        unsubscribeCadence = selectorCadenceSource.subscribe(flushLatest);
+        unsubscribeCadence = selectorCadenceSource.subscribe(checkLatest);
       }
     };
 
@@ -32,49 +34,48 @@ export const createThrottledObservable = <T, E = any>(
       }
     };
 
-    const flushLatest = () => {
-      if (pending !== null) {
-        const { value } = pending;
-        pending = null;
-        emitter.value(value);
+    const hasChangedLatest = () => latest !== null && latest.value !== lastEmitted?.value;
+
+    const emit = (value: T) => {
+      lastEmitted = { value };
+      emitter.value(value);
+    };
+
+    function checkLatest() {
+      if (latest !== null && latest.value !== lastEmitted?.value) {
+        emit(latest.value);
       }
-      if (pending === null) {
-        clearScheduledFlush();
+      if (!hasChangedLatest()) {
         finishIfNeeded();
       }
-    };
+    }
 
     const subscription = source.observe({
       value(value) {
-        if (value === latest?.value) {
-          return;
-        }
         latest = { value };
         if (!initialized) {
           initialized = true;
-          emitter.value(value);
-          return;
+          emit(value);
         }
-        pending = { value };
-        scheduleFlush();
       },
       error(error) {
         emitter.error(error);
       },
       end() {
         ended = true;
-        if (pending !== null) {
-          scheduleFlush();
-          return;
+        if (!hasChangedLatest()) {
+          finishIfNeeded();
         }
-        finishIfNeeded();
       },
     });
+    if (!ended || hasChangedLatest()) {
+      startCheckingOnCadence();
+    }
 
     return () => {
-      clearScheduledFlush();
+      stopCheckingOnCadence();
       latest = null;
-      pending = null;
+      lastEmitted = null;
       ended = true;
       subscription.unsubscribe();
     };

@@ -20,28 +20,6 @@ export type SelectorCadenceSourceSource =
   | SelectorCadenceSourceProvider
   | number;
 
-export type SelectorFlushCallback = SelectorCadenceTickListener;
-
-/** @deprecated Use SelectorCadenceSource instead. */
-export type SelectorFlushManager = {
-  readonly frequency: number;
-  readonly frameIntervalMs: number;
-  requestFlush(callback: SelectorFlushCallback): void;
-  cancelFlush(callback: SelectorFlushCallback): void;
-  dispose(): void;
-};
-/** @deprecated Use SelectorCadenceSourceOptions instead. */
-export type SelectorFlushManagerOptions = SelectorCadenceSourceOptions;
-/** @deprecated Use SelectorCadenceSourceProvider instead. */
-export type SelectorFlushManagerProvider = () => SelectorFlushManager;
-/** @deprecated Use SelectorCadenceSourceSource instead. */
-export type SelectorFlushManagerSource =
-  | SelectorFlushManager
-  | SelectorFlushManagerProvider
-  | SelectorCadenceSource
-  | SelectorCadenceSourceProvider
-  | number;
-
 export const validateThrottledSelectorFrequency = (frequency: number): number => {
   if (
     typeof frequency !== 'number' ||
@@ -58,22 +36,6 @@ export const validateThrottledSelectorFrequency = (frequency: number): number =>
 };
 
 const hasRAF = (): boolean => typeof requestAnimationFrame === 'function';
-
-const isSelectorCadenceSource = (source: unknown): source is SelectorCadenceSource => {
-  if (!source || typeof source !== 'object') {
-    return false;
-  }
-
-  return 'subscribe' in source && typeof source.subscribe === 'function';
-};
-
-const isSelectorFlushManager = (source: unknown): source is SelectorFlushManager => {
-  if (!source || typeof source !== 'object') {
-    return false;
-  }
-
-  return 'requestFlush' in source && typeof source.requestFlush === 'function';
-};
 
 const getNextTickDelay = (
   lastTickWallTimeAt: number | null,
@@ -265,79 +227,4 @@ export const resolveSelectorCadenceSource = (
     return selectorCadenceSourceOrFrequency();
   }
   return selectorCadenceSourceOrFrequency;
-};
-
-/** @deprecated Use createSelectorCadenceSource instead. */
-export const createSelectorFlushManager = (
-  throttledSelectorFrequencyOrSource: number | SelectorCadenceSource = DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
-  options: SelectorFlushManagerOptions = {}
-): SelectorFlushManager => {
-  const ownsCadenceSource = typeof throttledSelectorFrequencyOrSource === 'number';
-  const cadenceSource = ownsCadenceSource
-    ? createSelectorCadenceSource(throttledSelectorFrequencyOrSource, options)
-    : throttledSelectorFrequencyOrSource;
-  const pendingCallbacks = new Map<SelectorFlushCallback, () => void>();
-  let disposed = false;
-
-  const cancelFlush = (callback: SelectorFlushCallback): void => {
-    pendingCallbacks.get(callback)?.();
-    pendingCallbacks.delete(callback);
-  };
-
-  return {
-    frequency: cadenceSource.frequency,
-    frameIntervalMs: cadenceSource.frameIntervalMs,
-    requestFlush(callback) {
-      if (disposed || pendingCallbacks.has(callback)) {
-        return;
-      }
-      if (options.traceSelectors === true) {
-        console.info('REQUEST FLUSH', callback);
-      }
-      let unsubscribe: (() => void) | undefined;
-      const runCallback = (timestamp: number): void => {
-        pendingCallbacks.delete(callback);
-        unsubscribe?.();
-        if (options.traceSelectors === true) {
-          console.info('START FLUSHING', Math.max(Date.now(), timestamp));
-        }
-        callback(timestamp);
-        if (options.traceSelectors === true) {
-          console.info('FLUSHED', Date.now(), 1);
-        }
-      };
-      unsubscribe = cadenceSource.subscribe(runCallback);
-      pendingCallbacks.set(callback, unsubscribe);
-    },
-    cancelFlush,
-    dispose() {
-      disposed = true;
-      for (const unsubscribe of pendingCallbacks.values()) {
-        unsubscribe();
-      }
-      pendingCallbacks.clear();
-      if (ownsCadenceSource) {
-        cadenceSource.dispose();
-      }
-    },
-  };
-};
-
-/** @deprecated Use resolveSelectorCadenceSource instead. */
-export const resolveSelectorFlushManager = (
-  selectorFlushManagerOrFrequency: SelectorFlushManagerSource = DEFAULT_THROTTLED_SELECTOR_FREQUENCY
-): SelectorFlushManager => {
-  if (typeof selectorFlushManagerOrFrequency === 'number') {
-    return createSelectorFlushManager(selectorFlushManagerOrFrequency);
-  }
-  if (typeof selectorFlushManagerOrFrequency === 'function') {
-    return resolveSelectorFlushManager(selectorFlushManagerOrFrequency());
-  }
-  if (isSelectorFlushManager(selectorFlushManagerOrFrequency)) {
-    return selectorFlushManagerOrFrequency;
-  }
-  if (isSelectorCadenceSource(selectorFlushManagerOrFrequency)) {
-    return createSelectorFlushManager(selectorFlushManagerOrFrequency);
-  }
-  return selectorFlushManagerOrFrequency;
 };

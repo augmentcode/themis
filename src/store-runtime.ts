@@ -35,9 +35,7 @@ import { deriveSagaName } from './utils/sagas/derive-saga-name';
 import { normalizeStoreOptions } from './store-options';
 import {
   createSelectorCadenceSource,
-  createSelectorFlushManager,
   type SelectorCadenceSource,
-  type SelectorFlushManager,
 } from './utils/selector-core/throttled-selector-options';
 import {
   renderAccessedPaths,
@@ -113,7 +111,6 @@ export abstract class StoreRuntime<
   private tasksStarted: Task[] = [];
   private storeContext: ReduxStoreContext | undefined;
   private selectorCadenceSource: SelectorCadenceSource | undefined;
-  private selectorFlushManager: SelectorFlushManager | undefined;
   private disposeDevTools: (() => void) | undefined;
   private selectorTracingEnabled = false;
   private maxLoggedSelectorAccessedPathCount: number | undefined;
@@ -196,36 +193,13 @@ export abstract class StoreRuntime<
     return this.selectorCadenceSource;
   }
 
-  private getOrCreateSelectorFlushManager(): SelectorFlushManager {
-    if (!this.selectorFlushManager) {
-      this.selectorFlushManager = createSelectorFlushManager(
-        this.getOrCreateSelectorCadenceSource(),
-        { traceSelectors: this.storeOptions.traceSelectors }
-      );
-    }
-
-    return this.selectorFlushManager;
-  }
-
   private disposeSelectorCadenceSource(): void {
-    this.selectorFlushManager?.dispose();
-    this.selectorFlushManager = undefined;
     this.selectorCadenceSource?.dispose();
     this.selectorCadenceSource = undefined;
   }
 
-  /** @deprecated Use disposeSelectorCadenceSource instead. */
-  private disposeSelectorFlushManager(): void {
-    this.disposeSelectorCadenceSource();
-  }
-
   protected getSelectorCadenceSource(): SelectorCadenceSource {
     return this.getOrCreateSelectorCadenceSource();
-  }
-
-  /** @deprecated Selector adapters should subscribe to getSelectorCadenceSource(). */
-  protected getSelectorFlushManager(): SelectorFlushManager {
-    return this.getOrCreateSelectorFlushManager();
   }
 
   getReducers(): StoreReducersMap<TStateMap, TReducers> {
@@ -352,7 +326,7 @@ export abstract class StoreRuntime<
 
   dispose(): void {
     if (!this.storeContext) {
-      this.disposeSelectorFlushManager();
+      this.disposeSelectorCadenceSource();
       return;
     }
 
@@ -360,7 +334,7 @@ export abstract class StoreRuntime<
     this.disposeDevTools = undefined;
     this.stopSagas();
     this.storeContext = undefined;
-    this.disposeSelectorFlushManager();
+    this.disposeSelectorCadenceSource();
   }
 
   runSaga<TSaga extends Saga>(saga: TSaga): () => void {

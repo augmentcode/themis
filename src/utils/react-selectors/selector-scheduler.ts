@@ -10,64 +10,41 @@ export const createThrottledSignal = <T>(
   source: ReadonlySignal<T>,
   selectorCadenceSource: SelectorCadenceSource = createSelectorCadenceSource()
 ): ReadonlySignal<T> => {
-  let latest: { value: T } | null = null;
-  let pending: { value: T } | null = null;
+  let lastEmitted: T = source.value;
   let unsubscribeCadence: (() => void) | null = null;
-  let unsubscribeSource: (() => void) | null = null;
   let output!: Signal<T>;
 
   const emit = (value: T) => {
+    lastEmitted = value;
     output.value = value;
   };
 
-  const clearScheduledFlush = () => {
+  const stopCheckingOnCadence = () => {
     unsubscribeCadence?.();
     unsubscribeCadence = null;
   };
 
-  const scheduleFlush = () => {
-    if (unsubscribeCadence === null) {
-      unsubscribeCadence = selectorCadenceSource.subscribe(flushLatest);
+  const checkSourceValue = () => {
+    const value = source.value;
+    if (value !== lastEmitted) {
+      emit(value);
     }
   };
 
-  const flushLatest = () => {
-    if (pending !== null) {
-      const { value } = pending;
-      pending = null;
-      output.value = value;
-    }
-    if (pending === null) {
-      clearScheduledFlush();
+  const startCheckingOnCadence = () => {
+    if (unsubscribeCadence === null) {
+      unsubscribeCadence = selectorCadenceSource.subscribe(checkSourceValue);
     }
   };
 
   output = signal(source.value, {
     watched() {
-      if (unsubscribeSource !== null) {
-        return;
-      }
-      let initialized = false;
-      unsubscribeSource = source.subscribe((value) => {
-        if (value === latest?.value) {
-          return;
-        }
-        latest = { value };
-        if (!initialized) {
-          initialized = true;
-          emit(value);
-          return;
-        }
-        pending = { value };
-        scheduleFlush();
-      });
+      lastEmitted = source.value;
+      output.value = lastEmitted;
+      startCheckingOnCadence();
     },
     unwatched() {
-      unsubscribeSource?.();
-      unsubscribeSource = null;
-      clearScheduledFlush();
-      latest = null;
-      pending = null;
+      stopCheckingOnCadence();
     },
   });
 

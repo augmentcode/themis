@@ -10,54 +10,50 @@ export function createThrottledReadable<T>(
   selectorCadenceSource: SelectorCadenceSource = createSelectorCadenceSource()
 ): Readable<T> {
 
+  // Svelte Readable sources are push-only, so active selectors keep only the
+  // current source snapshot and compare it with the last emitted value on ticks.
   let latest: { value: T } | null = null;
-  let pending: { value: T } | null = null;
+  let lastEmitted: { value: T } | null = null;
 
   const store = writable<T>(undefined as T, (set) => {
     let initialized = false;
     let unsubscribeCadence: (() => void) | null = null;
 
-    const clearScheduledFlush = () => {
+    const stopCheckingOnCadence = () => {
       unsubscribeCadence?.();
       unsubscribeCadence = null;
     };
 
-    const scheduleFlush = () => {
-      if (unsubscribeCadence === null) {
-        unsubscribeCadence = selectorCadenceSource.subscribe(flushLatest);
+    const checkLatest = () => {
+      if (latest === null || latest.value === lastEmitted?.value) {
+        return;
       }
+      const { value } = latest;
+      lastEmitted = { value };
+      set(value);
     };
 
-    const flushLatest = () => {
-      if (pending !== null) {
-        const { value } = pending;
-        pending = null;
-        set(value);
-      }
-      if (pending === null) {
-        clearScheduledFlush();
+    const startCheckingOnCadence = () => {
+      if (unsubscribeCadence === null) {
+        unsubscribeCadence = selectorCadenceSource.subscribe(checkLatest);
       }
     };
 
     const unsubscribe = source.subscribe((value) => {
-      if (value === latest?.value) {
-        return;
-      }
       latest = { value };
       if (!initialized) {
         initialized = true;
+        lastEmitted = { value };
         set(value);
-        return;
       }
-      pending = { value };
-      scheduleFlush();
     });
+    startCheckingOnCadence();
 
     return () => {
-      clearScheduledFlush();
+      stopCheckingOnCadence();
       unsubscribe();
       latest = null;
-      pending = null;
+      lastEmitted = null;
     };
   });
 
