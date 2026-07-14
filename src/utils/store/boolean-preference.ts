@@ -1,19 +1,11 @@
-import { type UnknownAction } from "redux";
-import type { StoreAction, StoreActionCreator } from "../../types";
 import { createAction } from "./create-action";
+import type { BooleanPreferenceReducerBuilder } from "../types";
+
+export type { BooleanPreferenceReducerBuilder } from "../types";
 
 type BooleanFieldKey<S> = {
   [K in keyof S]-?: S[K] extends boolean ? K : never;
 }[keyof S] & string;
-
-export type BooleanPreferenceReducerBuilder<S> = {
-  (state: S | undefined, action: StoreAction<any> | UnknownAction): S;
-  with<ARGS extends any[], PL = ARGS>(
-    action: StoreActionCreator<ARGS, PL>,
-    reducer: (state: S, action: StoreAction<PL>) => S
-  ): BooleanPreferenceReducerBuilder<S>;
-  initialState: S;
-};
 
 type CreateBooleanPreferenceOptions<
   S,

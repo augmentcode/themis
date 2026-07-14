@@ -1,6 +1,4 @@
-import type { Readable } from 'svelte/store';
 import {
-  type PreloadedStoreState,
   type StoreOptions,
   type StoreStateMap,
   type StoreSelector,
@@ -14,8 +12,7 @@ import {
 } from './store-runtime';
 import type { ReduxStoreContext } from './internal-types';
 import { getStoreContext } from './utils/runtime-svelte/utils';
-import { createSelectorFromReadableState } from './utils/svelte-selectors/create-selector';
-import { createStoreStateReadable } from './utils/svelte-selectors/create-readable-store-state';
+import { createSelector as createSvelteSelector } from './utils/svelte-selectors/create-selector';
 
 export type { StoreOptions } from './types';
 export { getDispatch } from './utils/runtime-svelte/utils';
@@ -28,8 +25,6 @@ export class Store<
   TStateMap extends StoreStateMap = {},
   TReducers extends StoreReducersInput<TStateMap> = StoreReducersInput<TStateMap>,
 > extends StoreRuntime<TStateMap, TReducers> {
-  private readableState: Readable<StoreBoundState<TStateMap>> | undefined;
-
   /**
    * Create a Svelte-readable Store with app-owned reducers and middlewares.
    * Throws if any reducer uses a package-reserved internal key.
@@ -50,43 +45,12 @@ export class Store<
     return getStoreContext() ?? super.getExistingStoreContext();
   }
 
-  init(initialState?: PreloadedStoreState): () => void {
-    const storeContext = this.initStoreContext(initialState);
-    if (!storeContext) {
-      return () => {};
-    }
-
-    this.readableState = createStoreStateReadable(storeContext.store) as Readable<
-      StoreBoundState<TStateMap>
-    >;
-    this.startSagaManager(storeContext);
-
-    return () => {
-      this.dispose();
-    };
-  }
-
   createSelector<ARGS extends any[] = [], R = unknown>(
     selectorFunc: StoreSelectorCallback<R, ARGS, StoreBoundState<TStateMap>>
-  ): StoreSelector<R, ARGS, StoreBoundState<TStateMap>> {
-    return createSelectorFromReadableState<StoreBoundState<TStateMap>, ARGS, R>(
+  ): StoreSelector<R, ARGS, StoreBoundState<TStateMap>, Store<TStateMap, TReducers>> {
+    return createSvelteSelector<Store<TStateMap, TReducers>, ARGS, R>(
       this,
       selectorFunc
     );
-  }
-
-  getStateObservable(): Readable<StoreBoundState<TStateMap>> {
-    if (!this.readableState) {
-      throw new Error(
-        'Cannot access Store.getStateObservable() before Store.init() has been called.'
-      );
-    }
-
-    return this.readableState;
-  }
-
-  dispose(): void {
-    super.dispose();
-    this.readableState = undefined;
   }
 }

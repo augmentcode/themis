@@ -3,7 +3,7 @@ import { createArchitectureRule } from "../../rule-utils.mjs";
 
 export const ruleId = "duplicate-selector-implementation";
 
-const selectorFactories = new Set(["createSelector", "createCollectionItemSelector", "createCollectionItemsListSelector"]);
+const selectorFactories = new Set(["createSelector"]);
 
 function selectorBody(sourceCode, node) {
   const firstArg = node.arguments[0];

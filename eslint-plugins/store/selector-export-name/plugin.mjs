@@ -3,7 +3,7 @@ import { createArchitectureRule, createArchitectureRulePlugin } from "../../rule
 
 export const ruleId = "selector-export-name";
 
-const selectorFactories = new Set(["createSelector", "createCollectionItemSelector", "createCollectionItemsListSelector"]);
+const selectorFactories = new Set(["createSelector"]);
 
 function isSelectorFactoryCall(node) {
   return node?.type === "CallExpression" && selectorFactories.has(calleeIdentifierName(node));

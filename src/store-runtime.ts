@@ -3,6 +3,11 @@ import {
   combineReducers,
   legacy_createStore as createStore,
 } from 'redux';
+import Kefir, {
+  type Emitter,
+  type Observable,
+  type Property,
+} from 'kefir';
 import createSagaMiddleware from 'redux-saga';
 import type { Saga, SagaMonitor, Task } from 'redux-saga';
 import {
@@ -33,16 +38,16 @@ import type { StoreUtilityState } from './slices/store-utility/store-utility-sli
 import { registerGlobalDevTools } from './global-dev-tools';
 import { deriveSagaName } from './utils/sagas/derive-saga-name';
 import { normalizeStoreOptions } from './store-options';
-import {
-  createSelectorFlushManager,
-  type SelectorFlushManager,
-} from './utils/selector-core/throttled-selector-options';
+import { createSelectorCadenceSource } from './utils/selector-core/throttled-selector-options';
 import {
   renderAccessedPaths,
-  type CachedSelector,
-  type SelectorTrace,
-  type SelectorTraceReporter,
 } from './utils/selector-core/create-cached-selector';
+import type {
+  CachedSelector,
+  SelectorCadenceSource,
+  SelectorTrace,
+  SelectorTraceReporter,
+} from './utils/types';
 
 const MAX_SELECTOR_SOURCE_SNIPPET_LINES = 5;
 const MAX_SELECTOR_SOURCE_SNIPPET_LENGTH = 500;
@@ -64,6 +69,79 @@ type DefaultStoreReducersMap = {
 type DefaultStoreStateMap = {
   [INTERNAL_STORE_UTILITY_DOMAIN]: StoreUtilityState;
   [INTERNAL_SAGA_MANAGER_NAME]: SagaCrashState;
+};
+
+type RuntimeStoreStateStream<TState> = {
+  observable: Property<TState, never>;
+  getSnapshot(): TState;
+  dispose(): void;
+};
+
+const createCadencedStoreStateStream = <TState>(
+  store: ReduxStoreContext['store'],
+  selectorCadenceSource: SelectorCadenceSource
+): RuntimeStoreStateStream<TState> => {
+  let currentState = store.getState() as TState;
+  let lastEmitted = currentState;
+  let activeEmitter: Emitter<TState, never> | undefined;
+  let activeCleanup: (() => void) | undefined;
+  let disposed = false;
+
+  const readCurrentState = (): TState => {
+    currentState = store.getState() as TState;
+    return currentState;
+  };
+
+  const emitLatest = (): void => {
+    if (disposed || !activeEmitter) {
+      return;
+    }
+    const latestState = readCurrentState();
+    if (latestState !== lastEmitted) {
+      lastEmitted = latestState;
+      activeEmitter.value(latestState);
+    }
+  };
+
+  const observable = Kefir.stream<TState, never>((emitter) => {
+    if (disposed) {
+      emitter.end();
+      return;
+    }
+
+    currentState = store.getState() as TState;
+    lastEmitted = currentState;
+    activeEmitter = emitter;
+    const unsubscribeStore = store.subscribe(() => {
+      currentState = store.getState() as TState;
+    });
+    const unsubscribeCadence = selectorCadenceSource.subscribe(emitLatest);
+
+    activeCleanup = () => {
+      unsubscribeCadence();
+      unsubscribeStore();
+      activeEmitter = undefined;
+      activeCleanup = undefined;
+    };
+
+    return activeCleanup;
+  }).toProperty(() => {
+    const snapshot = readCurrentState();
+    lastEmitted = snapshot;
+    return snapshot;
+  });
+
+  return {
+    observable,
+    getSnapshot: readCurrentState,
+    dispose() {
+      disposed = true;
+      activeEmitter?.end();
+      activeCleanup?.();
+      activeEmitter = undefined;
+      activeCleanup = undefined;
+    },
+  };
 };
 
 export type StoreReducersInput<TStateMap extends StoreStateMap> = {
@@ -110,7 +188,10 @@ export abstract class StoreRuntime<
   private readonly sagaMiddleware: ReturnType<typeof createSagaMiddleware>;
   private tasksStarted: Task[] = [];
   private storeContext: ReduxStoreContext | undefined;
-  private selectorFlushManager: SelectorFlushManager | undefined;
+  private selectorCadenceSource: SelectorCadenceSource | undefined;
+  private cadencedStoreStateStream:
+    | RuntimeStoreStateStream<StoreBoundState<TStateMap>>
+    | undefined;
   private disposeDevTools: (() => void) | undefined;
   private selectorTracingEnabled = false;
   private maxLoggedSelectorAccessedPathCount: number | undefined;
@@ -182,20 +263,45 @@ export abstract class StoreRuntime<
     this.tasksStarted = [];
   }
 
-  private getOrCreateSelectorFlushManager(): SelectorFlushManager {
-    if (!this.selectorFlushManager) {
-      this.selectorFlushManager = createSelectorFlushManager(
+  private getOrCreateSelectorCadenceSource(): SelectorCadenceSource {
+    if (!this.selectorCadenceSource) {
+      this.selectorCadenceSource = createSelectorCadenceSource(
         this.storeOptions.throttledSelectorFrequency,
         { traceSelectors: this.storeOptions.traceSelectors }
       );
     }
 
-    return this.selectorFlushManager;
+    return this.selectorCadenceSource;
   }
 
-  private disposeSelectorFlushManager(): void {
-    this.selectorFlushManager?.dispose();
-    this.selectorFlushManager = undefined;
+  private disposeSelectorCadenceSource(): void {
+    this.selectorCadenceSource?.dispose();
+    this.selectorCadenceSource = undefined;
+  }
+
+  private disposeCadencedStoreStateStream(): void {
+    this.cadencedStoreStateStream?.dispose();
+    this.cadencedStoreStateStream = undefined;
+  }
+
+  getStoreStateStream(): Observable<StoreBoundState<TStateMap>, any> {
+    if (!this.cadencedStoreStateStream) {
+      throw new Error(
+        'Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.'
+      );
+    }
+
+    return this.cadencedStoreStateStream.observable;
+  }
+
+  getStoreStateSnapshot(): StoreBoundState<TStateMap> {
+    if (!this.cadencedStoreStateStream) {
+      throw new Error(
+        'Cannot access StoreRuntime.getStoreStateSnapshot() before Store.init() has been called.'
+      );
+    }
+
+    return this.cadencedStoreStateStream.getSnapshot();
   }
 
   getReducers(): StoreReducersMap<TStateMap, TReducers> {
@@ -247,15 +353,28 @@ export abstract class StoreRuntime<
       store,
     };
     this.storeContext = storeContext;
+    this.cadencedStoreStateStream = createCadencedStoreStateStream<StoreBoundState<TStateMap>>(
+      store,
+      this.getOrCreateSelectorCadenceSource()
+    );
 
     return storeContext;
   }
 
-  protected getSelectorFlushManager(): SelectorFlushManager {
-    return this.getOrCreateSelectorFlushManager();
+  init(initialState?: PreloadedStoreState): () => void {
+    const storeContext = this.initStoreContext(initialState);
+    if (!storeContext) {
+      return () => {};
+    }
+
+    this.startSagaManager(storeContext);
+
+    return () => {
+      this.dispose();
+    };
   }
 
-  protected getSelectorTraceReporter<
+  getSelectorTraceReporter<
     STATE,
     R,
     ARGS extends unknown[] = [],
@@ -263,7 +382,7 @@ export abstract class StoreRuntime<
     return (trace) => this.reportSelectorTrace(trace);
   }
 
-  protected shouldTraceSelectorCache(): boolean {
+  shouldTraceSelectorCache(): boolean {
     return this.selectorTracingEnabled;
   }
 
@@ -326,15 +445,17 @@ export abstract class StoreRuntime<
 
   dispose(): void {
     if (!this.storeContext) {
-      this.disposeSelectorFlushManager();
+      this.disposeCadencedStoreStateStream();
+      this.disposeSelectorCadenceSource();
       return;
     }
 
     this.disposeDevTools?.();
     this.disposeDevTools = undefined;
+    this.disposeCadencedStoreStateStream();
     this.stopSagas();
     this.storeContext = undefined;
-    this.disposeSelectorFlushManager();
+    this.disposeSelectorCadenceSource();
   }
 
   runSaga<TSaga extends Saga>(saga: TSaga): () => void {

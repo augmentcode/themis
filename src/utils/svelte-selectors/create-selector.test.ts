@@ -1,10 +1,9 @@
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
-import { writable, type Writable } from "svelte/store";
-import type { Observable, UnknownAction } from "redux";
-import type { ReduxStore } from "../../internal-types";
-import type { StoreReadableStateSource, StoreState } from "../../types";
-import type { Collection } from "../collections/collection-utils";
+import { get, writable, type Writable } from "svelte/store";
+import type { Observable as KefirObservable } from "kefir";
+import type { StoreState } from "../../types";
 import { INTERNAL_STORE_UTILITY_DOMAIN } from "../store/store-runtime-constants";
+import { Store } from "../../svelte-store";
 
 const mocks = vi.hoisted(() => ({
   select: vi.fn((selector: unknown, ...args: unknown[]) => ({ kind: "select", selector, args })),
@@ -14,21 +13,14 @@ vi.mock("typed-redux-saga", () => ({
   select: mocks.select,
 }));
 
-import { createCollection } from "../collections/collection-utils";
-import {
-  createCollectionItemSelector,
-  createCollectionItemsListSelector,
-  createSelector,
-  createSelectorFromReadableState,
-} from "./create-selector";
-import { createStoreStateReadable } from "./create-readable-store-state";
+import { createKefirPropertyFromSubscribe } from "../selector-core/kefir-selector";
+import { createSelector } from "./create-selector";
 
 type CounterState = StoreState & {
   counter: { count: number };
   [INTERNAL_STORE_UTILITY_DOMAIN]: { updatesLocked: boolean };
 };
 
-type Todo = { id: string; text: string; completed: boolean };
 type InternalUtilityTestState = {
   [INTERNAL_STORE_UTILITY_DOMAIN]: { updatesLocked: boolean };
 };
@@ -38,42 +30,59 @@ const withUtility = <T extends StoreState>(state: T): T & InternalUtilityTestSta
   [INTERNAL_STORE_UTILITY_DOMAIN]: { updatesLocked: false },
 });
 
-const createMockObservable = (): Observable<StoreState> => ({
-  subscribe: vi.fn(() => ({ unsubscribe: vi.fn() })),
-  [Symbol.observable]() {
-    return this;
-  },
-});
-const mockDispatch: ReduxStore["dispatch"] = <T extends UnknownAction>(action: T) => action;
+class MockReadableRuntimeStore<TState extends StoreState> extends Store<any, any> {
+  readonly getStoreStateStreamMock = vi.fn();
+  readonly getStoreStateSnapshotMock = vi.fn();
 
-const createMockStore = (initialState: StoreState) => {
-  let state = initialState;
-  const listeners = new Set<() => void>();
-  const store = {
-    dispatch: mockDispatch,
-    getState: vi.fn(() => state),
-    subscribe: vi.fn((listener: () => void) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    }),
-    replaceReducer: vi.fn(),
-    [Symbol.observable]: vi.fn(createMockObservable),
-  } satisfies ReduxStore;
+  constructor(
+    private readonly readState: () => TState,
+    private readonly stateStream: KefirObservable<TState, any>,
+    private readonly streamError?: Error
+  ) {
+    super();
+  }
 
-  return {
-    store,
-    setState(nextState: StoreState) {
-      state = nextState;
-      listeners.forEach((listener) => listener());
-    },
-  };
-};
+  override get state(): TState {
+    return this.readState();
+  }
+
+  override getStoreStateStream(): KefirObservable<TState, any> {
+    this.getStoreStateStreamMock();
+    if (this.streamError) {
+      throw this.streamError;
+    }
+    return this.stateStream;
+  }
+
+  override getStoreStateSnapshot(): TState {
+    this.getStoreStateSnapshotMock();
+    return this.readState();
+  }
+}
 
 const createMockStoreBinding = <TState extends StoreState>(
   storeState: Writable<TState>
-): StoreReadableStateSource<TState> => ({
-  getStateObservable: vi.fn(() => storeState),
-});
+): MockReadableRuntimeStore<TState> => {
+  const stateStream = createKefirPropertyFromSubscribe(
+    () => get(storeState),
+    (listener) => storeState.subscribe(listener)
+  );
+
+  return new MockReadableRuntimeStore(() => get(storeState), stateStream);
+};
+
+const assertPlainReadableStateSourceRejected = () => {
+  const state = withUtility({ counter: { count: 1 } });
+  const plainStoreLike = {
+    state,
+    getStoreStateStream: () => createKefirPropertyFromSubscribe(() => state, () => () => {}),
+    getStoreStateSnapshot: () => state,
+  };
+
+  // @ts-expect-error Plain structural state sources are not Store instances.
+  createSelector(plainStoreLike, (state) => state.counter.count);
+};
+void assertPlainReadableStateSourceRejected;
 
 describe("createSelector", () => {
   beforeEach(() => {
@@ -110,7 +119,7 @@ describe("createSelector", () => {
     expect(mocks.select).toHaveBeenCalledWith(selectorFn, "u1");
   });
 
-  it("creates readable selectors from the supplied Store.getStateObservable()", () => {
+  it("creates readable selectors from the StoreRuntime Kefir state source", () => {
     const storeState = writable<CounterState>(withUtility({ counter: { count: 2 } }));
     const selectorStore = createMockStoreBinding(storeState);
     const multiplier = writable(3);
@@ -140,13 +149,13 @@ describe("createSelector", () => {
     expect(selectScaledCount(3)).not.toBe(selectScaledCount(4));
   });
 
-  it("reuses direct selector readables without a selector-argument cache key", () => {
+  it("reuses selector readables by Store-like source identity", () => {
     const storeState = writable<CounterState>(withUtility({ counter: { count: 2 } }));
-    const getStateObservable = vi.fn(() => storeState);
-    const selectCount = createSelectorFromReadableState(getStateObservable, (state) => state.counter.count);
+    const selectorStore = createMockStoreBinding(storeState);
+    const selectCount = createSelector(selectorStore, (state) => state.counter.count);
 
     expect(selectCount()).toBe(selectCount());
-    expect(getStateObservable).toHaveBeenCalledTimes(2);
+    expect(selectorStore.getStoreStateStreamMock).toHaveBeenCalledTimes(1);
   });
 
   it("keys cached selector readables by object identity and argument order", () => {
@@ -181,16 +190,17 @@ describe("createSelector", () => {
     expect(values).toEqual([2, 7]);
   });
 
-  it("propagates Store.getStateObservable() initialization guard errors", () => {
-    const selectorStore: StoreReadableStateSource<CounterState> = {
-      getStateObservable: vi.fn(() => {
-        throw new Error("Cannot access Store.getStateObservable() before Store.init() has been called.");
-      }),
-    };
+  it("propagates StoreRuntime state stream initialization guard errors", () => {
+    const state = withUtility({ counter: { count: 0 } });
+    const selectorStore = new MockReadableRuntimeStore(
+      () => state,
+      createKefirPropertyFromSubscribe(() => state, () => () => {}),
+      new Error("Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.")
+    );
     const selectCount = createSelector(selectorStore, (state) => state.counter.count);
 
     expect(() => selectCount()).toThrow(
-      "Cannot access Store.getStateObservable() before Store.init() has been called."
+      "Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called."
     );
   });
 
@@ -198,32 +208,31 @@ describe("createSelector", () => {
     const selectorFn = (state: CounterState) => state.counter.count;
 
     expect(() => (createSelector as unknown as (selectorFunc: unknown) => unknown)(selectorFn)).toThrow(
-      "createSelector requires a Store instance as the first argument."
+      "createSelector requires a Store-like state source as the first argument."
     );
   });
 
-  it("creates readable selectors bound to an explicit redux store with .withStore()", () => {
-    const initialState = withUtility({ counter: { count: 1 } });
-    const { store, setState } = createMockStore(initialState);
-    const selectorStore = createMockStoreBinding(writable<CounterState>(initialState));
+  it("creates readable selectors bound to an explicit Store-like source with .withStore()", () => {
+    const selectorStore = createMockStoreBinding(writable<CounterState>(withUtility({ counter: { count: 1 } })));
+    const overrideState = writable<CounterState>(withUtility({ counter: { count: 5 } }));
+    const overrideStore = createMockStoreBinding(overrideState);
     const selectCount = createSelector(selectorStore, (state) => state.counter.count);
     const values: number[] = [];
 
-    const unsubscribe = selectCount.withStore(store)().subscribe((value) => values.push(value));
-    setState(withUtility({ counter: { count: 7 } }));
+    const unsubscribe = selectCount.withStore(overrideStore)().subscribe((value) => values.push(value));
+    overrideState.set(withUtility({ counter: { count: 7 } }));
     vi.advanceTimersByTime(16);
     unsubscribe();
-    setState(withUtility({ counter: { count: 9 } }));
 
-    expect(store.subscribe).toHaveBeenCalledTimes(1);
-    expect(values).toEqual([1, 7]);
+    expect(overrideStore.getStoreStateStreamMock).toHaveBeenCalledTimes(1);
+    expect(values).toEqual([5, 7]);
   });
 
-  it("does not share cached selector readables across explicit redux stores", () => {
+  it("does not share cached selector readables across explicit Store-like sources", () => {
     const initialStateA = withUtility({ counter: { count: 1 } });
     const initialStateB = withUtility({ counter: { count: 5 } });
-    const { store: storeA } = createMockStore(initialStateA);
-    const { store: storeB } = createMockStore(initialStateB);
+    const storeA = createMockStoreBinding(writable<CounterState>(initialStateA));
+    const storeB = createMockStoreBinding(writable<CounterState>(initialStateB));
     const selectorStore = createMockStoreBinding(writable<CounterState>(initialStateA));
     const selectCount = createSelector(selectorStore, (state) => state.counter.count);
     const selectCountFromA = selectCount.withStore(storeA);
@@ -233,7 +242,7 @@ describe("createSelector", () => {
     expect(selectCountFromA()).not.toBe(selectCountFromB());
   });
 
-  it("does not share cached selector readables across explicit readable state sources", () => {
+  it("does not share cached selector readables across Store-like wrappers around shared state", () => {
     const sharedStoreState = writable<CounterState>(withUtility({ counter: { count: 1 } }));
     const sourceA = createMockStoreBinding(sharedStoreState);
     const sourceB = createMockStoreBinding(sharedStoreState);
@@ -243,64 +252,5 @@ describe("createSelector", () => {
 
     expect(selectCountFromA()).toBe(selectCountFromA());
     expect(selectCountFromA()).not.toBe(selectCountFromB());
-    expect(selectCountFromA()).not.toBe(selectCount.withStore(sharedStoreState)());
-  });
-});
-
-describe("createStoreStateReadable", () => {
-  it("initializes from getState and emits subscribed store updates", () => {
-    const initialState = withUtility({ counter: { count: 10 } });
-    const { store, setState } = createMockStore(initialState);
-    const readableState = createStoreStateReadable(store);
-    const values: number[] = [];
-
-    const unsubscribe = readableState.subscribe((state) => values.push(state.counter.count));
-    setState(withUtility({ counter: { count: 11 } }));
-    unsubscribe();
-    setState(withUtility({ counter: { count: 12 } }));
-
-    expect(values).toEqual([10, 11]);
-  });
-});
-
-describe("collection selector helpers", () => {
-  const todos = createCollection<Todo, "id">("id", [
-    { id: "a", text: "Write tests", completed: false },
-    { id: "b", text: "Review tests", completed: true },
-  ]);
-  const state = withUtility({ todos });
-  const selectTodosCollection = (state: StoreState): Collection<Todo, "id"> => state.todos;
-
-  it("creates item selectors with typed undefined handling", () => {
-    const selectorStore = createMockStoreBinding(writable(state));
-    const selectTodo = createCollectionItemSelector<Todo, "id">(selectorStore, selectTodosCollection);
-
-    const found = selectTodo.select(state, "b");
-    const missing = selectTodo.select(state, "missing");
-
-    expectTypeOf(found).toEqualTypeOf<Todo | undefined>();
-    expect(found).toEqual({ id: "b", text: "Review tests", completed: true });
-    expect(missing).toBeUndefined();
-    expect(selectTodo.select(state, "")).toBeUndefined();
-  });
-
-  it("creates ordered list selectors with optional item filtering", () => {
-    const selectorStore = createMockStoreBinding(writable(state));
-    const selectTodos = createCollectionItemsListSelector<Todo, "id", (todo: Todo) => boolean>(
-      selectorStore,
-      selectTodosCollection
-    );
-    const selectCompletedTodos = createCollectionItemsListSelector<Todo, "id", (todo: Todo) => boolean>(
-      selectorStore,
-      selectTodosCollection,
-      (todo) => todo.completed
-    );
-
-    const allTodos = selectTodos.select(state);
-    const completedTodos = selectCompletedTodos.select(state);
-
-    expectTypeOf(allTodos).toEqualTypeOf<Todo[]>();
-    expect(allTodos.map((todo) => todo.id)).toEqual(["a", "b"]);
-    expect(completedTodos).toEqual([{ id: "b", text: "Review tests", completed: true }]);
   });
 });

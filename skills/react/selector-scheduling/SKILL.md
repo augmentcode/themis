@@ -37,9 +37,9 @@ configured `ReactStore` instance and tune selector coalescing only through
   preferred React consumer integration path when callers can accept signals.
 - Use `selectFoo.useValue(...args)` in React components and custom hooks only when a
   hook/plain value is necessary and a signal-aware rewrite is impractical.
-- Direct `ReadonlySignal` outputs are cached for the same state source + selector + args, and direct
-  signal outputs plus `.useValue(...args)` are scheduled/coalesced by the owning
-  `ReactStore`.
+- Direct `ReadonlySignal` outputs are cached for the same ReactStore instance + selector + args, and direct
+  signal outputs plus `.useValue(...args)` subscribe to the owning `ReactStore`'s
+  Store-owned cadence, capped by `throttledSelectorFrequency`.
 - Tune coalescing only with the final constructor options argument, for example
   `new ReactStore(reducers, middleware, { throttledSelectorFrequency })`.
 - Omit `throttledSelectorFrequency` for the default `64` FPS. Explicit values

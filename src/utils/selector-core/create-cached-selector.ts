@@ -1,41 +1,23 @@
 import { shallowEqual } from "fast-equals";
+import type {
+  AccessedPath,
+  CachedSelector,
+  CreateCachedSelectorOptions,
+} from "../types";
 
-export type AccessedPath = (string | symbol)[];
+export type {
+  AccessedPath,
+  CachedSelector,
+  CreateCachedSelectorOptions,
+  SelectorAccessTrace,
+  SelectorOutputCacheTrace,
+  SelectorTrace,
+  SelectorTraceReporter,
+} from "../types";
 
 const proxyValuesWeakMap = new WeakMap<object, unknown>();
 const collectionFieldsSet = new Set(["idField", "ids", "map", "refsCount"]);
 const safePropertyNameRegex = /^[A-Za-z_$][0-9A-Za-z_$]*$/;
-
-export type CachedSelector<STATE, R, ARGS extends unknown[] = []> = (
-  state: STATE,
-  ...args: ARGS
-) => R;
-
-export type SelectorAccessTrace<STATE, R, ARGS extends unknown[] = []> = {
-  selectorFunc: CachedSelector<STATE, R, ARGS>;
-  accessedPathCount: number;
-  accessedPaths: Set<string>;
-  parsedPaths: Map<string, AccessedPath>;
-};
-
-export type SelectorOutputCacheTrace<STATE, R, ARGS extends unknown[] = []> = {
-  selectorFunc: CachedSelector<STATE, R, ARGS>;
-  observableCacheRequestCount: number;
-  observableCacheCachedCount: number;
-};
-
-export type SelectorTrace<STATE, R, ARGS extends unknown[] = []> =
-  | SelectorAccessTrace<STATE, R, ARGS>
-  | SelectorOutputCacheTrace<STATE, R, ARGS>;
-
-export type SelectorTraceReporter<STATE, R, ARGS extends unknown[] = []> = (
-  trace: SelectorTrace<STATE, R, ARGS>
-) => void;
-
-export type CreateCachedSelectorOptions<STATE, R = unknown, ARGS extends unknown[] = []> = {
-  lockUpdatesPredicate?: (state: STATE) => boolean;
-  traceReporter?: SelectorTraceReporter<STATE, R, ARGS>;
-};
 
 const renderAccessedPathSegment = (segment: string | symbol, index: number): string => {
   if (typeof segment === "symbol") {

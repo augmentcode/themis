@@ -5,7 +5,7 @@ description: >-
   ReadonlySignal values and are the preferred React consumer integration path.
   Covers signal selector arguments, .value tracking via Babel transform or
   useSignals(), Store-bound creation, .useValue(...args) as a fallback for
-  hook/plain-value boundaries, .withStore(signalSource), pure .select(state)
+  hook/plain-value boundaries, .withStore(reactStore), pure .select(state)
   composition/testing, and saga-only .effect() usage without
   importing React selector internals.
 type: sub-skill
@@ -79,7 +79,7 @@ function TodoRow({ id }: { id: string }) {
 | --- | --- | --- |
 | Preferred React/signal-aware consumer | `selectFoo(...argsOrSignals)` | `ReadonlySignal<R>` |
 | Hook/plain-value fallback | `selectFoo.useValue(...argsOrSignals)` | Plain value `R` |
-| Alternate signal state | `selectFoo.withStore(signalSource)(...argsOrSignals)` | `ReadonlySignal<R>` |
+| Explicit ReactStore binding | `selectFoo.withStore(reactStore)(...argsOrSignals)` | `ReadonlySignal<R>` |
 | Tests/handlers/composition | `selectFoo.select(state, ...args)` | Plain value `R` |
 | Sagas | `yield* selectFoo.effect(...args)` | typed-redux-saga select effect |
 
@@ -109,7 +109,7 @@ path, not through React signals, Svelte readables, or Kefir observables.
 ## Selector caching
 
 - Store-created selectors have internal selector-result caching/memoization.
-- Direct React `ReadonlySignal` outputs are cached per state source + selector + arguments; repeated `selectFoo(args)` calls for the same source reuse the same `ReadonlySignal`.
+- Direct React `ReadonlySignal` outputs are cached per ReactStore instance + selector + arguments; repeated `selectFoo(args)` calls for the same store reuse the same `ReadonlySignal`.
 - Do not wrap selector callbacks, direct signal calls, or `.useValue(...args)` calls in extra `memoize`, `cache`, manual cache maps, debounce, or throttle layers solely for performance.
 - Prefer the same Store-bound selector + same arguments over props drilling when the receiving consumer can reasonably call the selector in valid React/signal context; otherwise use `.select`, `.effect`, `.withStore`, or `.useValue` as the boundary requires.
 
@@ -119,7 +119,7 @@ path, not through React signals, Svelte readables, or Kefir observables.
   numbers, `null`, or `undefined`.
 - Do not pass freshly constructed object, array, or function arguments to direct
   `selectFoo(...)`, `.useValue(...)`, `.select(state, ...)`, `.effect(...)`,
-  `.withStore(source)(...)`, selector-channel args tuples, or `waitFor` args
+  `.withStore(store)(...)`, selector-channel args tuples, or `waitFor` args
   tuples.
 - Object/function args are valid only when the identity is stable and intentional,
   such as a module constant, memoized config, existing source object, or Preact
@@ -197,19 +197,15 @@ expect(selectOpenTodoTitles.select(mockState)).toEqual(["Write docs"]);
 `.select(...)` is pure and synchronous. Use it inside selector callbacks, tests,
 and one-shot handlers when an explicit state snapshot is already available.
 
-### 5. Explicit alternate binding with `.withStore(signalSource)`
+### 5. Explicit alternate binding with `.withStore(reactStore)`
 
 ```ts
 const selectPreviewTodo = selectTodo.withStore(previewReactStore);
 const previewTodo = selectPreviewTodo("todo-1");
-
-const selectFromStateSignal = selectTodo.withStore(previewStateSignal);
-const previewTodoFromSignal = selectFromStateSignal("todo-1");
 ```
 
-For React selectors, `.withStore(...)` accepts a `ReactStore`/signal-state source
-or a `ReadonlySignal<TState>` state signal and returns a direct-call binding whose
-calls produce `ReadonlySignal<R>`.
+For React selectors, `.withStore(...)` accepts another `ReactStore` and returns a
+direct-call binding whose calls produce `ReadonlySignal<R>`.
 
 ### 6. Saga read with `.effect(...args)`
 

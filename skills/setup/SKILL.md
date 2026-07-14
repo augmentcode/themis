@@ -55,7 +55,7 @@ Use the shared slice/action/reducer/saga examples below for all families, but ad
 | Setup seam | Svelte Store | React Store | Streaming Store |
 | --- | --- | --- | --- |
 | Store import and instance | import { Store } from '@augmentcode/themis/svelte-store'; export const store = new Store({ counter: counterReducer }) | import { ReactStore } from '@augmentcode/themis/react-store'; export const reactStore = new ReactStore({ counter: counterReducer }) | import { StreamingStore } from '@augmentcode/themis/streaming-store'; export const streamStore = new StreamingStore({ counter: counterReducer }) |
-| State bridge expectation | store.init() creates the Svelte readable state bridge; store.getStateObservable() and window.svelteRedux.reduxContext are Svelte-readable/devtool inspection paths | reactStore.init() creates the Preact React signal state bridge; reactStore.getStateObservable() is available only after init and direct selector calls return signals | streamStore.init() creates the Kefir state stream; streamStore.getStateObservable() is available only after init and direct selector calls return Kefir observables |
+| State bridge expectation | store.init() creates the Store-owned state stream; direct selector calls return Svelte readables and window.svelteRedux.reduxContext exposes state/dispatch for devtool inspection | reactStore.init() creates the Store-owned state stream; direct selector calls return Preact React signals | streamStore.init() creates the Store-owned Kefir state stream; direct selector calls return Kefir observables |
 | Selector direct call mode | selectFoo() returns a Svelte readable and belongs at Svelte component init; templates use $foo | selectFoo() returns a ReadonlySignal<R> and is the preferred React consumer path; use selectFoo.useValue(...args) only for necessary plain-value boundaries | selectFoo() returns a Kefir Observable<R, any>; consumers own observation/subscription teardown |
 | Non-render selector reads | .select(state, ...args) for tests, handlers, and selector composition; yield* selectFoo.effect(...args) in sagas | Same .select(...) and saga .effect(...); .useValue(...) is not a saga/test helper | Same .select(...) and saga .effect(...); observable calls are not Svelte readables or React hooks |
 | Initialization owner | Svelte root layout calls const dispose = store.init(); onDestroy(dispose) before children use selectors | App bootstrap initializes reactStore before React selector reads; dispose when the root/test owner unmounts or exits | Process/server/test owner initializes streamStore before observing selector streams; dispose when that owner exits |
@@ -232,7 +232,7 @@ Call `store.init()` during root component initialization and register the return
 - Combines all registered reducers into the root reducer
 - Applies the base store middleware chain and saga middleware
 - Starts the package saga manager orchestrator
-- Creates the Store-owned readable state source used by Svelte selectors and saga integrations
+- Creates the Store-owned selector state resources used by Svelte selectors
 - Returns a cleanup function that delegates to `store.dispose()` (registered with `onDestroy`)
 
 `store.init()` starts the internal saga manager but does **not** start app sagas. Each app saga must be started explicitly by function — call `store.runSaga(counterSaga)` from `onMount` in the layout for mount-scoped cleanup, or keep `const cancel = store.runSaga(counterSaga)` for imperative control. Store derives the manager name from the saga function. Do not call it with `@internal_sagaManager`. For whole-store teardown outside the root-layout `onDestroy(dispose)` pattern, call `store.dispose()` to tear down the initialized Store runtime and stop saga tasks owned by that Store.
@@ -388,7 +388,7 @@ If you register devtools with `store.initDevTool()` after `store.init()`, the in
 
 | Console Command | Effect |
 | --- | --- |
-| window.svelteRedux.reduxContext | Access the initialized Store instance (state, dispatch, getStateObservable()) |
+| window.svelteRedux.reduxContext | Access the initialized Store instance (state, dispatch) |
 
 ### Inspecting state from the console:
 
@@ -399,8 +399,8 @@ window.svelteRedux.reduxContext.state
 // Dispatch an action manually
 window.svelteRedux.reduxContext.dispatch({ type: 'counter/increment', payload: undefined })
 
-// Subscribe to readable state
-window.svelteRedux.reduxContext.getStateObservable().subscribe(console.log)
+// Read the current Store state snapshot
+window.svelteRedux.reduxContext.state
 ```
 
 ## Quick Reference

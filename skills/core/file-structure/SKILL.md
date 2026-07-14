@@ -63,7 +63,7 @@ store and start each app saga explicitly by function. Use the selected Store
 family skill for component/runtime lifecycle details; core owns the file layout,
 saga registration, and reducer ownership rules.
 
-`store.init()` combines the registered reducers, creates the Redux store with middleware, lets the concrete Store variant create its selector state source, and starts the package saga manager. It does **not** start app sagas — start each one with `store.runSaga(sagaFn)` from the family-appropriate root lifecycle, or imperatively and keep the returned cancel function. It derives the manager name from the saga function and rejects direct `@internal_sagaManager` usage. Register the `store.init()` disposer with the selected Store family lifecycle cleanup; that disposer delegates to `store.dispose()`, which tears down the initialized Store runtime and stops Store-owned saga tasks when the whole Store lifetime ends.
+`store.init()` combines the registered reducers, creates the Redux store with middleware, lets the concrete Store variant create its selector state resources, and starts the package saga manager. It does **not** start app sagas — start each one with `store.runSaga(sagaFn)` from the family-appropriate root lifecycle, or imperatively and keep the returned cancel function. It derives the manager name from the saga function and rejects direct `@internal_sagaManager` usage. Register the `store.init()` disposer with the selected Store family lifecycle cleanup; that disposer delegates to `store.dispose()`, which tears down the initialized Store runtime and stops Store-owned saga tasks when the whole Store lifetime ends.
 
 ### Saga-only slice (no state, no reducer)
 

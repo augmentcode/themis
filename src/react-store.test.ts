@@ -157,7 +157,7 @@ describe('ReactStore', () => {
     expect(mocks.useSignals).toHaveBeenCalledTimes(1);
   });
 
-  it('shares one store-scoped flush manager across signal selectors and disposes scheduled work', () => {
+  it('shares one store-scoped cadence source across active signal selectors and disposes scheduled work', () => {
     const store = new ReactStore(
       { counter: counterReducer },
       undefined,
@@ -183,11 +183,12 @@ describe('ReactStore', () => {
     vi.advanceTimersByTime(0);
     expect(countValues).toEqual([0, 2]);
     expect(doubleValues).toEqual([0, 4]);
-    expect(vi.getTimerCount()).toBe(0);
+    expect(vi.getTimerCount()).toBe(1);
 
     vi.advanceTimersByTime(500);
     expect(countValues).toEqual([0, 2]);
     expect(doubleValues).toEqual([0, 4]);
+    expect(vi.getTimerCount()).toBe(1);
 
     store.dispatch({ type: 'counter/set', payload: 3 });
     expect(vi.getTimerCount()).toBe(1);
@@ -205,23 +206,20 @@ describe('ReactStore', () => {
     const store = new ReactStore({ counter: counterReducer });
     const selectCount = store.createSelector((state) => state.counter.count);
 
-    expect(() => store.getStateObservable()).toThrow(
-      'Cannot access ReactStore.getStateObservable() before Store.init() has been called.'
-    );
     expect(() => selectCount()).toThrow(
-      'Cannot access ReactStore.getStateObservable() before Store.init() has been called.'
+      'Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.'
     );
   });
 
-  it('clears signal state on dispose', () => {
+  it('clears runtime state stream on dispose', () => {
     const store = new ReactStore({ counter: counterReducer });
+    const selectCount = store.createSelector((state) => state.counter.count);
 
     store.init();
-    expect(store.getStateObservable()).toEqual(expect.objectContaining({ subscribe: expect.any(Function) }));
     store.dispose();
 
-    expect(() => store.getStateObservable()).toThrow(
-      'Cannot access ReactStore.getStateObservable() before Store.init() has been called.'
+    expect(() => selectCount()).toThrow(
+      'Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.'
     );
   });
 });

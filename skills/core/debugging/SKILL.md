@@ -36,20 +36,13 @@ window.svelteRedux = {
 ```
 
 `reduxContext` stores the public `Store` instance, not the internal Redux store
-context. Use the `Store.state`, `Store.dispatch`, and `Store.getStateObservable()`
-APIs from the console.
+context. Use the `Store.state` and `Store.dispatch` APIs from the console.
 
 ### 1.1 Inspect state from the console
 
 ```js
 // Current state snapshot (plain object)
 window.svelteRedux.reduxContext.state;
-
-// Subscribe to changes
-const unsub = window.svelteRedux.reduxContext.getStateObservable().subscribe((s) => {
-  console.log("state", s);
-});
-unsub();
 
 // Dispatch an action manually (useful when a button is broken)
 window.svelteRedux.reduxContext.dispatch({ type: "my/action", payload: [...] });

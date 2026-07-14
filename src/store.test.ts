@@ -252,9 +252,9 @@ describe('Store', () => {
       vi.advanceTimersByTime(0);
       unsubscribe();
 
-      expect(consoleInfo).toHaveBeenCalledWith('REQUEST FLUSH', expect.any(Function));
-      expect(consoleInfo).toHaveBeenCalledWith('START FLUSHING', expect.any(Number));
-      expect(consoleInfo).toHaveBeenCalledWith('FLUSHED', expect.any(Number), 1);
+      expect(consoleInfo).toHaveBeenCalledWith('SUBSCRIBE SELECTOR CADENCE', 1);
+      expect(consoleInfo).toHaveBeenCalledWith('SELECTOR CADENCE TICK', 0, 1);
+      expect(consoleInfo).toHaveBeenCalledTimes(2);
       consoleInfo.mockRestore();
     });
     
@@ -398,7 +398,7 @@ describe('Store', () => {
       expect(values).toEqual([0, 1, 2]);
     });
 
-    it('shares one store-scoped flush manager across readable selectors and disposes scheduled work', () => {
+    it('shares one store-scoped cadence source across readable selectors and disposes scheduled work', () => {
       vi.useFakeTimers();
       vi.setSystemTime(0);
       let rafCallback: FrameRequestCallback | null = null;
@@ -457,7 +457,7 @@ describe('Store', () => {
       expect(doubleValues).toEqual([0, 4]);
     });
 
-    it('recreates selector flush scheduling safely after dispose and re-init', () => {
+    it('recreates selector cadence scheduling safely after dispose and re-init', () => {
       let rafCallback: FrameRequestCallback | null = null;
       vi.stubGlobal(
         'requestAnimationFrame',
@@ -516,18 +516,27 @@ describe('Store', () => {
     });
   });
 
-  describe('getStateObservable', () => {
-    it('returns the initialized readable store state', () => {
-      store.init();
+  describe('selector runtime state stream', () => {
+    it('throws if a readable selector output is requested before init()', () => {
+      const selectUpdatesLocked = store.createSelector(
+        (state) => state[INTERNAL_STORE_UTILITY_DOMAIN].updatesLocked
+      );
 
-      expect(store.getStateObservable()).toEqual(
-        expect.objectContaining({ subscribe: expect.any(Function) })
+      expect(() => selectUpdatesLocked()).toThrow(
+        'Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.'
       );
     });
 
-    it('throws if init() has not been called', () => {
-      expect(() => store.getStateObservable()).toThrow(
-        'Cannot access Store.getStateObservable() before Store.init() has been called.'
+    it('clears the runtime state stream on dispose', () => {
+      const selectUpdatesLocked = store.createSelector(
+        (state) => state[INTERNAL_STORE_UTILITY_DOMAIN].updatesLocked
+      );
+
+      store.init();
+      store.dispose();
+
+      expect(() => selectUpdatesLocked()).toThrow(
+        'Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.'
       );
     });
   });

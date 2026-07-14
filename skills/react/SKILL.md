@@ -61,7 +61,7 @@ selector consumption. Generic Redux/redux-saga guidance remains in `../core/`.
 | Route | Use when |
 | --- | --- |
 | `./signals/SKILL.md` | General Preact Signals guidance for ReactStore apps: `ReadonlySignal<T>`, `.value`, `computed`, Babel transform/`useSignals()` tracking, direct JSX signal rendering, component-local signal hooks, and avoiding module-level shared signal state. |
-| `./store/SKILL.md` | Choosing/importing `ReactStore`, initialization/disposal, `getStateObservable()`, shared Store runtime behavior, or Store-family contrast. |
+| `./store/SKILL.md` | Choosing/importing `ReactStore`, initialization/disposal, shared Store runtime behavior, or Store-family contrast. |
 | `./selectors/SKILL.md` | Authoring selectors whose direct calls return cached `ReadonlySignal<R>` outputs, preferring direct signals in React consumers, using `.useValue(...args)` only for hook/plain-value fallback paths, plus `.withStore`, `.select`, and saga-only `.effect`. |
 | `./component-integration/SKILL.md` | Wiring `ReactStore` into JSX/TSX React apps, bootstrap/root init and disposal ownership, app saga startup through `reactStore.runSaga(sagaFn)`, React component reads through direct signals first, and Store-first dispatch. |
 | `./selector-lifecycle/SKILL.md` | Choosing React selector call modes across component render/custom hooks, direct signal-aware code, handlers/callbacks/tests, sagas, selector composition, and explicit `.withStore(...)` binding. |
@@ -85,7 +85,7 @@ First-time app setup starts at the canonical root setup skill: `../setup/SKILL.m
   the consumer to accept a signal is impractical.
 - Direct signal outputs and `.useValue(...args)` are throttled by
   `throttledSelectorFrequency`.
-- Direct `ReadonlySignal` outputs are cached for the same state source + selector + args; do not add memoize/cache/debounce/throttle wrappers for selector performance.
+- Direct `ReadonlySignal` outputs are cached for the same ReactStore instance + selector + args; do not add memoize/cache/debounce/throttle wrappers for selector performance.
 - Selector trace output is a default-off diagnostic; pass
   `{ traceSelectors: true }` only while diagnosing selector scheduling.
 - `.effect(...args)` stays saga-only; it is not a hook or render subscription.
@@ -102,7 +102,7 @@ First-time app setup starts at the canonical root setup skill: `../setup/SKILL.m
 | `../svelte/component-integration/SKILL.md` | `./component-integration/SKILL.md` | Applicable as React component/app-root wiring. Substitute `ReactStore`, JSX/TSX components/hooks, Preact React direct selector signals, `.useValue(...args)` only for hook/plain-value fallback paths, and Store-first dispatch; do not use Svelte readables, `$selector` template syntax, `+layout.svelte`, `onDestroy`, or Svelte context. |
 | `../svelte/selector-lifecycle/SKILL.md` | `./selector-lifecycle/SKILL.md` | Applicable as React selector call-mode guidance. Direct calls return `ReadonlySignal<R>` and are preferred for React consumers that can accept signals, `.useValue(...args)` is a necessary-only plain-value fallback, `.select(state, ...args)` is for handlers/tests/composition, and `.effect(...args)` is saga-only. No `lifecycle_outside_component`/Svelte-context model. |
 | `../svelte/selector-scheduling/SKILL.md` | `./selector-scheduling/SKILL.md` | Applicable as React signal/`.useValue(...args)` scheduling guidance. Scheduling remains Store-owned and tuned with `ReactStore` `throttledSelectorFrequency`; do not import scheduler internals or wrap signals/read values in ad hoc timers. |
-| `../svelte/selectors/SKILL.md` | `./selectors/SKILL.md` | Already implemented for React selectors. Substitute Preact React `ReadonlySignal` direct outputs, signal/plain arguments, `.useValue(...args)`, `.withStore(signalSource)`, `.select`, and `.effect`; no Svelte readable direct calls. |
+| `../svelte/selectors/SKILL.md` | `./selectors/SKILL.md` | Already implemented for React selectors. Substitute Preact React `ReadonlySignal` direct outputs, signal/plain arguments, `.useValue(...args)`, `.withStore(reactStore)`, `.select`, and `.effect`; no Svelte readable direct calls. |
 | `../svelte/migration/SKILL.md` and `../svelte/migration/**/SKILL.md` | `./migration/SKILL.md` and `./migration/**/SKILL.md` | Applicable only as migration/adoption structure, not literal Svelte-store/rune conversion. React leaves should map local/shared React state, context/hooks, external-store subscriptions, `useMemo` derivations, and `useEffect` side effects to Redux slices, ReactStore selectors, and sagas. Svelte-only primitives (`writable`, `derived`, `$state`, `$derived`, `$effect`, templates) are documented as not applicable. |
 
 Use the React leaves above for operational guidance; Svelte leaves are coverage

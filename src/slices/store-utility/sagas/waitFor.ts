@@ -1,9 +1,7 @@
 import { type EventChannel } from "redux-saga";
 import { call, race, take, delay } from "typed-redux-saga";
-import {
-  createChannelFromSelector,
-  type SelectorChannelSelector,
-} from "../../../utils/sagas/selector-channel-effects";
+import { createChannelFromSelector } from "../../../utils/sagas/selector-channel-effects";
+import type { SelectorChannelSelector } from "../../../utils/types";
 
 const checkValueSaga = function* <R, T extends { payload: R; prevPayload: R | undefined | null }>(
   channel: EventChannel<T>,

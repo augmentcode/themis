@@ -3,7 +3,7 @@ import { createArchitectureRule } from "../../rule-utils.mjs";
 
 export const ruleId = "saga-local-selector";
 
-const selectorFactories = new Set(["createSelector", "createCollectionItemSelector", "createCollectionItemsListSelector"]);
+const selectorFactories = new Set(["createSelector"]);
 
 function isSelectorIdentifier(node) {
   return node?.type === "Identifier" && /^select[A-Z]/.test(node.name);

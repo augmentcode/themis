@@ -65,7 +65,7 @@ observable selector outputs.
 ## Selector caching
 
 - Store-created selectors have internal selector-result caching/memoization.
-- Direct readable outputs are cached per state source + selector + arguments; repeated `selectFoo(args)` calls for the same source reuse the same Svelte readable.
+- Direct readable outputs are cached per Store instance + selector + arguments; repeated `selectFoo(args)` calls for the same store reuse the same Svelte readable.
 - Do not wrap selector callbacks or selector calls in extra `memoize`, `cache`, manual cache maps, debounce, or throttle layers solely for performance.
 - Prefer the same Store-bound selector + same arguments over props drilling when the receiving consumer can reasonably call the selector in valid Svelte init context; otherwise use `.select`, `.effect`, or `.withStore` as the context requires.
 

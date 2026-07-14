@@ -1,17 +1,7 @@
 import { call, delay, race } from "typed-redux-saga";
+import type { RetryWithTimeoutOptions, RetryWithTimeoutOutcome } from "../types";
 
-export type RetryWithTimeoutOutcome = "success" | "retries-exhausted" | "timeout";
-
-export interface RetryWithTimeoutOptions {
-  /** Maximum number of retries. Total attempts = maxRetries + 1. */
-  maxRetries: number;
-  /** Overall timeout in milliseconds for all attempts and retry delays combined. */
-  timeoutMs: number;
-  /** Delay before retrying after a failed attempt. Defaults to progressive 1s, 2s, ... delays. */
-  getDelayMs?: (attempt: number) => number;
-  /** Called after each failed attempt. Callback errors are swallowed so retries can continue. */
-  onAttemptError?: (error: unknown, attempt: number, totalAttempts: number) => void;
-}
+export type { RetryWithTimeoutOptions, RetryWithTimeoutOutcome } from "../types";
 
 export function* retryWithTimeout(
   fn: () => Generator<any, unknown, any>,

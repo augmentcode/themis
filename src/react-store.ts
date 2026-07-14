@@ -1,6 +1,4 @@
-import { signal, type ReadonlySignal, type Signal } from '@preact/signals-react';
 import {
-  type PreloadedStoreState,
   type StoreOptions,
   type StoreSelectorCallback,
   type StoreStateMap,
@@ -11,10 +9,8 @@ import {
   type StoreMiddlewareInput,
   type StoreReducersInput,
 } from './store-runtime';
-import {
-  createSelectorFromSignalState,
-  type StoreReactSelector,
-} from './utils/react-selectors/create-selector';
+import { createSelector as createReactSelector } from './utils/react-selectors/create-selector';
+import type { StoreReactSelector } from './utils/types';
 
 export type { StoreOptions } from './types';
 
@@ -26,9 +22,6 @@ export class ReactStore<
   TStateMap extends StoreStateMap = {},
   TReducers extends StoreReducersInput<TStateMap> = StoreReducersInput<TStateMap>,
 > extends StoreRuntime<TStateMap, TReducers> {
-  private signalState: Signal<StoreBoundState<TStateMap>> | undefined;
-  private disposeSignalState: (() => void) | undefined;
-
   /**
    * Create a React signal Store with app-owned reducers and middlewares.
    * Throws if any reducer uses a package-reserved internal key.
@@ -41,46 +34,12 @@ export class ReactStore<
     super(reducersMap, middleware, options);
   }
 
-  init(initialState?: PreloadedStoreState): () => void {
-    const storeContext = this.initStoreContext(initialState);
-    if (!storeContext) {
-      return () => {};
-    }
-
-    this.signalState = signal(storeContext.store.getState() as StoreBoundState<TStateMap>);
-    this.disposeSignalState = storeContext.store.subscribe(() => {
-      this.signalState!.value = storeContext.store.getState() as StoreBoundState<TStateMap>;
-    });
-    this.startSagaManager(storeContext);
-
-    return () => {
-      this.dispose();
-    };
-  }
-
   createSelector<ARGS extends any[] = [], R = unknown>(
     selectorFunc: StoreSelectorCallback<R, ARGS, StoreBoundState<TStateMap>>
-  ): StoreReactSelector<R, ARGS, StoreBoundState<TStateMap>> {
-    return createSelectorFromSignalState<StoreBoundState<TStateMap>, ARGS, R>(
+  ): StoreReactSelector<R, ARGS, StoreBoundState<TStateMap>, ReactStore<TStateMap, TReducers>> {
+    return createReactSelector<ReactStore<TStateMap, TReducers>, ARGS, R>(
       this,
       selectorFunc
     );
-  }
-
-  getStateObservable(): ReadonlySignal<StoreBoundState<TStateMap>> {
-    if (!this.signalState) {
-      throw new Error(
-        'Cannot access ReactStore.getStateObservable() before Store.init() has been called.'
-      );
-    }
-
-    return this.signalState;
-  }
-
-  dispose(): void {
-    super.dispose();
-    this.disposeSignalState?.();
-    this.disposeSignalState = undefined;
-    this.signalState = undefined;
   }
 }

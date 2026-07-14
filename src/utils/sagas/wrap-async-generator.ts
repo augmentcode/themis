@@ -1,15 +1,13 @@
 import { call, delay, race, type SagaGenerator } from "typed-redux-saga";
+import type { WrapStreamingGeneratorOptions } from "../types";
+
+export type { WrapStreamingGeneratorOptions } from "../types";
 
 export class StreamTimeoutError extends Error {
   constructor(timeoutMs?: number) {
     super(timeoutMs === undefined ? "Stream timed out" : `Stream timed out after ${timeoutMs}ms`);
     this.name = "StreamTimeoutError";
   }
-}
-
-export interface WrapStreamingGeneratorOptions {
-  timeoutMs?: number;
-  onError?: (error: unknown) => void;
 }
 
 const normalizeOptions = (options?: number | WrapStreamingGeneratorOptions): WrapStreamingGeneratorOptions => {
