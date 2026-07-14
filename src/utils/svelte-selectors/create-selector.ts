@@ -46,15 +46,6 @@ const readReadableArg = <T>(arg: T | Readable<T>): T => {
 
 type SvelteState<TStore> = StoreState<TStore>;
 
-export type CreateSvelteSelector = <
-  TStore extends Store<any, any>,
-  ARGS extends any[] = [],
-  R = unknown,
->(
-  store: TStore,
-  selectorFunc: StoreSelectorCallback<R, ARGS, SvelteState<TStore>>
-) => StoreSelector<R, ARGS, SvelteState<TStore>, TStore>;
-
 const kefirSelectorPropertyToReadable = <R>(
   selected: KefirSelectorProperty<R>
 ): Readable<R> => {
@@ -70,12 +61,12 @@ const kefirSelectorPropertyToReadable = <R>(
 
 const isStoreRuntime = (arg: unknown): arg is StoreRuntime<any, any> => arg instanceof StoreRuntime;
 
-export const createSelectorFromReadableState = <TStore extends Store<any, any>, ARGS extends any[] = [], R = unknown>(
+export const createSelector = <TStore extends Store<any, any>, ARGS extends any[] = [], R = unknown>(
   store: TStore,
   selectorFunc: StoreSelectorCallback<R, ARGS, SvelteState<TStore>>
 ): StoreSelector<R, ARGS, SvelteState<TStore>, TStore> => {
   if (!isStoreRuntime(store)) {
-    throw new TypeError("createSelectorFromReadableState requires a Store-like state source as the first argument.");
+    throw new TypeError("createSelector requires a Store-like state source as the first argument.");
   }
 
   const boundSelector = (
@@ -114,5 +105,3 @@ export const createSelectorFromReadableState = <TStore extends Store<any, any>, 
 
   return readableSelector;
 };
-
-export const createSelector = createSelectorFromReadableState as CreateSvelteSelector;
