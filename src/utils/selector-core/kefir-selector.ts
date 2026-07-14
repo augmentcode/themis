@@ -1,29 +1,11 @@
 import Kefir, { type Observable, type Property } from "kefir";
-import type { StoreSelectorCallback } from "../../types";
-import {
-  createCachedSelector,
-  type SelectorTraceReporter,
-} from "./create-cached-selector";
+import type { StoreRuntime } from "../../store-runtime";
+import type { StoreSelectorCallback, StoreState } from "../../types";
+import { createCachedSelector } from "./create-cached-selector";
 import { areStoreUpdatesLocked } from "./store-update-lock";
+import type { KefirSelectorProperty, SelectorTraceReporter } from "../types";
 
-export type RuntimeKefirStateSource<TState> = {
-  stream: Observable<TState, any>;
-  getSnapshot: () => TState;
-};
-
-export type StoreRuntimeKefirStateSource<TState> = {
-  getStoreStateStream: () => Observable<TState, any>;
-  getStoreStateSnapshot: () => TState;
-};
-
-export const getRuntimeKefirStateSource = <TState>(
-  source: StoreRuntimeKefirStateSource<TState>
-): RuntimeKefirStateSource<TState> => {
-  return {
-    stream: source.getStoreStateStream(),
-    getSnapshot: () => source.getStoreStateSnapshot(),
-  };
-};
+export type { KefirSelectorProperty } from "../types";
 
 export const createKefirPropertyFromSubscribe = <T>(
   getSnapshot: () => T,
@@ -53,19 +35,14 @@ export const isKefirObservable = <T = any>(arg: unknown): arg is Observable<T, a
   return "observe" in arg && typeof arg.observe === "function";
 };
 
-export type KefirSelectorProperty<T> = {
-  property: Property<T, any>;
-  getSnapshot: () => T;
-};
-
-export const createKefirSelectorProperty = <TState, ARGS extends any[], R>(
-  stateSource: RuntimeKefirStateSource<TState>,
-  selectorFunc: StoreSelectorCallback<R, ARGS, TState>,
+export const createKefirSelectorProperty = <TStore extends StoreRuntime<any, any>, ARGS extends any[], R>(
+  stateSource: TStore,
+  selectorFunc: StoreSelectorCallback<R, ARGS, StoreState<TStore>>,
   argProperties: Array<Observable<any, any>>,
   getArgsSnapshot: (() => ARGS) | undefined,
-  traceReporter?: SelectorTraceReporter<TState, R, ARGS>
+  traceReporter?: SelectorTraceReporter<StoreState<TStore>, R, ARGS>
 ): KefirSelectorProperty<R> => {
-  const cachedSelector = createCachedSelector<TState, ARGS, R>(selectorFunc, {
+  const cachedSelector = createCachedSelector<StoreState<TStore>, ARGS, R>(selectorFunc, {
     lockUpdatesPredicate: areStoreUpdatesLocked,
     traceReporter,
   });
@@ -73,12 +50,12 @@ export const createKefirSelectorProperty = <TState, ARGS extends any[], R>(
     if (!getArgsSnapshot) {
       throw new Error("Cannot synchronously snapshot selector observable arguments.");
     }
-    return cachedSelector(stateSource.getSnapshot(), ...getArgsSnapshot());
+    return cachedSelector(stateSource.getStoreStateSnapshot() as StoreState<TStore>, ...getArgsSnapshot());
   };
-  const combinedInputs = [stateSource.stream, ...argProperties] as Array<Observable<any, any>>;
+  const combinedInputs = [stateSource.getStoreStateStream(), ...argProperties] as Array<Observable<any, any>>;
   const selected = (Kefir.combine(combinedInputs as any) as Observable<any[], any>)
     .map(([storeState, ...args]) => {
-      return cachedSelector(storeState as TState, ...(args as ARGS));
+      return cachedSelector(storeState as StoreState<TStore>, ...(args as ARGS));
     })
     .skipDuplicates();
   const property = (getArgsSnapshot

@@ -3,7 +3,7 @@ import { createArchitectureRule, createArchitectureRulePlugin } from "../../rule
 
 export const ruleId = "selector-argument-stability";
 
-const selectorFactories = new Set(["createSelector", "createCollectionItemSelector", "createCollectionItemsListSelector"]);
+const selectorFactories = new Set(["createSelector"]);
 const selectorModeProperties = new Set(["select", "effect", "useValue"]);
 const selectorChannelDirectArgHelpers = new Set(["createChannelFromSelector"]);
 const selectorChannelTupleArgHelpers = new Set(["takeEveryFromSelector", "takeLatestFromSelector", "takeLeadingFromSelector", "waitFor"]);

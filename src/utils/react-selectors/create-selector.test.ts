@@ -2,9 +2,8 @@ import { signal, type ReadonlySignal } from "@preact/signals-react";
 import type { Observable } from "kefir";
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import type { StoreState } from "../../types";
-import type { Collection } from "../collections/collection-utils";
 import { INTERNAL_STORE_UTILITY_DOMAIN } from "../store/store-runtime-constants";
-import { StoreRuntime } from "../../store-runtime";
+import { ReactStore } from "../../react-store";
 
 const mocks = vi.hoisted(() => ({
   select: vi.fn((selector: unknown, ...args: unknown[]) => ({ kind: "select", selector, args })),
@@ -19,12 +18,7 @@ vi.mock("@preact/signals-react/runtime", () => ({
   useSignals: mocks.useSignals,
 }));
 
-import {
-  createCollectionItemSelector,
-  createCollectionItemsListSelector,
-  createSelector,
-  type StoreSignalStateSource,
-} from "./create-selector";
+import { createSelector } from "./create-selector";
 import { createKefirPropertyFromSubscribe } from "../selector-core/kefir-selector";
 
 type CounterState = StoreState & {
@@ -32,7 +26,6 @@ type CounterState = StoreState & {
   [INTERNAL_STORE_UTILITY_DOMAIN]: { updatesLocked: boolean };
 };
 
-type Todo = { id: string; text: string; completed: boolean };
 type InternalUtilityTestState = {
   [INTERNAL_STORE_UTILITY_DOMAIN]: { updatesLocked: boolean };
 };
@@ -42,7 +35,7 @@ const withUtility = <T extends StoreState>(state: T): T & InternalUtilityTestSta
   [INTERNAL_STORE_UTILITY_DOMAIN]: { updatesLocked: false },
 });
 
-class MockSignalRuntimeStore<TState extends StoreState> extends StoreRuntime<any, any> {
+class MockSignalRuntimeStore<TState extends StoreState> extends ReactStore<any, any> {
   readonly getStoreStateStreamMock = vi.fn();
   readonly getStoreStateSnapshotMock = vi.fn();
 
@@ -82,6 +75,19 @@ const createMockStoreBinding = <TState extends StoreState>(
 
   return new MockSignalRuntimeStore(() => signalState.value, stateStream);
 };
+
+const assertPlainSignalStateSourceRejected = () => {
+  const state = withUtility({ counter: { count: 1 } });
+  const plainStoreLike = {
+    state,
+    getStoreStateStream: () => createKefirPropertyFromSubscribe(() => state, () => () => {}),
+    getStoreStateSnapshot: () => state,
+  };
+
+  // @ts-expect-error Plain structural state sources are not ReactStore instances.
+  createSelector(plainStoreLike, (state) => state.counter.count);
+};
+void assertPlainSignalStateSourceRejected;
 
 describe("react createSelector", () => {
   beforeEach(() => {
@@ -272,54 +278,7 @@ describe("react createSelector", () => {
     const selectorFn = (state: CounterState) => state.counter.count;
 
     expect(() => (createSelector as unknown as (selectorFunc: unknown) => unknown)(selectorFn)).toThrow(
-      "createSelector requires a signal state source as the first argument."
+      "createSelector requires a Store-like state source as the first argument."
     );
-  });
-});
-
-describe("react collection selector helpers", () => {
-  const todos: Collection<Todo, "id"> = {
-    idField: "id",
-    ids: ["a", "b"],
-    map: {
-      a: { id: "a", text: "Write tests", completed: false },
-      b: { id: "b", text: "Review tests", completed: true },
-    },
-    refsCount: {},
-  };
-  const state = withUtility({ todos });
-  const selectTodosCollection = (state: StoreState): Collection<Todo, "id"> => state.todos;
-
-  it("creates item selectors with typed undefined handling", () => {
-    const selectorStore = createMockStoreBinding(signal(state));
-    const selectTodo = createCollectionItemSelector<Todo, "id">(selectorStore, selectTodosCollection);
-
-    const found = selectTodo.select(state, "b");
-    const missing = selectTodo.select(state, "missing");
-
-    expectTypeOf(found).toEqualTypeOf<Todo | undefined>();
-    expect(found).toEqual({ id: "b", text: "Review tests", completed: true });
-    expect(missing).toBeUndefined();
-    expect(selectTodo.select(state, "")).toBeUndefined();
-  });
-
-  it("creates ordered list selectors with optional item filtering", () => {
-    const selectorStore = createMockStoreBinding(signal(state));
-    const selectTodos = createCollectionItemsListSelector<Todo, "id", (todo: Todo) => boolean>(
-      selectorStore,
-      selectTodosCollection
-    );
-    const selectCompletedTodos = createCollectionItemsListSelector<Todo, "id", (todo: Todo) => boolean>(
-      selectorStore,
-      selectTodosCollection,
-      (todo) => todo.completed
-    );
-
-    const allTodos = selectTodos.select(state);
-    const completedTodos = selectCompletedTodos.select(state);
-
-    expectTypeOf(allTodos).toEqualTypeOf<Todo[]>();
-    expect(allTodos.map((todo) => todo.id)).toEqual(["a", "b"]);
-    expect(completedTodos).toEqual([{ id: "b", text: "Review tests", completed: true }]);
   });
 });

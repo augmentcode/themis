@@ -1,4 +1,7 @@
 import { shallowEqual } from "fast-equals";
+import type { Collection } from "../types";
+
+export type { Collection, RefsCounter } from "../types";
 
 function isString(value: unknown): value is string {
   if (typeof value !== "string") {
@@ -6,20 +9,6 @@ function isString(value: unknown): value is string {
   }
   return true;
 }
-
-export type Collection<ITEM extends object, K extends string & keyof ITEM> = ITEM[K] extends string
-  ? {
-      idField: K & string;
-      ids: Array<ITEM[K]>;
-      map: Record<ITEM[K] & string, ITEM>;
-      refsCount: Record<ITEM[K], number>;
-    }
-  : never;
-
-export type RefsCounter<
-  ITEM extends object,
-  K extends ITEM[K] extends string ? keyof ITEM : never,
-> = ITEM[K] extends string ? Record<ITEM[K], ITEM> : never;
 
 export function createCollection<ITEM extends object, K extends keyof ITEM & string>(
   idFieldName: K,

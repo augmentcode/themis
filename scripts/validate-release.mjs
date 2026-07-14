@@ -228,8 +228,6 @@ const svelteStoreBlockedExports = [
   "useInitStore",
   "getReduxStore",
   "createCachedSelector",
-  "createCollectionItemSelector",
-  "createCollectionItemsListSelector",
   "lockUpdates",
   "unlockUpdates",
   "init",
@@ -278,8 +276,6 @@ export const packageImportChecks = [
       "useRunSaga",
       "createSelector",
       "createCachedSelector",
-      "createCollectionItemSelector",
-      "createCollectionItemsListSelector",
     ],
   },
   {

@@ -1,8 +1,9 @@
 import { type UnknownAction } from "redux";
 import { shallowEqual } from "fast-equals";
 import { type StoreAction, type StoreActionCreator } from "../../types";
+import type { StoreReducer } from "../types";
 
-export type StoreReducer<S, A> = (state: S, action: A) => S;
+export type { StoreReducer } from "../types";
 
 export const createReducer = <S, A extends StoreAction<any> = StoreAction<any>>(
   initialState: S

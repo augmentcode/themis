@@ -516,18 +516,27 @@ describe('Store', () => {
     });
   });
 
-  describe('getStateObservable', () => {
-    it('returns the initialized readable store state', () => {
-      store.init();
+  describe('selector runtime state stream', () => {
+    it('throws if a readable selector output is requested before init()', () => {
+      const selectUpdatesLocked = store.createSelector(
+        (state) => state[INTERNAL_STORE_UTILITY_DOMAIN].updatesLocked
+      );
 
-      expect(store.getStateObservable()).toEqual(
-        expect.objectContaining({ subscribe: expect.any(Function) })
+      expect(() => selectUpdatesLocked()).toThrow(
+        'Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.'
       );
     });
 
-    it('throws if init() has not been called', () => {
-      expect(() => store.getStateObservable()).toThrow(
-        'Cannot access Store.getStateObservable() before Store.init() has been called.'
+    it('clears the runtime state stream on dispose', () => {
+      const selectUpdatesLocked = store.createSelector(
+        (state) => state[INTERNAL_STORE_UTILITY_DOMAIN].updatesLocked
+      );
+
+      store.init();
+      store.dispose();
+
+      expect(() => selectUpdatesLocked()).toThrow(
+        'Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.'
       );
     });
   });

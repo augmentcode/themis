@@ -43,7 +43,7 @@ selector observation rules in the same app/package/code path.
 | Event handler/callback/test | selectFoo.select(state, ...args) | Plain value R | Performs a synchronous one-shot read without React hook/runtime requirements. |
 | Selector composition | otherSelector.select(state, ...args) | Plain value R | Keeps selector callbacks pure and synchronous with state already in scope. |
 | Saga | yield* selectFoo.effect(...args) | typed-redux-saga select effect | Reads via redux-saga state selection, not React signals or hooks. |
-| Explicit binding | selectFoo.withStore(signalSource)(...args) | Preact React ReadonlySignal<R> | Binds to an explicit ReactStore/signal-state source instead of the selector's original store. |
+| Explicit binding | selectFoo.withStore(reactStore)(...args) | Preact React ReadonlySignal<R> | Binds to an explicit ReactStore instead of the selector's original store. |
 
 ## Do
 
@@ -59,7 +59,7 @@ selector observation rules in the same app/package/code path.
 - Use `.select(state, ...args)` inside selector callbacks to compose selectors.
 - Use `.effect(...args)` in sagas, and pass ReactStore selectors with plain args to selector-channel helpers when a saga needs to react to selector value changes.
 - Use `.withStore(...)` only when you intentionally need to bind the selector to an
-  explicit `ReactStore` or compatible signal state source.
+  explicit `ReactStore`.
 
 ## React signal consumption guardrails
 

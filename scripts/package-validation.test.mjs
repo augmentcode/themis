@@ -443,8 +443,6 @@ describe("package metadata", () => {
     expect(svelteStore.createStoreContext).toBeUndefined();
     expect(svelteStore.createReduxStoreContext).toBeUndefined();
     expect(svelteStore.createCachedSelector).toBeUndefined();
-    expect(svelteStore.createCollectionItemSelector).toBeUndefined();
-    expect(svelteStore.createCollectionItemsListSelector).toBeUndefined();
     expect(svelteStore.lockUpdates).toBeUndefined();
     expect(svelteStore.unlockUpdates).toBeUndefined();
     expect(svelteStore.init).toBeUndefined();

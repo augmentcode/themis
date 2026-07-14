@@ -3,7 +3,7 @@ name: react/store
 description: >-
   ReactStore import, initialization, disposal, and Store-runtime guidance for the
   React signal Store variant. Use for @augmentcode/themis/react-store,
-  getStateObservable(), inherited runSaga/dispatch/state behavior, and contrast with
+  inherited runSaga/dispatch/state behavior, and contrast with
   Svelte-readable Store or StreamingStore without teaching those call modes.
 type: sub-skill
 requires:
@@ -16,7 +16,7 @@ sources:
 triggers:
   - ReactStore
   - react-store import
-  - getStateObservable
+  - Store state lifecycle
   - signal Store
 ---
 # ReactStore import and lifecycle
@@ -45,10 +45,10 @@ const dispose = reactStore.init();
 ## Lifecycle rules
 
 - Construct `ReactStore` with app-owned reducers and optional middleware, then
-  call `reactStore.init(initialState?)` before invoking direct selector calls,
-  `.useValue(...args)`, or `reactStore.getStateObservable()`.
-- `getStateObservable()` returns the Store state as a Preact React signal after
-  initialization and throws before `init()` or after `dispose()`.
+  call `reactStore.init(initialState?)` before invoking direct selector calls or
+  `.useValue(...args)`.
+- React selector calls return Preact React signal outputs backed by the Store-owned
+  state stream after initialization and throw before `init()` or after `dispose()`.
 - Keep app shared/domain state in reducers and ReactStore selectors rather than
   module-level shared Preact signals.
 - `reactStore.dispatch`, `reactStore.state`, `reactStore.runSaga(sagaFn)`, and

@@ -330,9 +330,6 @@
     "@preact/signals-react": {
       "optional": true
     },
-    "kefir": {
-      "optional": true
-    },
     "react": {
       "optional": true
     },

@@ -82,7 +82,7 @@ const defaultPaths = ["src"];
 const sourceExtensions = new Set([".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".svelte", ".ts", ".tsx"]);
 const ignoredDirectories = new Set([".git", "coverage", "dist", "node_modules"]);
 const testFilePattern = /(^|[\\/])[^\\/]+\.(test|spec)\.[^\\/]+$/;
-const selectorFactories = new Set(["createSelector", "createCollectionItemSelector", "createCollectionItemsListSelector"]);
+const selectorFactories = new Set(["createSelector"]);
 const actionFactories = new Set(["createAction", "createAsyncAction"]);
 const ownerModuleKinds = [
   { kind: "slice", pattern: /-slice\.[cm]?[jt]sx?$/, noun: "slice owner", suffix: "*-slice" },

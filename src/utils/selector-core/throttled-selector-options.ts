@@ -1,24 +1,21 @@
+import type {
+  SelectorCadenceSource,
+  SelectorCadenceSourceOptions,
+  SelectorCadenceSourceSource,
+  SelectorCadenceTickListener,
+} from "../types";
+
+export type {
+  SelectorCadenceSource,
+  SelectorCadenceSourceOptions,
+  SelectorCadenceSourceProvider,
+  SelectorCadenceSourceSource,
+  SelectorCadenceTickListener,
+} from "../types";
+
 export const DEFAULT_THROTTLED_SELECTOR_FREQUENCY = 64;
 export const MIN_THROTTLED_SELECTOR_FREQUENCY = 1;
 export const MAX_THROTTLED_SELECTOR_FREQUENCY = 256;
-
-export type SelectorCadenceTickListener = (timestamp: number) => void;
-
-export type SelectorCadenceSource = {
-  readonly frequency: number;
-  readonly frameIntervalMs: number;
-  getSnapshot(): number;
-  subscribe(listener: SelectorCadenceTickListener): () => void;
-  dispose(): void;
-};
-export type SelectorCadenceSourceOptions = {
-  traceSelectors?: boolean;
-};
-export type SelectorCadenceSourceProvider = () => SelectorCadenceSource;
-export type SelectorCadenceSourceSource =
-  | SelectorCadenceSource
-  | SelectorCadenceSourceProvider
-  | number;
 
 export const validateThrottledSelectorFrequency = (frequency: number): number => {
   if (
@@ -97,7 +94,7 @@ export const createSelectorCadenceSource = (
       }
       timerDueAt = null;
     }
-    runScheduledTick(timestamp);
+    tick(timestamp);
   };
 
   const runTimer = (timestamp: number): void => {
@@ -118,7 +115,7 @@ export const createSelectorCadenceSource = (
       scheduleFrame();
       return;
     }
-    runScheduledTick(timestamp);
+    tick(timestamp);
   };
 
   const scheduleFrame = (): void => {
@@ -133,15 +130,6 @@ export const createSelectorCadenceSource = (
     timerId = setTimeout(() => {
       runTimer(Date.now());
     }, timerDelayMs);
-  };
-
-  const runScheduledTick = (
-    timestamp: number,
-  ): void => {
-    if (!canRunScheduledTick()) {
-      return;
-    }
-    tick(timestamp);
   };
 
   const scheduleTick = (): void => {
@@ -165,6 +153,9 @@ export const createSelectorCadenceSource = (
   };
 
   const tick = (timestamp: number): void => {
+    if (!canRunScheduledTick()) {
+      return;
+    }
     clearScheduledTick();
     if (disposed || listeners.size === 0) {
       return;

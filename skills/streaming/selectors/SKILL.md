@@ -3,7 +3,7 @@ name: streaming/selectors
 description: >-
   Author StreamingStore selectors whose direct calls return Kefir Observable
   values. Covers observable selector arguments, Store-bound creation,
-  withStore(streamSource), pure .select(state) composition/testing, and saga
+  withStore(streamStore), pure .select(state) composition/testing, and saga
   .effect() usage without importing streaming selector internals.
 type: sub-skill
 requires:
@@ -63,7 +63,7 @@ const todoCount$ = selectTodoCount();
 | Context | Use | Result |
 | --- | --- | --- |
 | Streaming consumer | `selectFoo(...argsOrArgStreams)` | Kefir `Observable<R, any>` |
-| Alternate stream state | `selectFoo.withStore(source)(...args)` | Kefir `Observable<R, any>` |
+| Explicit StreamingStore binding | `selectFoo.withStore(streamStore)(...args)` | Kefir `Observable<R, any>` |
 | Tests/handlers/composition | `selectFoo.select(state, ...args)` | Plain value `R` |
 | Sagas | `yield* selectFoo.effect(...args)` | typed-redux-saga select effect |
 
@@ -87,7 +87,7 @@ effects read Redux state from saga context and do not subscribe to direct Kefir
 ## Selector caching
 
 - Store-created selectors have internal selector-result caching/memoization.
-- Direct Kefir `Observable` outputs are cached per source observable + selector + arguments; repeated `selectFoo(args)` calls for the same source reuse the same Kefir Observable.
+- Direct Kefir `Observable` outputs are cached per StreamingStore instance + selector + arguments; repeated `selectFoo(args)` calls for the same store reuse the same Kefir Observable.
 - Do not wrap selector callbacks or selector calls in extra `memoize`, `cache`, manual cache maps, debounce, or throttle layers solely for performance.
 - Prefer the same Store-bound selector + same arguments over props drilling/manual stream passing when the receiving consumer can reasonably call the selector in valid streaming setup; otherwise use `.select`, `.effect`, or `.withStore` as the context requires.
 
@@ -96,7 +96,7 @@ effects read Redux state from saga context and do not subscribe to direct Kefir
 - Prefer primitive scalar selector arguments: ids, booleans, enum strings,
   numbers, `null`, or `undefined`.
 - Do not pass freshly constructed object, array, or function arguments to direct
-  `selectFoo(...)`, `.select(state, ...)`, `.effect(...)`, `.withStore(source)(...)`,
+  `selectFoo(...)`, `.select(state, ...)`, `.effect(...)`, `.withStore(store)(...)`,
   selector-channel args tuples, or `waitFor` args tuples.
 - Object/function args are valid only when the identity is stable and intentional,
   such as a module constant, memoized config, existing source object, or Kefir

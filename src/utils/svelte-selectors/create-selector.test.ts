@@ -14,10 +14,7 @@ vi.mock("typed-redux-saga", () => ({
 }));
 
 import { createKefirPropertyFromSubscribe } from "../selector-core/kefir-selector";
-import {
-  createSelector,
-  createSelectorFromReadableState,
-} from "./create-selector";
+import { createSelector } from "./create-selector";
 
 type CounterState = StoreState & {
   counter: { count: number };
@@ -84,8 +81,6 @@ const assertPlainReadableStateSourceRejected = () => {
 
   // @ts-expect-error Plain structural state sources are not Store instances.
   createSelector(plainStoreLike, (state) => state.counter.count);
-  // @ts-expect-error Plain structural state sources are not Store instances.
-  createSelectorFromReadableState(plainStoreLike, (state) => state.counter.count);
 };
 void assertPlainReadableStateSourceRejected;
 
@@ -154,10 +149,10 @@ describe("createSelector", () => {
     expect(selectScaledCount(3)).not.toBe(selectScaledCount(4));
   });
 
-  it("reuses helper-created selector readables by Store-like source identity", () => {
+  it("reuses selector readables by Store-like source identity", () => {
     const storeState = writable<CounterState>(withUtility({ counter: { count: 2 } }));
     const selectorStore = createMockStoreBinding(storeState);
-    const selectCount = createSelectorFromReadableState(selectorStore, (state) => state.counter.count);
+    const selectCount = createSelector(selectorStore, (state) => state.counter.count);
 
     expect(selectCount()).toBe(selectCount());
     expect(selectorStore.getStoreStateStreamMock).toHaveBeenCalledTimes(1);
@@ -213,7 +208,7 @@ describe("createSelector", () => {
     const selectorFn = (state: CounterState) => state.counter.count;
 
     expect(() => (createSelector as unknown as (selectorFunc: unknown) => unknown)(selectorFn)).toThrow(
-      "createSelectorFromReadableState requires a Store-like state source as the first argument."
+      "createSelector requires a Store-like state source as the first argument."
     );
   });
 

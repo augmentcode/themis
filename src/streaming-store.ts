@@ -1,6 +1,4 @@
-import { type Observable } from 'kefir';
 import {
-  type PreloadedStoreState,
   type StoreOptions,
   type StoreSelectorCallback,
   type StoreStateMap,
@@ -11,10 +9,8 @@ import {
   type StoreMiddlewareInput,
   type StoreReducersInput,
 } from './store-runtime';
-import {
-  createSelectorFromStreamState,
-  type StoreStreamingSelector,
-} from './utils/streaming-selectors/create-selector';
+import { createSelector as createStreamingSelector } from './utils/streaming-selectors/create-selector';
+import type { StoreStreamingSelector } from './utils/types';
 
 export type { StoreOptions } from './types';
 
@@ -26,8 +22,6 @@ export class StreamingStore<
   TStateMap extends StoreStateMap = {},
   TReducers extends StoreReducersInput<TStateMap> = StoreReducersInput<TStateMap>,
 > extends StoreRuntime<TStateMap, TReducers> {
-  private streamState: Observable<StoreBoundState<TStateMap>, any> | undefined;
-
   /**
    * Create a streaming Store with app-owned reducers and middlewares.
    * Throws if any reducer uses a package-reserved internal key.
@@ -40,43 +34,12 @@ export class StreamingStore<
     super(reducersMap, middleware, options);
   }
 
-  init(initialState?: PreloadedStoreState): () => void {
-    const storeContext = this.initStoreContext(initialState);
-    if (!storeContext) {
-      return () => {};
-    }
-
-    this.streamState = this.getStoreStateStream() as Observable<
-      StoreBoundState<TStateMap>,
-      any
-    >;
-    this.startSagaManager(storeContext);
-
-    return () => {
-      this.dispose();
-    };
-  }
-
   createSelector<ARGS extends any[] = [], R = unknown>(
     selectorFunc: StoreSelectorCallback<R, ARGS, StoreBoundState<TStateMap>>
-  ): StoreStreamingSelector<R, ARGS, StoreBoundState<TStateMap>> {
-    return createSelectorFromStreamState<StoreBoundState<TStateMap>, ARGS, R>(
+  ): StoreStreamingSelector<R, ARGS, StoreBoundState<TStateMap>, StreamingStore<TStateMap, TReducers>> {
+    return createStreamingSelector<StreamingStore<TStateMap, TReducers>, ARGS, R>(
       this,
       selectorFunc
     );
-  }
-
-  getStateObservable(): Observable<StoreBoundState<TStateMap>, any> {
-    if (!this.streamState) {
-      throw new Error(
-        'Cannot access StreamingStore.getStateObservable() before Store.init() has been called.'
-      );
-    }
-    return this.streamState;
-  }
-
-  dispose(): void {
-    super.dispose();
-    this.streamState = undefined;
   }
 }

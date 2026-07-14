@@ -1,12 +1,14 @@
-import type { SelectorTraceReporter } from "./create-cached-selector";
+import type {
+  SelectorOutputCacheKey,
+  SelectorOutputCacheOptions,
+  SelectorOutputFactory,
+} from "../types";
 
-export type SelectorOutputCacheKey = (...args: any[]) => unknown;
-
-export type SelectorOutputFactory<OUTPUT> = () => OUTPUT;
-
-export type SelectorOutputCacheOptions = {
-  traceReporter?: SelectorTraceReporter<any, any, any[]>;
-};
+export type {
+  SelectorOutputCacheKey,
+  SelectorOutputCacheOptions,
+  SelectorOutputFactory,
+} from "../types";
 
 type PrimitiveCacheKey = string | number | boolean | bigint | symbol | null | undefined;
 

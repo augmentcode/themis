@@ -155,7 +155,7 @@ describe('StreamingStore', () => {
     expect(values).toEqual([0, 2, 3]);
   });
 
-  it('shares one store-scoped cadence source across stream selectors and disposes scheduled work', () => {
+  it('shares one store-scoped cadence source across active stream selectors and disposes scheduled work', () => {
     const store = new StreamingStore(
       { counter: counterReducer },
       undefined,
@@ -179,11 +179,12 @@ describe('StreamingStore', () => {
     vi.advanceTimersByTime(0);
     expect(countValues).toEqual([0, 2]);
     expect(doubleValues).toEqual([0, 4]);
-    expect(vi.getTimerCount()).toBe(0);
+    expect(vi.getTimerCount()).toBe(1);
 
     vi.advanceTimersByTime(500);
     expect(countValues).toEqual([0, 2]);
     expect(doubleValues).toEqual([0, 4]);
+    expect(vi.getTimerCount()).toBe(1);
 
     store.dispatch({ type: 'counter/set', payload: 3 });
     expect(vi.getTimerCount()).toBe(1);
@@ -200,24 +201,21 @@ describe('StreamingStore', () => {
   it('throws when a stream selector output is requested before initialization', () => {
     const store = new StreamingStore({ counter: counterReducer });
 
-    expect(() => store.getStateObservable()).toThrow(
-      'Cannot access StreamingStore.getStateObservable() before Store.init() has been called.'
-    );
     const selectCount = store.createSelector((state) => state.counter.count);
     expect(() => selectCount()).toThrow(
-      'Cannot access StreamingStore.getStateObservable() before Store.init() has been called.'
+      'Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.'
     );
   });
 
-  it('clears stream state on dispose', () => {
+  it('clears runtime state stream on dispose', () => {
     const store = new StreamingStore({ counter: counterReducer });
+    const selectCount = store.createSelector((state) => state.counter.count);
 
     store.init();
-    expect(store.getStateObservable()).toBeInstanceOf(Kefir.Observable);
     store.dispose();
 
-    expect(() => store.getStateObservable()).toThrow(
-      'Cannot access StreamingStore.getStateObservable() before Store.init() has been called.'
+    expect(() => selectCount()).toThrow(
+      'Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.'
     );
   });
 });

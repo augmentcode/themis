@@ -1,5 +1,4 @@
 import {
-  type PreloadedStoreState,
   type StoreOptions,
   type StoreStateMap,
   type StoreSelector,
@@ -13,7 +12,7 @@ import {
 } from './store-runtime';
 import type { ReduxStoreContext } from './internal-types';
 import { getStoreContext } from './utils/runtime-svelte/utils';
-import { createSelectorFromReadableState } from './utils/svelte-selectors/create-selector';
+import { createSelector as createSvelteSelector } from './utils/svelte-selectors/create-selector';
 
 export type { StoreOptions } from './types';
 export { getDispatch } from './utils/runtime-svelte/utils';
@@ -46,23 +45,10 @@ export class Store<
     return getStoreContext() ?? super.getExistingStoreContext();
   }
 
-  init(initialState?: PreloadedStoreState): () => void {
-    const storeContext = this.initStoreContext(initialState);
-    if (!storeContext) {
-      return () => {};
-    }
-
-    this.startSagaManager(storeContext);
-
-    return () => {
-      this.dispose();
-    };
-  }
-
   createSelector<ARGS extends any[] = [], R = unknown>(
     selectorFunc: StoreSelectorCallback<R, ARGS, StoreBoundState<TStateMap>>
   ): StoreSelector<R, ARGS, StoreBoundState<TStateMap>, Store<TStateMap, TReducers>> {
-    return createSelectorFromReadableState<Store<TStateMap, TReducers>, ARGS, R>(
+    return createSvelteSelector<Store<TStateMap, TReducers>, ARGS, R>(
       this,
       selectorFunc
     );

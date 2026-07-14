@@ -4,55 +4,21 @@ import { useSignals } from "@preact/signals-react/runtime";
 import { select } from "typed-redux-saga";
 import { StoreRuntime } from "../../store-runtime";
 import type { ReactStore } from "../../react-store";
-import type { StoreSelectorCallback, StoreSelectorEffect, StoreState } from "../../types";
-import {
-  createCachedSelector,
-  type SelectorTraceReporter,
-} from "../selector-core/create-cached-selector";
+import type { StoreSelectorCallback, StoreState } from "../../types";
+import type { SignalArgs, StoreReactSelector } from "../types";
+import { createCachedSelector } from "../selector-core/create-cached-selector";
 import { getOrCreate } from "../selector-core/selector-output-cache";
 import {
   createConstantKefirProperty,
   createKefirPropertyFromSubscribe,
   createKefirSelectorProperty,
-  type KefirSelectorProperty,
 } from "../selector-core/kefir-selector";
-import {
-  DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
-  type SelectorCadenceSourceSource,
-} from "../selector-core/throttled-selector-options";
+import type { KefirSelectorProperty } from "../types";
 
 export { createCachedSelector };
+export type { SignalArgs, StoreReactSelector } from "../types";
 
 type SignalState<TStore> = StoreState<TStore>;
-
-export type SignalArgs<ARGS extends any[]> = {
-  [K in keyof ARGS]: ARGS[K] | ReadonlySignal<ARGS[K]>;
-};
-
-export type StoreReactSelector<
-  R,
-  ARGS extends any[] = [],
-  TState = StoreState,
-  TStore extends ReactStore<any, any> = ReactStore<any, any>,
-> = ((
-  ...args: SignalArgs<ARGS>
-) => ReadonlySignal<R>) & {
-  useValue: (...args: SignalArgs<ARGS>) => R;
-  withStore: (store: TStore) => (
-    ...args: SignalArgs<ARGS>
-  ) => ReadonlySignal<R>;
-  select: StoreSelectorCallback<R, ARGS, TState>;
-  effect: StoreSelectorEffect<R, ARGS>;
-};
-
-export type CreateReactSelector = <
-  TStore extends ReactStore<any, any>,
-  ARGS extends any[] = [],
-  R = unknown,
->(
-  store: TStore,
-  selectorFunc: StoreSelectorCallback<R, ARGS, SignalState<TStore>>
-) => StoreReactSelector<R, ARGS, SignalState<TStore>, TStore>;
 
 const isSignal = <T = any>(arg: unknown): arg is ReadonlySignal<T> => {
   if (!arg || typeof arg !== "object") {
@@ -120,25 +86,20 @@ const kefirSelectorPropertyToSignal = <R>(
   return output;
 };
 
-export const createSelectorFromSignalState = <TStore extends ReactStore<any, any>, ARGS extends any[] = [], R = unknown>(
+export const createSelector = <TStore extends ReactStore<any, any>, ARGS extends any[] = [], R = unknown>(
   store: TStore,
-  selectorFunc: StoreSelectorCallback<R, ARGS, SignalState<TStore>>,
-  selectorCadenceSourceOrFrequency: SelectorCadenceSourceSource = DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
-  traceReporter?: SelectorTraceReporter<SignalState<TStore>, R, ARGS>,
-  shouldTraceSelectorCache?: () => boolean
+  selectorFunc: StoreSelectorCallback<R, ARGS, SignalState<TStore>>
 ): StoreReactSelector<R, ARGS, SignalState<TStore>, TStore> => {
   if (!isStoreRuntime(store)) {
-    throw new TypeError("createSelectorFromSignalState requires a Store-like state source as the first argument.");
+    throw new TypeError("createSelector requires a Store-like state source as the first argument.");
   }
 
-  const effectiveTraceReporter = traceReporter ?? store.getSelectorTraceReporter<SignalState<TStore>, R, ARGS>();
-  const effectiveShouldTraceSelectorCache =
-    shouldTraceSelectorCache ?? (() => store.shouldTraceSelectorCache());
-  void selectorCadenceSourceOrFrequency;
   const boundSelector = (
     store: TStore,
     ...restArgs: SignalArgs<ARGS>
   ): ReadonlySignal<R> => {
+    const traceReporter = store.getSelectorTraceReporter<SignalState<TStore>, R, ARGS>();
+
     return getOrCreate(store, selectorFunc, restArgs, () => {
       const argProperties = restArgs.map(signalArgToKefirProperty);
       const selected = createKefirSelectorProperty<TStore, ARGS, R>(
@@ -146,10 +107,10 @@ export const createSelectorFromSignalState = <TStore extends ReactStore<any, any
         selectorFunc,
         argProperties,
         () => restArgs.map(readSignalArg) as ARGS,
-        effectiveTraceReporter
+        traceReporter
       );
       return kefirSelectorPropertyToSignal(selected);
-    }, effectiveShouldTraceSelectorCache() ? { traceReporter: effectiveTraceReporter } : undefined);
+    }, store.shouldTraceSelectorCache() ? { traceReporter } : undefined);
   };
 
   const signalSelector = ((...restArgs: SignalArgs<ARGS>) => {
@@ -170,15 +131,3 @@ export const createSelectorFromSignalState = <TStore extends ReactStore<any, any
 
   return signalSelector;
 };
-
-const createSelectorImpl = <TStore extends ReactStore<any, any>, ARGS extends any[] = [], R = unknown>(
-  store: TStore,
-  selectorFunc: StoreSelectorCallback<R, ARGS, SignalState<TStore>>
-): StoreReactSelector<R, ARGS, SignalState<TStore>, TStore> => {
-  return createSelectorFromSignalState(
-    store,
-    selectorFunc
-  );
-};
-
-export const createSelector = createSelectorImpl as CreateReactSelector;

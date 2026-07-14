@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import type { Store as ReduxStore, UnknownAction } from 'redux';
-import type { Readable } from 'svelte/store';
 import type { Observable as KefirObservable } from 'kefir';
 import type { ReadonlySignal } from '@preact/signals-react';
 import { createReducer } from '@augmentcode/themis/utils/store/create-reducer';
@@ -75,12 +74,6 @@ type _StreamingStoreStateMatchesStore = Assert<IsEqual<StoreState<typeof streami
 type _ReactStoreStateMatchesStore = Assert<IsEqual<StoreState<typeof reactStoreWithCounter>, ExpectedStoreWithCounterState>>;
 type StoreWithCounterStateGetter = typeof storeWithCounter.state;
 type _StoreStateGetterPreservesCounterState = Assert<IsEqual<StoreWithCounterStateGetter, StoreWithCounterState>>;
-type StoreWithCounterReadableState = ReturnType<typeof storeWithCounter.getStateObservable>;
-type _StoreReadableStatePreservesCounterState = Assert<IsEqual<StoreWithCounterReadableState, Readable<StoreWithCounterState>>>;
-type StreamingStoreStreamState = ReturnType<typeof streamingStoreWithCounter.getStateObservable>;
-type _StreamingStatePreservesCounterState = Assert<IsEqual<StreamingStoreStreamState, KefirObservable<ExpectedStoreWithCounterState, any>>>;
-type ReactStoreSignalState = ReturnType<typeof reactStoreWithCounter.getStateObservable>;
-type _ReactSignalStatePreservesCounterState = Assert<IsEqual<ReactStoreSignalState, ReadonlySignal<ExpectedStoreWithCounterState>>>;
 type StoreWithCounterDispatchGetter = typeof storeWithCounter.dispatch;
 type _StoreDispatchGetterMatchesReduxDispatch = Assert<IsEqual<StoreWithCounterDispatchGetter, ReduxStore<StoreState, UnknownAction>['dispatch']>>;
 if (false) {

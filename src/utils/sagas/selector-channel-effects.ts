@@ -27,36 +27,21 @@
 import { take, cancel, fork, getContext as getSagaContext } from "typed-redux-saga";
 import { eventChannel, type EventChannel, type Task } from "redux-saga";
 import type { ReduxStore } from "../../internal-types";
-import type { StoreSelectorCallback, StoreSelectorEffect, StoreState } from "../../types";
+import type { StoreState } from "../../types";
 import { shallowEqual } from "fast-equals";
 import { createCachedSelector } from "../selector-core/create-cached-selector";
 import { INTERNAL_STORE_UTILITY_DOMAIN } from "../store/store-runtime-constants";
+import type {
+  SelectorChannelPayload,
+  SelectorChannelSelector,
+  SelectorWorkerSaga,
+} from "../types";
 
-/**
- * Structural selector shape used by selector-channel saga effects.
- *
- * This intentionally depends on the shared plain-argument selector capabilities
- * instead of a selector's direct-call observable output type.
- */
-export type SelectorChannelSelector<R, ARGS extends any[] = [], TState = StoreState> = {
-  select: StoreSelectorCallback<R, ARGS, TState>;
-  effect: StoreSelectorEffect<R, ARGS>;
-};
-
-/**
- * The payload type emitted by selector channels
- */
-export type SelectorChannelPayload<R> = {
-  payload: R;
-  prevPayload: R | undefined | null;
-};
-
-/**
- * Worker saga type for selector channel effects
- */
-export type SelectorWorkerSaga<R> = (
-  payload: SelectorChannelPayload<R>
-) => Generator<any, void, any>;
+export type {
+  SelectorChannelPayload,
+  SelectorChannelSelector,
+  SelectorWorkerSaga,
+} from "../types";
 
 /**
  * Creates an event channel from a selector that emits when the selector value changes.

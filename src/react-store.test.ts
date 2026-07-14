@@ -206,23 +206,20 @@ describe('ReactStore', () => {
     const store = new ReactStore({ counter: counterReducer });
     const selectCount = store.createSelector((state) => state.counter.count);
 
-    expect(() => store.getStateObservable()).toThrow(
-      'Cannot access ReactStore.getStateObservable() before Store.init() has been called.'
-    );
     expect(() => selectCount()).toThrow(
       'Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.'
     );
   });
 
-  it('clears signal state on dispose', () => {
+  it('clears runtime state stream on dispose', () => {
     const store = new ReactStore({ counter: counterReducer });
+    const selectCount = store.createSelector((state) => state.counter.count);
 
     store.init();
-    expect(store.getStateObservable()).toEqual(expect.objectContaining({ subscribe: expect.any(Function) }));
     store.dispose();
 
-    expect(() => store.getStateObservable()).toThrow(
-      'Cannot access ReactStore.getStateObservable() before Store.init() has been called.'
+    expect(() => selectCount()).toThrow(
+      'Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.'
     );
   });
 });
