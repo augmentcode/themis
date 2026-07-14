@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0 - 2026-07-14
+
+- Simplified scheduled selector throttling around store-owned cadence streams and local selector coalescing.
+- Removed obsolete selector flush, scheduler, cached-selector, and cadence getter internals from runtime/store APIs.
+- Updated selector runtime initialization and store type usage to rely on direct Store APIs.
+- Cleaned up packaged skills and docs guidance for the removed observable state APIs and selector cleanup.
+
 ## 0.0.4 - 2026-07-13
 
 - Added shared selector output caching with weak-object and primitive-key support.
