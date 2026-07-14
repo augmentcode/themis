@@ -18,9 +18,9 @@ import { getOrCreate } from "../selector-core/selector-output-cache";
 import { areStoreUpdatesLocked } from "../selector-core/store-update-lock";
 import {
   DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
-  resolveSelectorFlushManager,
-  type SelectorFlushManager,
-  type SelectorFlushManagerSource,
+  type SelectorCadenceSource,
+  type SelectorCadenceSourceSource,
+  resolveSelectorCadenceSource,
 } from "../selector-core/throttled-selector-options";
 
 export { createCachedSelector };
@@ -42,17 +42,17 @@ const isReadableStateSource = <TState = StoreState>(arg: unknown): arg is StoreR
 };
 
 type StoreSelectorRuntimeSource<TState, R, ARGS extends unknown[]> = {
-  getSelectorFlushManager?: () => SelectorFlushManager;
+  getSelectorCadenceSource?: () => SelectorCadenceSource;
   getSelectorTraceReporter?: <STATE = TState, RESULT = R, SELECTOR_ARGS extends unknown[] = ARGS>() => SelectorTraceReporter<STATE, RESULT, SELECTOR_ARGS>;
   shouldTraceSelectorCache?: () => boolean;
 };
 
-const getStoreSelectorFlushManagerSource = <TState, R, ARGS extends unknown[]>(
+const getStoreSelectorCadenceSource = <TState, R, ARGS extends unknown[]>(
   stateSource: StoreReadableStateSource<TState>
-): SelectorFlushManagerSource | undefined => {
-  const getSelectorFlushManager = (stateSource as StoreSelectorRuntimeSource<TState, R, ARGS>).getSelectorFlushManager;
-  return typeof getSelectorFlushManager === "function"
-    ? () => getSelectorFlushManager.call(stateSource)
+): SelectorCadenceSource | undefined => {
+  const getSelectorCadenceSource = (stateSource as StoreSelectorRuntimeSource<TState, R, ARGS>).getSelectorCadenceSource;
+  return typeof getSelectorCadenceSource === "function"
+    ? getSelectorCadenceSource.call(stateSource)
     : undefined;
 };
 
@@ -77,7 +77,7 @@ const getStoreSelectorCacheTracePredicate = <TState, R, ARGS extends unknown[]>(
 export const createSelectorFromReadableState = <TState = StoreState, ARGS extends any[] = [], R = unknown>(
   store: StoreReadableStateSource<TState>,
   selectorFunc: StoreSelectorCallback<R, ARGS, TState>,
-  selectorFlushManagerOrFrequency: SelectorFlushManagerSource = DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
+  selectorCadenceSourceOrFrequency: SelectorCadenceSourceSource = DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
   traceReporter?: SelectorTraceReporter<TState, R, ARGS>,
   shouldTraceSelectorCache?: () => boolean
 ): StoreSelector<R, ARGS, TState> => {
@@ -85,21 +85,20 @@ export const createSelectorFromReadableState = <TState = StoreState, ARGS extend
     throw new TypeError("createSelectorFromReadableState requires a Store-like state source as the first argument.");
   }
 
-  const effectiveSelectorFlushManagerOrFrequency =
-    getStoreSelectorFlushManagerSource<TState, R, ARGS>(store) ?? selectorFlushManagerOrFrequency;
   const effectiveTraceReporter = traceReporter ?? getStoreSelectorTraceReporter<TState, R, ARGS>(store);
   const effectiveShouldTraceSelectorCache =
     shouldTraceSelectorCache ?? getStoreSelectorCacheTracePredicate<TState, R, ARGS>(store);
-  const selectorFlushManager = typeof effectiveSelectorFlushManagerOrFrequency === "function"
-    ? undefined
-    : resolveSelectorFlushManager(effectiveSelectorFlushManagerOrFrequency);
-  const getSelectorFlushManager = () =>
-    selectorFlushManager ?? resolveSelectorFlushManager(effectiveSelectorFlushManagerOrFrequency);
+  let fallbackSelectorCadenceSource: SelectorCadenceSource | undefined;
+  const getFallbackSelectorCadenceSource = () => {
+    fallbackSelectorCadenceSource ??= resolveSelectorCadenceSource(selectorCadenceSourceOrFrequency);
+    return fallbackSelectorCadenceSource;
+  };
   const boundSelector = (
     store: StoreReadableStateSource<TState>,
     ...restArgs: ReadableArgs<ARGS>
   ): Readable<R> => {
     const readableStoreState = store.getStateObservable();
+    const cadenceSource = getStoreSelectorCadenceSource<TState, R, ARGS>(store) ?? getFallbackSelectorCadenceSource();
 
     return getOrCreate(store, selectorFunc, restArgs, () => {
       const cachedSelector = createCachedSelector<TState, ARGS, R>(selectorFunc, {
@@ -115,7 +114,7 @@ export const createSelectorFromReadableState = <TState = StoreState, ARGS extend
       const derivedStore = derived([readableStoreState, ...readableArgs], ([storeState, ...args]) => {
         return cachedSelector(storeState as TState, ...(args as ARGS));
       });
-      return createThrottledReadable(derivedStore, getSelectorFlushManager());
+      return createThrottledReadable(derivedStore, cadenceSource);
     }, effectiveTraceReporter && effectiveShouldTraceSelectorCache?.() ? { traceReporter: effectiveTraceReporter } : undefined);
   };
 

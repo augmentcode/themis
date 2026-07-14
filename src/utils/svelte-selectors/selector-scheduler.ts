@@ -1,24 +1,41 @@
 import { type Readable, writable } from "svelte/store";
 import {
-  createSelectorFlushManager,
-  type SelectorFlushManager,
+  createSelectorCadenceSource,
+  type SelectorCadenceSource,
 } from "../selector-core/throttled-selector-options";
 
 // ── Throttled readable factory ──────────────────────────────────────
 export function createThrottledReadable<T>(
   source: Readable<T>,
-  selectorFlushManager: SelectorFlushManager = createSelectorFlushManager()
+  selectorCadenceSource: SelectorCadenceSource = createSelectorCadenceSource()
 ): Readable<T> {
 
   let latest: { value: T } | null = null;
+  let pending: { value: T } | null = null;
 
   const store = writable<T>(undefined as T, (set) => {
     let initialized = false;
+    let unsubscribeCadence: (() => void) | null = null;
+
+    const clearScheduledFlush = () => {
+      unsubscribeCadence?.();
+      unsubscribeCadence = null;
+    };
+
+    const scheduleFlush = () => {
+      if (unsubscribeCadence === null) {
+        unsubscribeCadence = selectorCadenceSource.subscribe(flushLatest);
+      }
+    };
 
     const flushLatest = () => {
-      if (latest !== null) {
-        const { value } = latest;
+      if (pending !== null) {
+        const { value } = pending;
+        pending = null;
         set(value);
+      }
+      if (pending === null) {
+        clearScheduledFlush();
       }
     };
 
@@ -29,16 +46,18 @@ export function createThrottledReadable<T>(
       latest = { value };
       if (!initialized) {
         initialized = true;
-        flushLatest();
+        set(value);
         return;
       }
-      selectorFlushManager.requestFlush(flushLatest);
+      pending = { value };
+      scheduleFlush();
     });
 
     return () => {
-      selectorFlushManager.cancelFlush(flushLatest);
+      clearScheduledFlush();
       unsubscribe();
       latest = null;
+      pending = null;
     };
   });
 
