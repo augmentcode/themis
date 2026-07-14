@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1 - 2026-07-14
+
+- Fixed selector cadence to be event-driven so selector updates are requested by Redux store changes instead of ticking continuously while idle.
+- Added regression coverage for idle selector subscriptions and throttled/coalesced updates across store and React store behavior.
+
 ## 0.1.0 - 2026-07-14
 
 - Simplified scheduled selector throttling around store-owned cadence streams and local selector coalescing.
