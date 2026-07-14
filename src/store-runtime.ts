@@ -284,7 +284,7 @@ export abstract class StoreRuntime<
     this.cadencedStoreStateStream = undefined;
   }
 
-  protected getStoreStateStream(): Observable<StoreBoundState<TStateMap>, any> {
+  getStoreStateStream(): Observable<StoreBoundState<TStateMap>, any> {
     if (!this.cadencedStoreStateStream) {
       throw new Error(
         'Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.'
@@ -294,7 +294,7 @@ export abstract class StoreRuntime<
     return this.cadencedStoreStateStream.observable;
   }
 
-  protected getStoreStateSnapshot(): StoreBoundState<TStateMap> {
+  getStoreStateSnapshot(): StoreBoundState<TStateMap> {
     if (!this.cadencedStoreStateStream) {
       throw new Error(
         'Cannot access StoreRuntime.getStoreStateSnapshot() before Store.init() has been called.'
@@ -361,7 +361,20 @@ export abstract class StoreRuntime<
     return storeContext;
   }
 
-  protected getSelectorTraceReporter<
+  init(initialState?: PreloadedStoreState): () => void {
+    const storeContext = this.initStoreContext(initialState);
+    if (!storeContext) {
+      return () => {};
+    }
+
+    this.startSagaManager(storeContext);
+
+    return () => {
+      this.dispose();
+    };
+  }
+
+  getSelectorTraceReporter<
     STATE,
     R,
     ARGS extends unknown[] = [],
@@ -369,7 +382,7 @@ export abstract class StoreRuntime<
     return (trace) => this.reportSelectorTrace(trace);
   }
 
-  protected shouldTraceSelectorCache(): boolean {
+  shouldTraceSelectorCache(): boolean {
     return this.selectorTracingEnabled;
   }
 
