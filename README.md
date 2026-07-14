@@ -138,7 +138,7 @@ Use the public subpackage entrypoints in application code. There is no package r
 
 ## Store options
 
-- `throttledSelectorFrequency` — selector emission coalescing FPS for all three variants; defaults to `64`, accepts any finite value in the inclusive `1..256` range.
+- `throttledSelectorFrequency` — Store-scoped selector cadence cap for all three variants; defaults to `64` FPS, accepts any finite value in the inclusive `1..256` range, and coalesces rapid updates to the latest pending selector result.
 - `sagaMonitor: true` — enables Store-owned redux-saga monitoring; disabled by default, diagnostics only.
 - `traceSelectors: true` — enables selector trace output; disabled by default, diagnostics only.
 

@@ -155,7 +155,7 @@ describe('StreamingStore', () => {
     expect(values).toEqual([0, 2, 3]);
   });
 
-  it('shares one store-scoped flush manager across stream selectors and disposes scheduled work', () => {
+  it('shares one store-scoped cadence source across stream selectors and disposes scheduled work', () => {
     const store = new StreamingStore(
       { counter: counterReducer },
       undefined,

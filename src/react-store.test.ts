@@ -157,7 +157,7 @@ describe('ReactStore', () => {
     expect(mocks.useSignals).toHaveBeenCalledTimes(1);
   });
 
-  it('shares one store-scoped flush manager across signal selectors and disposes scheduled work', () => {
+  it('shares one store-scoped cadence source across signal selectors and disposes scheduled work', () => {
     const store = new ReactStore(
       { counter: counterReducer },
       undefined,
