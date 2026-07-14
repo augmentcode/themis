@@ -431,30 +431,52 @@ describe('Store', () => {
       selectorStore.init();
       const unsubscribeCounter = selectCounter().subscribe((value) => counterValues.push(value));
       const unsubscribeDouble = selectDoubleCounter().subscribe((value) => doubleValues.push(value));
+
+      expect(requestAnimationFrameMock).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+      expect(counterValues).toEqual([0]);
+      expect(doubleValues).toEqual([0]);
+
       selectorStore.dispatch({ type: 'counter/set', payload: 1 });
       selectorStore.dispatch({ type: 'counter/set', payload: 2 });
 
       expect(requestAnimationFrameMock).toHaveBeenCalledTimes(1);
-      expect(counterValues).toEqual([0]);
-      expect(doubleValues).toEqual([0]);
 
       triggerRAF(0);
       expect(counterValues).toEqual([0, 2]);
       expect(doubleValues).toEqual([0, 4]);
       expect(requestAnimationFrameMock).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
 
       selectorStore.dispatch({ type: 'counter/set', payload: 3 });
+      selectorStore.dispatch({ type: 'counter/set', payload: 4 });
       expect(requestAnimationFrameMock).toHaveBeenCalledTimes(1);
       expect(vi.getTimerCount()).toBe(1);
+      vi.advanceTimersByTime(99);
+      expect(counterValues).toEqual([0, 2]);
+      expect(doubleValues).toEqual([0, 4]);
+      expect(requestAnimationFrameMock).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(1);
+      expect(requestAnimationFrameMock).toHaveBeenCalledTimes(2);
+      triggerRAF(100);
+      expect(counterValues).toEqual([0, 2, 4]);
+      expect(doubleValues).toEqual([0, 4, 8]);
+      expect(vi.getTimerCount()).toBe(0);
+      vi.advanceTimersByTime(500);
+      expect(requestAnimationFrameMock).toHaveBeenCalledTimes(2);
+      expect(vi.getTimerCount()).toBe(0);
+
+      selectorStore.dispatch({ type: 'counter/set', payload: 5 });
+      expect(requestAnimationFrameMock).toHaveBeenCalledTimes(3);
       selectorStore.dispose();
       expect(vi.getTimerCount()).toBe(0);
-      triggerRAF(100);
+      triggerRAF(600);
       unsubscribeCounter();
       unsubscribeDouble();
 
-      expect(cancelAnimationFrameMock).not.toHaveBeenCalled();
-      expect(counterValues).toEqual([0, 2]);
-      expect(doubleValues).toEqual([0, 4]);
+      expect(cancelAnimationFrameMock).toHaveBeenCalledTimes(1);
+      expect(counterValues).toEqual([0, 2, 4]);
+      expect(doubleValues).toEqual([0, 4, 8]);
     });
 
     it('recreates selector cadence scheduling safely after dispose and re-init', () => {
