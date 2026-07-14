@@ -2,8 +2,27 @@ export const DEFAULT_THROTTLED_SELECTOR_FREQUENCY = 64;
 export const MIN_THROTTLED_SELECTOR_FREQUENCY = 1;
 export const MAX_THROTTLED_SELECTOR_FREQUENCY = 256;
 
-export type SelectorFlushCallback = (timestamp: number) => void;
+export type SelectorCadenceTickListener = (timestamp: number) => void;
 
+export type SelectorCadenceSource = {
+  readonly frequency: number;
+  readonly frameIntervalMs: number;
+  getSnapshot(): number;
+  subscribe(listener: SelectorCadenceTickListener): () => void;
+  dispose(): void;
+};
+export type SelectorCadenceSourceOptions = {
+  traceSelectors?: boolean;
+};
+export type SelectorCadenceSourceProvider = () => SelectorCadenceSource;
+export type SelectorCadenceSourceSource =
+  | SelectorCadenceSource
+  | SelectorCadenceSourceProvider
+  | number;
+
+export type SelectorFlushCallback = SelectorCadenceTickListener;
+
+/** @deprecated Use SelectorCadenceSource instead. */
 export type SelectorFlushManager = {
   readonly frequency: number;
   readonly frameIntervalMs: number;
@@ -11,13 +30,16 @@ export type SelectorFlushManager = {
   cancelFlush(callback: SelectorFlushCallback): void;
   dispose(): void;
 };
-export type SelectorFlushManagerOptions = {
-  traceSelectors?: boolean;
-};
+/** @deprecated Use SelectorCadenceSourceOptions instead. */
+export type SelectorFlushManagerOptions = SelectorCadenceSourceOptions;
+/** @deprecated Use SelectorCadenceSourceProvider instead. */
 export type SelectorFlushManagerProvider = () => SelectorFlushManager;
+/** @deprecated Use SelectorCadenceSourceSource instead. */
 export type SelectorFlushManagerSource =
   | SelectorFlushManager
   | SelectorFlushManagerProvider
+  | SelectorCadenceSource
+  | SelectorCadenceSourceProvider
   | number;
 
 export const validateThrottledSelectorFrequency = (frequency: number): number => {
@@ -37,44 +59,60 @@ export const validateThrottledSelectorFrequency = (frequency: number): number =>
 
 const hasRAF = (): boolean => typeof requestAnimationFrame === 'function';
 
-const getNextFlushDelay = (
-  lastFlushWallTimeAt: number | null,
+const isSelectorCadenceSource = (source: unknown): source is SelectorCadenceSource => {
+  if (!source || typeof source !== 'object') {
+    return false;
+  }
+
+  return 'subscribe' in source && typeof source.subscribe === 'function';
+};
+
+const isSelectorFlushManager = (source: unknown): source is SelectorFlushManager => {
+  if (!source || typeof source !== 'object') {
+    return false;
+  }
+
+  return 'requestFlush' in source && typeof source.requestFlush === 'function';
+};
+
+const getNextTickDelay = (
+  lastTickWallTimeAt: number | null,
   frameIntervalMs: number,
   now: number,
 ): number => {
-  return lastFlushWallTimeAt === null
+  return lastTickWallTimeAt === null
       ? 0
-      : Math.max(0, frameIntervalMs - (now - lastFlushWallTimeAt));
+      : Math.max(0, frameIntervalMs - (now - lastTickWallTimeAt));
 };
 
-export const createSelectorFlushManager = (
+export const createSelectorCadenceSource = (
   throttledSelectorFrequency = DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
-  options: SelectorFlushManagerOptions = {}
-): SelectorFlushManager => {
+  options: SelectorCadenceSourceOptions = {}
+): SelectorCadenceSource => {
   const frequency = validateThrottledSelectorFrequency(throttledSelectorFrequency);
   const frameIntervalMs = 1000 / frequency;
   const traceSelectors = options.traceSelectors === true;
-  let queuedCallbacks = new Set<SelectorFlushCallback>();
+  const listeners = new Set<SelectorCadenceTickListener>();
   let frameId: number | null = null;
   let timerId: ReturnType<typeof setTimeout> | null = null;
   let timerDueAt: number | null = null;
-  let lastFlushWallTimeAt: number | null = null;
-  let flushingCallbacks: Set<SelectorFlushCallback> | null = null;
+  let lastTickWallTimeAt: number | null = null;
+  let latestTimestamp = 0;
   let disposed = false;
 
-  const hasScheduledFlush = () => frameId !== null || timerId !== null;
+  const hasScheduledTick = () => frameId !== null || timerId !== null;
 
-  const canRunScheduledFlush = () => {
-    if (disposed || queuedCallbacks.size === 0) {
+  const canRunScheduledTick = () => {
+    if (disposed || listeners.size === 0) {
       return false;
     }
     return true;
   };
 
-  const canScheduleFlush = () =>
-    canRunScheduledFlush() && !hasScheduledFlush();
+  const canScheduleTick = () =>
+    canRunScheduledTick() && !hasScheduledTick();
 
-  const clearScheduledFlush = () => {
+  const clearScheduledTick = () => {
     if (frameId !== null) {
       if (typeof cancelAnimationFrame === 'function') {
         cancelAnimationFrame(frameId);
@@ -97,7 +135,7 @@ export const createSelectorFlushManager = (
       }
       timerDueAt = null;
     }
-    runScheduledFlush(timestamp);
+    runScheduledTick(timestamp);
   };
 
   const runTimer = (timestamp: number): void => {
@@ -118,11 +156,11 @@ export const createSelectorFlushManager = (
       scheduleFrame();
       return;
     }
-    runScheduledFlush(timestamp);
+    runScheduledTick(timestamp);
   };
 
   const scheduleFrame = (): void => {
-    if (canScheduleFlush()) {
+    if (canScheduleTick()) {
       frameId = requestAnimationFrame(runFrame);
     }
   };
@@ -135,21 +173,21 @@ export const createSelectorFlushManager = (
     }, timerDelayMs);
   };
 
-  const runScheduledFlush = (
+  const runScheduledTick = (
     timestamp: number,
   ): void => {
-    if (!canRunScheduledFlush()) {
+    if (!canRunScheduledTick()) {
       return;
     }
-    flush(timestamp);
+    tick(timestamp);
   };
 
-  const scheduleFlush = (): void => {
-    if (!canScheduleFlush()) {
+  const scheduleTick = (): void => {
+    if (!canScheduleTick()) {
       return;
     }
-    const delay = getNextFlushDelay(
-      lastFlushWallTimeAt,
+    const delay = getNextTickDelay(
+      lastTickWallTimeAt,
       frameIntervalMs,
       Date.now(),
     );
@@ -164,57 +202,128 @@ export const createSelectorFlushManager = (
     }
   };
 
-  const flush = (timestamp: number): void => {
-    clearScheduledFlush();
-    if (disposed || queuedCallbacks.size === 0) {
+  const tick = (timestamp: number): void => {
+    clearScheduledTick();
+    if (disposed || listeners.size === 0) {
       return;
     }
+    const listenersToNotify = Array.from(listeners);
+    latestTimestamp = Math.max(Date.now(), timestamp);
+    lastTickWallTimeAt = Date.now();
     if (traceSelectors) {
-      console.info('START FLUSHING', Math.max(Date.now(), timestamp));
+      console.info('SELECTOR CADENCE TICK', latestTimestamp, listenersToNotify.length);
     }
-    const callbacksToFlush = queuedCallbacks;
-    queuedCallbacks = new Set();
-    flushingCallbacks = callbacksToFlush;
-    lastFlushWallTimeAt = Date.now();
-    for (const callback of callbacksToFlush) {
-      callback(timestamp);
+    for (const listener of listenersToNotify) {
+      if (listeners.has(listener)) {
+        listener(timestamp);
+      }
     }
-    flushingCallbacks = null;
-    if (traceSelectors) {
-      console.info('FLUSHED', lastFlushWallTimeAt, callbacksToFlush.size);
+    scheduleTick();
+  };
+
+  const unsubscribe = (listener: SelectorCadenceTickListener): void => {
+    listeners.delete(listener);
+    if (listeners.size === 0) {
+      clearScheduledTick();
     }
   };
 
   return {
     frequency,
     frameIntervalMs,
-    requestFlush(callback) {
-      if (traceSelectors) {
-        console.info('REQUEST FLUSH', callback);
-      }
-      if (disposed) {
-        return;
-      }
-      queuedCallbacks.add(callback);
-      if (canScheduleFlush()) {
-        scheduleFlush();
-      }
+    getSnapshot() {
+      return latestTimestamp;
     },
-    cancelFlush(callback) {
-      queuedCallbacks.delete(callback);
-      flushingCallbacks?.delete(callback);
-      if (queuedCallbacks.size === 0) {
-        clearScheduledFlush();
+    subscribe(listener) {
+      if (disposed) {
+        return () => undefined;
       }
+      listeners.add(listener);
+      if (traceSelectors) {
+        console.info('SUBSCRIBE SELECTOR CADENCE', listeners.size);
+      }
+      if (canScheduleTick()) {
+        scheduleTick();
+      }
+      return () => unsubscribe(listener);
     },
     dispose() {
       disposed = true;
-      queuedCallbacks.clear();
-      clearScheduledFlush();
+      listeners.clear();
+      clearScheduledTick();
     },
   };
 };
 
+export const resolveSelectorCadenceSource = (
+  selectorCadenceSourceOrFrequency: SelectorCadenceSourceSource = DEFAULT_THROTTLED_SELECTOR_FREQUENCY
+): SelectorCadenceSource => {
+  if (typeof selectorCadenceSourceOrFrequency === 'number') {
+    return createSelectorCadenceSource(selectorCadenceSourceOrFrequency);
+  }
+  if (typeof selectorCadenceSourceOrFrequency === 'function') {
+    return selectorCadenceSourceOrFrequency();
+  }
+  return selectorCadenceSourceOrFrequency;
+};
+
+/** @deprecated Use createSelectorCadenceSource instead. */
+export const createSelectorFlushManager = (
+  throttledSelectorFrequencyOrSource: number | SelectorCadenceSource = DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
+  options: SelectorFlushManagerOptions = {}
+): SelectorFlushManager => {
+  const ownsCadenceSource = typeof throttledSelectorFrequencyOrSource === 'number';
+  const cadenceSource = ownsCadenceSource
+    ? createSelectorCadenceSource(throttledSelectorFrequencyOrSource, options)
+    : throttledSelectorFrequencyOrSource;
+  const pendingCallbacks = new Map<SelectorFlushCallback, () => void>();
+  let disposed = false;
+
+  const cancelFlush = (callback: SelectorFlushCallback): void => {
+    pendingCallbacks.get(callback)?.();
+    pendingCallbacks.delete(callback);
+  };
+
+  return {
+    frequency: cadenceSource.frequency,
+    frameIntervalMs: cadenceSource.frameIntervalMs,
+    requestFlush(callback) {
+      if (disposed || pendingCallbacks.has(callback)) {
+        return;
+      }
+      if (options.traceSelectors === true) {
+        console.info('REQUEST FLUSH', callback);
+      }
+      let unsubscribe: (() => void) | undefined;
+      const runCallback = (timestamp: number): void => {
+        pendingCallbacks.delete(callback);
+        unsubscribe?.();
+        if (options.traceSelectors === true) {
+          console.info('START FLUSHING', Math.max(Date.now(), timestamp));
+        }
+        callback(timestamp);
+        if (options.traceSelectors === true) {
+          console.info('FLUSHED', Date.now(), 1);
+        }
+      };
+      unsubscribe = cadenceSource.subscribe(runCallback);
+      pendingCallbacks.set(callback, unsubscribe);
+    },
+    cancelFlush,
+    dispose() {
+      disposed = true;
+      for (const unsubscribe of pendingCallbacks.values()) {
+        unsubscribe();
+      }
+      pendingCallbacks.clear();
+      if (ownsCadenceSource) {
+        cadenceSource.dispose();
+      }
+    },
+  };
+};
+
+/** @deprecated Use resolveSelectorCadenceSource instead. */
 export const resolveSelectorFlushManager = (
   selectorFlushManagerOrFrequency: SelectorFlushManagerSource = DEFAULT_THROTTLED_SELECTOR_FREQUENCY
 ): SelectorFlushManager => {
@@ -222,7 +331,13 @@ export const resolveSelectorFlushManager = (
     return createSelectorFlushManager(selectorFlushManagerOrFrequency);
   }
   if (typeof selectorFlushManagerOrFrequency === 'function') {
-    return selectorFlushManagerOrFrequency();
+    return resolveSelectorFlushManager(selectorFlushManagerOrFrequency());
+  }
+  if (isSelectorFlushManager(selectorFlushManagerOrFrequency)) {
+    return selectorFlushManagerOrFrequency;
+  }
+  if (isSelectorCadenceSource(selectorFlushManagerOrFrequency)) {
+    return createSelectorFlushManager(selectorFlushManagerOrFrequency);
   }
   return selectorFlushManagerOrFrequency;
 };

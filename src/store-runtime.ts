@@ -34,7 +34,9 @@ import { registerGlobalDevTools } from './global-dev-tools';
 import { deriveSagaName } from './utils/sagas/derive-saga-name';
 import { normalizeStoreOptions } from './store-options';
 import {
+  createSelectorCadenceSource,
   createSelectorFlushManager,
+  type SelectorCadenceSource,
   type SelectorFlushManager,
 } from './utils/selector-core/throttled-selector-options';
 import {
@@ -110,6 +112,7 @@ export abstract class StoreRuntime<
   private readonly sagaMiddleware: ReturnType<typeof createSagaMiddleware>;
   private tasksStarted: Task[] = [];
   private storeContext: ReduxStoreContext | undefined;
+  private selectorCadenceSource: SelectorCadenceSource | undefined;
   private selectorFlushManager: SelectorFlushManager | undefined;
   private disposeDevTools: (() => void) | undefined;
   private selectorTracingEnabled = false;
@@ -182,10 +185,21 @@ export abstract class StoreRuntime<
     this.tasksStarted = [];
   }
 
+  private getOrCreateSelectorCadenceSource(): SelectorCadenceSource {
+    if (!this.selectorCadenceSource) {
+      this.selectorCadenceSource = createSelectorCadenceSource(
+        this.storeOptions.throttledSelectorFrequency,
+        { traceSelectors: this.storeOptions.traceSelectors }
+      );
+    }
+
+    return this.selectorCadenceSource;
+  }
+
   private getOrCreateSelectorFlushManager(): SelectorFlushManager {
     if (!this.selectorFlushManager) {
       this.selectorFlushManager = createSelectorFlushManager(
-        this.storeOptions.throttledSelectorFrequency,
+        this.getOrCreateSelectorCadenceSource(),
         { traceSelectors: this.storeOptions.traceSelectors }
       );
     }
@@ -193,9 +207,25 @@ export abstract class StoreRuntime<
     return this.selectorFlushManager;
   }
 
-  private disposeSelectorFlushManager(): void {
+  private disposeSelectorCadenceSource(): void {
     this.selectorFlushManager?.dispose();
     this.selectorFlushManager = undefined;
+    this.selectorCadenceSource?.dispose();
+    this.selectorCadenceSource = undefined;
+  }
+
+  /** @deprecated Use disposeSelectorCadenceSource instead. */
+  private disposeSelectorFlushManager(): void {
+    this.disposeSelectorCadenceSource();
+  }
+
+  protected getSelectorCadenceSource(): SelectorCadenceSource {
+    return this.getOrCreateSelectorCadenceSource();
+  }
+
+  /** @deprecated Selector adapters should subscribe to getSelectorCadenceSource(). */
+  protected getSelectorFlushManager(): SelectorFlushManager {
+    return this.getOrCreateSelectorFlushManager();
   }
 
   getReducers(): StoreReducersMap<TStateMap, TReducers> {
@@ -249,10 +279,6 @@ export abstract class StoreRuntime<
     this.storeContext = storeContext;
 
     return storeContext;
-  }
-
-  protected getSelectorFlushManager(): SelectorFlushManager {
-    return this.getOrCreateSelectorFlushManager();
   }
 
   protected getSelectorTraceReporter<

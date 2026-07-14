@@ -1,5 +1,70 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createSelectorFlushManager } from "./throttled-selector-options";
+import {
+  createSelectorCadenceSource,
+  createSelectorFlushManager,
+} from "./throttled-selector-options";
+
+describe("createSelectorCadenceSource", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    vi.stubGlobal("requestAnimationFrame", undefined);
+    vi.stubGlobal("cancelAnimationFrame", undefined);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("emits cadence ticks to subscribers and exposes the latest tick snapshot", () => {
+    const cadenceSource = createSelectorCadenceSource(2.5);
+    const listener = vi.fn();
+
+    const unsubscribe = cadenceSource.subscribe(listener);
+    expect(listener).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(0);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(cadenceSource.getSnapshot()).toBe(0);
+
+    vi.advanceTimersByTime(399);
+    expect(listener).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(1);
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(cadenceSource.getSnapshot()).toBe(400);
+
+    unsubscribe();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("starts on first subscriber and clears scheduled work after last unsubscribe", () => {
+    const cadenceSource = createSelectorCadenceSource(64);
+    const setTimeoutMock = vi.spyOn(globalThis, "setTimeout");
+    const listenerA = vi.fn();
+    const listenerB = vi.fn();
+
+    const unsubscribeA = cadenceSource.subscribe(listenerA);
+    const unsubscribeB = cadenceSource.subscribe(listenerB);
+
+    expect(setTimeoutMock).toHaveBeenCalledTimes(1);
+    unsubscribeA();
+    expect(vi.getTimerCount()).toBe(1);
+    unsubscribeB();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("disposes timer-backed scheduled work", () => {
+    const cadenceSource = createSelectorCadenceSource(64);
+    cadenceSource.subscribe(vi.fn());
+    expect(vi.getTimerCount()).toBe(1);
+
+    cadenceSource.dispose();
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
 
 describe("createSelectorFlushManager", () => {
   beforeEach(() => {
