@@ -1,17 +1,18 @@
 import { signal, type ReadonlySignal, type Signal } from "@preact/signals-react";
 import {
-  createSelectorFlushManager,
-  type SelectorFlushManager,
+  createSelectorCadenceSource,
+  type SelectorCadenceSource,
 } from "../selector-core/throttled-selector-options";
 
 const unsetValue = Symbol("unset-throttled-signal-value");
 
 export const createThrottledSignal = <T>(
   source: ReadonlySignal<T>,
-  selectorFlushManager: SelectorFlushManager = createSelectorFlushManager()
+  selectorCadenceSource: SelectorCadenceSource = createSelectorCadenceSource()
 ): ReadonlySignal<T> => {
   let latest: { value: T } | null = null;
-  let isScheduled = false;
+  let pending: { value: T } | null = null;
+  let unsubscribeCadence: (() => void) | null = null;
   let unsubscribeSource: (() => void) | null = null;
   let output!: Signal<T>;
 
@@ -19,13 +20,26 @@ export const createThrottledSignal = <T>(
     output.value = value;
   };
 
-  const flushLatest = () => {
-    isScheduled = false;
-    if (latest === null) {
-      return;
+  const clearScheduledFlush = () => {
+    unsubscribeCadence?.();
+    unsubscribeCadence = null;
+  };
+
+  const scheduleFlush = () => {
+    if (unsubscribeCadence === null) {
+      unsubscribeCadence = selectorCadenceSource.subscribe(flushLatest);
     }
-    const { value } = latest;
-    output.value = value;
+  };
+
+  const flushLatest = () => {
+    if (pending !== null) {
+      const { value } = pending;
+      pending = null;
+      output.value = value;
+    }
+    if (pending === null) {
+      clearScheduledFlush();
+    }
   };
 
   output = signal(source.value, {
@@ -44,15 +58,16 @@ export const createThrottledSignal = <T>(
           emit(value);
           return;
         }
-        selectorFlushManager.requestFlush(flushLatest);
+        pending = { value };
+        scheduleFlush();
       });
     },
     unwatched() {
       unsubscribeSource?.();
       unsubscribeSource = null;
-      selectorFlushManager.cancelFlush(flushLatest);
+      clearScheduledFlush();
       latest = null;
-      isScheduled = false;
+      pending = null;
     },
   });
 

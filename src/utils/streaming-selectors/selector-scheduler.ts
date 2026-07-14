@@ -1,17 +1,30 @@
 import Kefir, { type Observable } from "kefir";
 import {
-  createSelectorFlushManager,
-  type SelectorFlushManager,
+  createSelectorCadenceSource,
+  type SelectorCadenceSource,
 } from "../selector-core/throttled-selector-options";
 
 export const createThrottledObservable = <T, E = any>(
   source: Observable<T, E>,
-  selectorFlushManager: SelectorFlushManager = createSelectorFlushManager()
+  selectorCadenceSource: SelectorCadenceSource = createSelectorCadenceSource()
 ): Observable<T, E> => {
   return Kefir.stream<T, E>((emitter) => {
     let initialized = false;
     let latest: { value: T } | null = null;
+    let pending: { value: T } | null = null;
     let ended = false;
+    let unsubscribeCadence: (() => void) | null = null;
+
+    const clearScheduledFlush = () => {
+      unsubscribeCadence?.();
+      unsubscribeCadence = null;
+    };
+
+    const scheduleFlush = () => {
+      if (unsubscribeCadence === null) {
+        unsubscribeCadence = selectorCadenceSource.subscribe(flushLatest);
+      }
+    };
 
     const finishIfNeeded = () => {
       if (ended) {
@@ -20,11 +33,15 @@ export const createThrottledObservable = <T, E = any>(
     };
 
     const flushLatest = () => {
-      if (latest !== null) {
-        const { value } = latest;
+      if (pending !== null) {
+        const { value } = pending;
+        pending = null;
         emitter.value(value);
       }
-      finishIfNeeded();
+      if (pending === null) {
+        clearScheduledFlush();
+        finishIfNeeded();
+      }
     };
 
     const subscription = source.observe({
@@ -38,15 +55,16 @@ export const createThrottledObservable = <T, E = any>(
           emitter.value(value);
           return;
         }
-        selectorFlushManager.requestFlush(flushLatest);
+        pending = { value };
+        scheduleFlush();
       },
       error(error) {
         emitter.error(error);
       },
       end() {
         ended = true;
-        if (latest !== null) {
-          selectorFlushManager.requestFlush(flushLatest);
+        if (pending !== null) {
+          scheduleFlush();
           return;
         }
         finishIfNeeded();
@@ -54,8 +72,9 @@ export const createThrottledObservable = <T, E = any>(
     });
 
     return () => {
-      selectorFlushManager.cancelFlush(flushLatest);
+      clearScheduledFlush();
       latest = null;
+      pending = null;
       ended = true;
       subscription.unsubscribe();
     };
