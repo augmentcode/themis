@@ -6,6 +6,7 @@ import {
 
 const unsetValue = Symbol("unset-throttled-signal-value");
 
+/** @deprecated Store-created selectors now derive from cadenced Store state signals. */
 export const createThrottledSignal = <T>(
   source: ReadonlySignal<T>,
   selectorCadenceSource: SelectorCadenceSource = createSelectorCadenceSource()
