@@ -3,7 +3,7 @@ import { createArchitectureRule } from "../../rule-utils.mjs";
 
 export const ruleId = "duplicate-selector-export";
 
-const selectorFactories = new Set(["createSelector", "createCollectionItemSelector", "createCollectionItemsListSelector"]);
+const selectorFactories = new Set(["createSelector"]);
 
 function declarationName(node) {
   return node?.type === "VariableDeclarator" && node.id?.type === "Identifier" ? node.id.name : undefined;

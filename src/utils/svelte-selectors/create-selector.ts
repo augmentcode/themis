@@ -1,13 +1,11 @@
 import type {
-  CreateSelector,
   StoreState,
-  StoreReadableStateSource,
-  StoreRuntimeSelectorSource,
   StoreSelector,
   ReadableArgs,
   StoreSelectorCallback,
 } from "../../types";
-import type { Collection } from "../collections/collection-utils";
+import { StoreRuntime } from "../../store-runtime";
+import type { Store } from "../../svelte-store";
 import { readable, get, type Readable } from "svelte/store";
 import type { Observable } from "kefir";
 import { select } from "typed-redux-saga";
@@ -53,6 +51,17 @@ const readReadableArg = <T>(arg: T | Readable<T>): T => {
   return arg;
 };
 
+type SvelteState<TStore> = StoreState<TStore>;
+
+export type CreateSvelteSelector = <
+  TStore extends Store<any, any>,
+  ARGS extends any[] = [],
+  R = unknown,
+>(
+  store: TStore,
+  selectorFunc: StoreSelectorCallback<R, ARGS, SvelteState<TStore>>
+) => StoreSelector<R, ARGS, SvelteState<TStore>, TStore>;
+
 const kefirSelectorPropertyToReadable = <R>(
   selected: KefirSelectorProperty<R>
 ): Readable<R> => {
@@ -66,65 +75,30 @@ const kefirSelectorPropertyToReadable = <R>(
   });
 };
 
-const isReadableStateSource = <TState = StoreState>(arg: unknown): arg is StoreRuntimeSelectorSource<TState> => {
-  if (!arg || typeof arg !== "object") {
-    return false;
-  }
+const isStoreRuntime = (arg: unknown): arg is StoreRuntime<any, any> => arg instanceof StoreRuntime;
 
-  const maybeRuntimeSource = arg as {
-    getStoreStateStream?: unknown;
-    getStoreStateSnapshot?: unknown;
-  };
-  return "state" in arg
-    && typeof maybeRuntimeSource.getStoreStateStream === "function"
-    && typeof maybeRuntimeSource.getStoreStateSnapshot === "function";
-};
-
-type StoreSelectorRuntimeSource<TState, R, ARGS extends unknown[]> = {
-  getSelectorTraceReporter?: <STATE = TState, RESULT = R, SELECTOR_ARGS extends unknown[] = ARGS>() => SelectorTraceReporter<STATE, RESULT, SELECTOR_ARGS>;
-  shouldTraceSelectorCache?: () => boolean;
-};
-
-const getStoreSelectorTraceReporter = <TState, R, ARGS extends unknown[]>(
-  stateSource: StoreReadableStateSource<TState>
-): SelectorTraceReporter<TState, R, ARGS> | undefined => {
-  const getSelectorTraceReporter = (stateSource as StoreSelectorRuntimeSource<TState, R, ARGS>).getSelectorTraceReporter;
-  return typeof getSelectorTraceReporter === "function"
-    ? getSelectorTraceReporter.call(stateSource) as SelectorTraceReporter<TState, R, ARGS>
-    : undefined;
-};
-
-const getStoreSelectorCacheTracePredicate = <TState, R, ARGS extends unknown[]>(
-  stateSource: StoreReadableStateSource<TState>
-): (() => boolean) | undefined => {
-  const shouldTraceSelectorCache = (stateSource as StoreSelectorRuntimeSource<TState, R, ARGS>).shouldTraceSelectorCache;
-  return typeof shouldTraceSelectorCache === "function"
-    ? () => shouldTraceSelectorCache.call(stateSource)
-    : undefined;
-};
-
-export const createSelectorFromReadableState = <TState = StoreState, ARGS extends any[] = [], R = unknown>(
-  store: StoreRuntimeSelectorSource<TState>,
-  selectorFunc: StoreSelectorCallback<R, ARGS, TState>,
+export const createSelectorFromReadableState = <TStore extends Store<any, any>, ARGS extends any[] = [], R = unknown>(
+  store: TStore,
+  selectorFunc: StoreSelectorCallback<R, ARGS, SvelteState<TStore>>,
   selectorCadenceSourceOrFrequency: SelectorCadenceSourceSource = DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
-  traceReporter?: SelectorTraceReporter<TState, R, ARGS>,
+  traceReporter?: SelectorTraceReporter<SvelteState<TStore>, R, ARGS>,
   shouldTraceSelectorCache?: () => boolean
-): StoreSelector<R, ARGS, TState> => {
-  if (!isReadableStateSource(store)) {
+): StoreSelector<R, ARGS, SvelteState<TStore>, TStore> => {
+  if (!isStoreRuntime(store)) {
     throw new TypeError("createSelectorFromReadableState requires a Store-like state source as the first argument.");
   }
 
-  const effectiveTraceReporter = traceReporter ?? getStoreSelectorTraceReporter<TState, R, ARGS>(store);
+  const effectiveTraceReporter = traceReporter ?? store.getSelectorTraceReporter<SvelteState<TStore>, R, ARGS>();
   const effectiveShouldTraceSelectorCache =
-    shouldTraceSelectorCache ?? getStoreSelectorCacheTracePredicate<TState, R, ARGS>(store);
+    shouldTraceSelectorCache ?? (() => store.shouldTraceSelectorCache());
   void selectorCadenceSourceOrFrequency;
   const boundSelector = (
-    store: StoreRuntimeSelectorSource<TState>,
+    store: TStore,
     ...restArgs: ReadableArgs<ARGS>
   ): Readable<R> => {
     return getOrCreate(store, selectorFunc, restArgs, () => {
       const argProperties = restArgs.map(readableArgToKefirProperty);
-      const selected = createKefirSelectorProperty<TState, ARGS, R>(
+      const selected = createKefirSelectorProperty<TStore, ARGS, R>(
         store,
         selectorFunc,
         argProperties,
@@ -132,15 +106,15 @@ export const createSelectorFromReadableState = <TState = StoreState, ARGS extend
         effectiveTraceReporter
       );
       return kefirSelectorPropertyToReadable(selected);
-    }, effectiveTraceReporter && effectiveShouldTraceSelectorCache?.() ? { traceReporter: effectiveTraceReporter } : undefined);
+    }, effectiveShouldTraceSelectorCache() ? { traceReporter: effectiveTraceReporter } : undefined);
   };
 
   const readableSelector = ((...restArgs: ReadableArgs<ARGS>) => {
     return boundSelector(store, ...restArgs);
-  }) as StoreSelector<R, ARGS, TState>;
+  }) as StoreSelector<R, ARGS, SvelteState<TStore>, TStore>;
 
   readableSelector.withStore =
-    (store: StoreRuntimeSelectorSource<TState>) =>
+    (store: TStore) =>
     (...args: ReadableArgs<ARGS>) => {
       return boundSelector(store, ...args);
     };
@@ -153,57 +127,14 @@ export const createSelectorFromReadableState = <TState = StoreState, ARGS extend
   return readableSelector;
 };
 
-const createSelectorImpl = <TStore extends StoreRuntimeSelectorSource<any>, ARGS extends any[] = [], R = unknown>(
+const createSelectorImpl = <TStore extends Store<any, any>, ARGS extends any[] = [], R = unknown>(
   store: TStore,
-  selectorFunc: StoreSelectorCallback<R, ARGS, StoreState<TStore>>
-): StoreSelector<R, ARGS, StoreState<TStore>> => {
-  if (!isReadableStateSource(store)) {
-    throw new TypeError("createSelector requires a Store instance as the first argument.");
-  }
-
-  if (typeof selectorFunc !== "function") {
-    throw new TypeError("createSelector requires a selector function as the second argument.");
-  }
-
+  selectorFunc: StoreSelectorCallback<R, ARGS, SvelteState<TStore>>
+): StoreSelector<R, ARGS, SvelteState<TStore>, TStore> => {
   return createSelectorFromReadableState(
     store,
     selectorFunc
   );
 };
 
-export const createSelector = createSelectorImpl as CreateSelector;
-
-export const createCollectionItemSelector = <
-  ITEM extends object,
-  K extends keyof ITEM & string,
-  TStore extends StoreRuntimeSelectorSource<any> = StoreRuntimeSelectorSource<StoreState>,
->(
-  store: TStore,
-  collectionSelector: StoreSelectorCallback<Collection<ITEM, K>, any[], StoreState<TStore>>
-) => {
-  return createSelector(
-    store,
-    (state, itemId: ITEM[K] & string): ITEM | undefined => {
-      if (!itemId) return undefined;
-      const collection = collectionSelector(state);
-      return collection.map[itemId];
-    }
-  );
-};
-
-export const createCollectionItemsListSelector = <
-  ITEM extends object,
-  K extends keyof ITEM & string,
-  F extends (...args: any) => boolean,
-  TStore extends StoreRuntimeSelectorSource<any> = StoreRuntimeSelectorSource<StoreState>,
->(
-  store: TStore,
-  collectionSelector: StoreSelectorCallback<Collection<ITEM, K>, any[], StoreState<TStore>>,
-  itemFilter?: F
-) => {
-  return createSelector(store, (state): ITEM[] => {
-    const { map, ids } = collectionSelector(state);
-    const list = ids.map((id) => map[id]);
-    return itemFilter ? list.filter(itemFilter) : list;
-  });
-};
+export const createSelector = createSelectorImpl as CreateSvelteSelector;

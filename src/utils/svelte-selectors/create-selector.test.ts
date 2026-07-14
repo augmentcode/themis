@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { get, writable, type Writable } from "svelte/store";
 import type { Observable as KefirObservable } from "kefir";
-import type { StoreReadableStateSource, StoreState } from "../../types";
-import type { Collection } from "../collections/collection-utils";
+import type { StoreState } from "../../types";
 import { INTERNAL_STORE_UTILITY_DOMAIN } from "../store/store-runtime-constants";
+import { Store } from "../../svelte-store";
 
 const mocks = vi.hoisted(() => ({
   select: vi.fn((selector: unknown, ...args: unknown[]) => ({ kind: "select", selector, args })),
@@ -13,11 +13,8 @@ vi.mock("typed-redux-saga", () => ({
   select: mocks.select,
 }));
 
-import { createCollection } from "../collections/collection-utils";
 import { createKefirPropertyFromSubscribe } from "../selector-core/kefir-selector";
 import {
-  createCollectionItemSelector,
-  createCollectionItemsListSelector,
   createSelector,
   createSelectorFromReadableState,
 } from "./create-selector";
@@ -27,7 +24,6 @@ type CounterState = StoreState & {
   [INTERNAL_STORE_UTILITY_DOMAIN]: { updatesLocked: boolean };
 };
 
-type Todo = { id: string; text: string; completed: boolean };
 type InternalUtilityTestState = {
   [INTERNAL_STORE_UTILITY_DOMAIN]: { updatesLocked: boolean };
 };
@@ -37,27 +33,61 @@ const withUtility = <T extends StoreState>(state: T): T & InternalUtilityTestSta
   [INTERNAL_STORE_UTILITY_DOMAIN]: { updatesLocked: false },
 });
 
-type RuntimeReadableStateSource<TState> = StoreReadableStateSource<TState> & {
-  getStoreStateStream(): KefirObservable<TState, any>;
-  getStoreStateSnapshot(): TState;
-};
+class MockReadableRuntimeStore<TState extends StoreState> extends Store<any, any> {
+  readonly getStoreStateStreamMock = vi.fn();
+  readonly getStoreStateSnapshotMock = vi.fn();
+
+  constructor(
+    private readonly readState: () => TState,
+    private readonly stateStream: KefirObservable<TState, any>,
+    private readonly streamError?: Error
+  ) {
+    super();
+  }
+
+  override get state(): TState {
+    return this.readState();
+  }
+
+  override getStoreStateStream(): KefirObservable<TState, any> {
+    this.getStoreStateStreamMock();
+    if (this.streamError) {
+      throw this.streamError;
+    }
+    return this.stateStream;
+  }
+
+  override getStoreStateSnapshot(): TState {
+    this.getStoreStateSnapshotMock();
+    return this.readState();
+  }
+}
 
 const createMockStoreBinding = <TState extends StoreState>(
   storeState: Writable<TState>
-): RuntimeReadableStateSource<TState> => {
+): MockReadableRuntimeStore<TState> => {
   const stateStream = createKefirPropertyFromSubscribe(
     () => get(storeState),
     (listener) => storeState.subscribe(listener)
   );
 
-  return {
-    get state() {
-      return get(storeState);
-    },
-    getStoreStateStream: vi.fn(() => stateStream),
-    getStoreStateSnapshot: vi.fn(() => get(storeState)),
-  };
+  return new MockReadableRuntimeStore(() => get(storeState), stateStream);
 };
+
+const assertPlainReadableStateSourceRejected = () => {
+  const state = withUtility({ counter: { count: 1 } });
+  const plainStoreLike = {
+    state,
+    getStoreStateStream: () => createKefirPropertyFromSubscribe(() => state, () => () => {}),
+    getStoreStateSnapshot: () => state,
+  };
+
+  // @ts-expect-error Plain structural state sources are not Store instances.
+  createSelector(plainStoreLike, (state) => state.counter.count);
+  // @ts-expect-error Plain structural state sources are not Store instances.
+  createSelectorFromReadableState(plainStoreLike, (state) => state.counter.count);
+};
+void assertPlainReadableStateSourceRejected;
 
 describe("createSelector", () => {
   beforeEach(() => {
@@ -130,7 +160,7 @@ describe("createSelector", () => {
     const selectCount = createSelectorFromReadableState(selectorStore, (state) => state.counter.count);
 
     expect(selectCount()).toBe(selectCount());
-    expect(selectorStore.getStoreStateStream).toHaveBeenCalledTimes(2);
+    expect(selectorStore.getStoreStateStreamMock).toHaveBeenCalledTimes(1);
   });
 
   it("keys cached selector readables by object identity and argument order", () => {
@@ -166,15 +196,12 @@ describe("createSelector", () => {
   });
 
   it("propagates StoreRuntime state stream initialization guard errors", () => {
-    const selectorStore: RuntimeReadableStateSource<CounterState> = {
-      get state() {
-        return withUtility({ counter: { count: 0 } });
-      },
-      getStoreStateStream: vi.fn(() => {
-        throw new Error("Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.");
-      }),
-      getStoreStateSnapshot: vi.fn(() => withUtility({ counter: { count: 0 } })),
-    };
+    const state = withUtility({ counter: { count: 0 } });
+    const selectorStore = new MockReadableRuntimeStore(
+      () => state,
+      createKefirPropertyFromSubscribe(() => state, () => () => {}),
+      new Error("Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.")
+    );
     const selectCount = createSelector(selectorStore, (state) => state.counter.count);
 
     expect(() => selectCount()).toThrow(
@@ -186,7 +213,7 @@ describe("createSelector", () => {
     const selectorFn = (state: CounterState) => state.counter.count;
 
     expect(() => (createSelector as unknown as (selectorFunc: unknown) => unknown)(selectorFn)).toThrow(
-      "createSelector requires a Store instance as the first argument."
+      "createSelectorFromReadableState requires a Store-like state source as the first argument."
     );
   });
 
@@ -202,7 +229,7 @@ describe("createSelector", () => {
     vi.advanceTimersByTime(16);
     unsubscribe();
 
-    expect(overrideStore.getStoreStateStream).toHaveBeenCalledTimes(1);
+    expect(overrideStore.getStoreStateStreamMock).toHaveBeenCalledTimes(1);
     expect(values).toEqual([5, 7]);
   });
 
@@ -230,47 +257,5 @@ describe("createSelector", () => {
 
     expect(selectCountFromA()).toBe(selectCountFromA());
     expect(selectCountFromA()).not.toBe(selectCountFromB());
-  });
-});
-
-describe("collection selector helpers", () => {
-  const todos = createCollection<Todo, "id">("id", [
-    { id: "a", text: "Write tests", completed: false },
-    { id: "b", text: "Review tests", completed: true },
-  ]);
-  const state = withUtility({ todos });
-  const selectTodosCollection = (state: StoreState): Collection<Todo, "id"> => state.todos;
-
-  it("creates item selectors with typed undefined handling", () => {
-    const selectorStore = createMockStoreBinding(writable(state));
-    const selectTodo = createCollectionItemSelector<Todo, "id">(selectorStore, selectTodosCollection);
-
-    const found = selectTodo.select(state, "b");
-    const missing = selectTodo.select(state, "missing");
-
-    expectTypeOf(found).toEqualTypeOf<Todo | undefined>();
-    expect(found).toEqual({ id: "b", text: "Review tests", completed: true });
-    expect(missing).toBeUndefined();
-    expect(selectTodo.select(state, "")).toBeUndefined();
-  });
-
-  it("creates ordered list selectors with optional item filtering", () => {
-    const selectorStore = createMockStoreBinding(writable(state));
-    const selectTodos = createCollectionItemsListSelector<Todo, "id", (todo: Todo) => boolean>(
-      selectorStore,
-      selectTodosCollection
-    );
-    const selectCompletedTodos = createCollectionItemsListSelector<Todo, "id", (todo: Todo) => boolean>(
-      selectorStore,
-      selectTodosCollection,
-      (todo) => todo.completed
-    );
-
-    const allTodos = selectTodos.select(state);
-    const completedTodos = selectCompletedTodos.select(state);
-
-    expectTypeOf(allTodos).toEqualTypeOf<Todo[]>();
-    expect(allTodos.map((todo) => todo.id)).toEqual(["a", "b"]);
-    expect(completedTodos).toEqual([{ id: "b", text: "Review tests", completed: true }]);
   });
 });
