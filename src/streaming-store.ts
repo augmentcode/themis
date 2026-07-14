@@ -1,12 +1,10 @@
-import Kefir, { type Observable } from 'kefir';
+import { type Observable } from 'kefir';
 import {
   type PreloadedStoreState,
   type StoreOptions,
   type StoreSelectorCallback,
-  type StoreState,
   type StoreStateMap,
 } from './types';
-import type { ReduxStore } from './internal-types';
 import {
   StoreRuntime,
   type StoreBoundState,
@@ -19,12 +17,6 @@ import {
 } from './utils/streaming-selectors/create-selector';
 
 export type { StoreOptions } from './types';
-
-const createStoreStateStream = (store: ReduxStore): Observable<StoreState, any> => {
-  return Kefir.stream<StoreState, never>((emitter) => {
-    return store.subscribe(() => emitter.value(store.getState()));
-  }).toProperty(() => store.getState());
-};
 
 /**
  * Kefir/observable Store variant. Its selectors return Kefir streams when
@@ -54,7 +46,7 @@ export class StreamingStore<
       return () => {};
     }
 
-    this.streamState = createStoreStateStream(storeContext.store) as Observable<
+    this.streamState = this.getStoreStateStream() as Observable<
       StoreBoundState<TStateMap>,
       any
     >;

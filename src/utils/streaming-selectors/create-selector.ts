@@ -9,12 +9,15 @@ import {
 import { getOrCreate } from "../selector-core/selector-output-cache";
 import { areStoreUpdatesLocked } from "../selector-core/store-update-lock";
 import {
+  createConstantKefirProperty,
+  createKefirSelectorProperty,
+  getRuntimeKefirStateSource,
+  isKefirObservable,
+} from "../selector-core/kefir-selector";
+import {
   DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
-  type SelectorCadenceSource,
   type SelectorCadenceSourceSource,
-  resolveSelectorCadenceSource,
 } from "../selector-core/throttled-selector-options";
-import { createThrottledObservable } from "./selector-scheduler";
 
 export { createCachedSelector };
 
@@ -25,7 +28,6 @@ export type StoreStreamingStateSource<TState = StoreState> = {
 type StreamingState<TStore> = TStore extends StoreStreamingStateSource<infer TState> ? TState : StoreState<TStore>;
 
 type StoreSelectorRuntimeSource<TState, R, ARGS extends unknown[]> = {
-  getSelectorCadenceSource?: () => SelectorCadenceSource;
   getSelectorTraceReporter?: <STATE = TState, RESULT = R, SELECTOR_ARGS extends unknown[] = ARGS>() => SelectorTraceReporter<STATE, RESULT, SELECTOR_ARGS>;
   shouldTraceSelectorCache?: () => boolean;
 };
@@ -53,29 +55,12 @@ export type CreateStreamingSelector = <
   selectorFunc: StoreSelectorCallback<R, ARGS, StreamingState<TStore>>
 ) => StoreStreamingSelector<R, ARGS, StreamingState<TStore>>;
 
-const isKefirObservable = <T = any>(arg: unknown): arg is Observable<T, any> => {
-  if (!arg || typeof arg !== "object") {
-    return false;
-  }
-
-  return "observe" in arg && typeof arg.observe === "function";
-};
-
 const isStreamingStateSource = <TState = StoreState>(arg: unknown): arg is StoreStreamingStateSource<TState> => {
   if (!arg || typeof arg !== "object") {
     return false;
   }
 
   return "getStateObservable" in arg && typeof arg.getStateObservable === "function";
-};
-
-const getStoreSelectorCadenceSource = <TState, R, ARGS extends unknown[]>(
-  stateSource: StoreStreamingStateSource<TState>
-): SelectorCadenceSource | undefined => {
-  const getSelectorCadenceSource = (stateSource as StoreSelectorRuntimeSource<TState, R, ARGS>).getSelectorCadenceSource;
-  return typeof getSelectorCadenceSource === "function"
-    ? getSelectorCadenceSource.call(stateSource)
-    : undefined;
 };
 
 const getStoreSelectorTraceReporter = <TState, R, ARGS extends unknown[]>(
@@ -101,8 +86,10 @@ const toKefirObservable = <T>(arg: T | Observable<T, any>): Observable<T, any> =
     return arg;
   }
 
-  return Kefir.constant(arg);
+  return createConstantKefirProperty(arg);
 };
+
+const hasObservableArgs = (args: unknown[]): boolean => args.some(isKefirObservable);
 
 export const createSelectorFromStreamState = <TState = StoreState, ARGS extends any[] = [], R = unknown>(
   store: StoreStreamingStateSource<TState>,
@@ -118,19 +105,26 @@ export const createSelectorFromStreamState = <TState = StoreState, ARGS extends 
   const effectiveTraceReporter = traceReporter ?? getStoreSelectorTraceReporter<TState, R, ARGS>(store);
   const effectiveShouldTraceSelectorCache =
     shouldTraceSelectorCache ?? getStoreSelectorCacheTracePredicate<TState, R, ARGS>(store);
-  let fallbackSelectorCadenceSource: SelectorCadenceSource | undefined;
-  const getFallbackSelectorCadenceSource = () => {
-    fallbackSelectorCadenceSource ??= resolveSelectorCadenceSource(selectorCadenceSourceOrFrequency);
-    return fallbackSelectorCadenceSource;
-  };
+  void selectorCadenceSourceOrFrequency;
   const boundSelector = (
     store: StoreStreamingStateSource<TState>,
     ...restArgs: StreamingArgs<ARGS>
   ): Observable<R, any> => {
     const streamStoreState = store.getStateObservable();
-    const cadenceSource = getStoreSelectorCadenceSource<TState, R, ARGS>(store) ?? getFallbackSelectorCadenceSource();
+    const runtimeStateSource = getRuntimeKefirStateSource<TState>(store);
 
     return getOrCreate(store, selectorFunc, restArgs, () => {
+      if (runtimeStateSource && !hasObservableArgs(restArgs)) {
+        const selected = createKefirSelectorProperty<TState, ARGS, R>(
+          runtimeStateSource,
+          selectorFunc,
+          restArgs.map(createConstantKefirProperty),
+          () => restArgs as ARGS,
+          effectiveTraceReporter
+        );
+        return selected.property;
+      }
+
       const cachedSelector = createCachedSelector<TState, ARGS, R>(selectorFunc, {
         lockUpdatesPredicate: areStoreUpdatesLocked,
         traceReporter: effectiveTraceReporter,
@@ -144,7 +138,7 @@ export const createSelectorFromStreamState = <TState = StoreState, ARGS extends 
         return cachedSelector(storeState as TState, ...(args as ARGS));
       });
 
-      return createThrottledObservable(selected, cadenceSource).toProperty();
+      return selected.skipDuplicates().toProperty();
     }, effectiveTraceReporter && effectiveShouldTraceSelectorCache?.() ? { traceReporter: effectiveTraceReporter } : undefined);
   };
 

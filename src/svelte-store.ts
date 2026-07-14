@@ -1,4 +1,5 @@
-import type { Readable } from 'svelte/store';
+import { readable, type Readable } from 'svelte/store';
+import type { Observable, Subscription } from 'kefir';
 import {
   type PreloadedStoreState,
   type StoreOptions,
@@ -15,10 +16,25 @@ import {
 import type { ReduxStoreContext } from './internal-types';
 import { getStoreContext } from './utils/runtime-svelte/utils';
 import { createSelectorFromReadableState } from './utils/svelte-selectors/create-selector';
-import { createStoreStateReadable } from './utils/svelte-selectors/create-readable-store-state';
 
 export type { StoreOptions } from './types';
 export { getDispatch } from './utils/runtime-svelte/utils';
+
+const createReadableFromStoreStateStream = <TState>(
+  storeStateStream: Observable<TState, any>,
+  getSnapshot: () => TState
+): Readable<TState> => {
+  return readable(getSnapshot(), (set) => {
+    set(getSnapshot());
+    const subscription: Subscription = storeStateStream.observe((state) => {
+      set(state);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  });
+};
 
 /**
  * Canonical Svelte-readable Store. Its selectors return Svelte Readable values
@@ -56,9 +72,10 @@ export class Store<
       return () => {};
     }
 
-    this.readableState = createStoreStateReadable(storeContext.store) as Readable<
-      StoreBoundState<TStateMap>
-    >;
+    this.readableState = createReadableFromStoreStateStream<StoreBoundState<TStateMap>>(
+      this.getStoreStateStream(),
+      () => this.getStoreStateSnapshot()
+    );
     this.startSagaManager(storeContext);
 
     return () => {

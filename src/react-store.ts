@@ -1,4 +1,5 @@
 import { signal, type ReadonlySignal, type Signal } from '@preact/signals-react';
+import type { Observable, Subscription } from 'kefir';
 import {
   type PreloadedStoreState,
   type StoreOptions,
@@ -17,6 +18,65 @@ import {
 } from './utils/react-selectors/create-selector';
 
 export type { StoreOptions } from './types';
+
+const createSignalFromStoreStateStream = <TState>(
+  storeStateStream: Observable<TState, any>,
+  getSnapshot: () => TState
+): { signalState: Signal<TState>; dispose: () => void } => {
+  let activeWatchers = 0;
+  let subscription: Subscription | null = null;
+
+  const stopObserving = () => {
+    subscription?.unsubscribe();
+    subscription = null;
+  };
+
+  const emit = (state: TState) => {
+    if (signalState.value !== state) {
+      signalState.value = state;
+    }
+  };
+
+  const emitSnapshotIfAvailable = () => {
+    try {
+      emit(getSnapshot());
+    } catch {
+      // StoreRuntime may already be disposed when React signal watchers unsubscribe.
+    }
+  };
+
+  const startObserving = () => {
+    if (subscription === null) {
+      subscription = storeStateStream.observe((state) => emit(state));
+    }
+  };
+
+  const signalState = signal(getSnapshot(), {
+    watched() {
+      const wasInactive = activeWatchers === 0;
+      activeWatchers += 1;
+      if (wasInactive) {
+        emitSnapshotIfAvailable();
+        startObserving();
+      }
+    },
+    unwatched() {
+      activeWatchers = Math.max(0, activeWatchers - 1);
+      if (activeWatchers === 0) {
+        stopObserving();
+        emitSnapshotIfAvailable();
+      }
+    },
+  });
+
+  return {
+    signalState,
+    dispose() {
+      stopObserving();
+      activeWatchers = 0;
+    },
+  };
+};
 
 /**
  * React signal Store variant. Its selectors return Preact React signals when
@@ -47,10 +107,12 @@ export class ReactStore<
       return () => {};
     }
 
-    this.signalState = signal(storeContext.store.getState() as StoreBoundState<TStateMap>);
-    this.disposeSignalState = storeContext.store.subscribe(() => {
-      this.signalState!.value = storeContext.store.getState() as StoreBoundState<TStateMap>;
-    });
+    const cadencedSignalState = createSignalFromStoreStateStream<StoreBoundState<TStateMap>>(
+      this.getStoreStateStream(),
+      () => this.getStoreStateSnapshot()
+    );
+    this.signalState = cadencedSignalState.signalState;
+    this.disposeSignalState = cadencedSignalState.dispose;
     this.startSagaManager(storeContext);
 
     return () => {
@@ -74,6 +136,7 @@ export class ReactStore<
       );
     }
 
+    this.signalState.value = this.getStoreStateSnapshot();
     return this.signalState;
   }
 

@@ -7,8 +7,8 @@ import type {
   StoreSelectorCallback,
 } from "../../types";
 import type { Collection } from "../collections/collection-utils";
-import { readable, derived, type Readable } from "svelte/store";
-import { createThrottledReadable } from "./selector-scheduler";
+import { readable, derived, get, type Readable } from "svelte/store";
+import type { Observable } from "kefir";
 import { select } from "typed-redux-saga";
 import {
   createCachedSelector,
@@ -17,10 +17,15 @@ import {
 import { getOrCreate } from "../selector-core/selector-output-cache";
 import { areStoreUpdatesLocked } from "../selector-core/store-update-lock";
 import {
+  createConstantKefirProperty,
+  createKefirPropertyFromSubscribe,
+  createKefirSelectorProperty,
+  getRuntimeKefirStateSource,
+  type KefirSelectorProperty,
+} from "../selector-core/kefir-selector";
+import {
   DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
-  type SelectorCadenceSource,
   type SelectorCadenceSourceSource,
-  resolveSelectorCadenceSource,
 } from "../selector-core/throttled-selector-options";
 
 export { createCachedSelector };
@@ -33,6 +38,35 @@ const isReadable = <T = any>(arg: unknown): arg is Readable<T> => {
   return "subscribe" in arg && typeof arg.subscribe === "function";
 };
 
+const readableArgToKefirProperty = <T>(arg: T | Readable<T>): Observable<T, any> => {
+  if (isReadable<T>(arg)) {
+    return createKefirPropertyFromSubscribe(() => get(arg), (listener) => arg.subscribe(listener));
+  }
+
+  return createConstantKefirProperty(arg);
+};
+
+const readReadableArg = <T>(arg: T | Readable<T>): T => {
+  if (isReadable<T>(arg)) {
+    return get(arg);
+  }
+
+  return arg;
+};
+
+const kefirSelectorPropertyToReadable = <R>(
+  selected: KefirSelectorProperty<R>
+): Readable<R> => {
+  return readable(selected.getSnapshot(), (set) => {
+    set(selected.getSnapshot());
+    const subscription = selected.property.observe((value) => set(value));
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  });
+};
+
 const isReadableStateSource = <TState = StoreState>(arg: unknown): arg is StoreReadableStateSource<TState> => {
   if (!arg || typeof arg !== "object") {
     return false;
@@ -42,18 +76,8 @@ const isReadableStateSource = <TState = StoreState>(arg: unknown): arg is StoreR
 };
 
 type StoreSelectorRuntimeSource<TState, R, ARGS extends unknown[]> = {
-  getSelectorCadenceSource?: () => SelectorCadenceSource;
   getSelectorTraceReporter?: <STATE = TState, RESULT = R, SELECTOR_ARGS extends unknown[] = ARGS>() => SelectorTraceReporter<STATE, RESULT, SELECTOR_ARGS>;
   shouldTraceSelectorCache?: () => boolean;
-};
-
-const getStoreSelectorCadenceSource = <TState, R, ARGS extends unknown[]>(
-  stateSource: StoreReadableStateSource<TState>
-): SelectorCadenceSource | undefined => {
-  const getSelectorCadenceSource = (stateSource as StoreSelectorRuntimeSource<TState, R, ARGS>).getSelectorCadenceSource;
-  return typeof getSelectorCadenceSource === "function"
-    ? getSelectorCadenceSource.call(stateSource)
-    : undefined;
 };
 
 const getStoreSelectorTraceReporter = <TState, R, ARGS extends unknown[]>(
@@ -88,19 +112,27 @@ export const createSelectorFromReadableState = <TState = StoreState, ARGS extend
   const effectiveTraceReporter = traceReporter ?? getStoreSelectorTraceReporter<TState, R, ARGS>(store);
   const effectiveShouldTraceSelectorCache =
     shouldTraceSelectorCache ?? getStoreSelectorCacheTracePredicate<TState, R, ARGS>(store);
-  let fallbackSelectorCadenceSource: SelectorCadenceSource | undefined;
-  const getFallbackSelectorCadenceSource = () => {
-    fallbackSelectorCadenceSource ??= resolveSelectorCadenceSource(selectorCadenceSourceOrFrequency);
-    return fallbackSelectorCadenceSource;
-  };
+  void selectorCadenceSourceOrFrequency;
   const boundSelector = (
     store: StoreReadableStateSource<TState>,
     ...restArgs: ReadableArgs<ARGS>
   ): Readable<R> => {
     const readableStoreState = store.getStateObservable();
-    const cadenceSource = getStoreSelectorCadenceSource<TState, R, ARGS>(store) ?? getFallbackSelectorCadenceSource();
+    const runtimeStateSource = getRuntimeKefirStateSource<TState>(store);
 
     return getOrCreate(store, selectorFunc, restArgs, () => {
+      if (runtimeStateSource) {
+        const argProperties = restArgs.map(readableArgToKefirProperty);
+        const selected = createKefirSelectorProperty<TState, ARGS, R>(
+          runtimeStateSource,
+          selectorFunc,
+          argProperties,
+          () => restArgs.map(readReadableArg) as ARGS,
+          effectiveTraceReporter
+        );
+        return kefirSelectorPropertyToReadable(selected);
+      }
+
       const cachedSelector = createCachedSelector<TState, ARGS, R>(selectorFunc, {
         lockUpdatesPredicate: areStoreUpdatesLocked,
         traceReporter: effectiveTraceReporter,
@@ -114,7 +146,15 @@ export const createSelectorFromReadableState = <TState = StoreState, ARGS extend
       const derivedStore = derived([readableStoreState, ...readableArgs], ([storeState, ...args]) => {
         return cachedSelector(storeState as TState, ...(args as ARGS));
       });
-      return createThrottledReadable(derivedStore, cadenceSource);
+      let hasEmitted = false;
+      let lastEmitted: R;
+      return derived(derivedStore, (value, set) => {
+        if (!hasEmitted || value !== lastEmitted) {
+          hasEmitted = true;
+          lastEmitted = value;
+          set(value);
+        }
+      });
     }, effectiveTraceReporter && effectiveShouldTraceSelectorCache?.() ? { traceReporter: effectiveTraceReporter } : undefined);
   };
 

@@ -46,7 +46,7 @@ export type AppState = StoreInstanceState<typeof store>;
 
 `StoreInstanceState<typeof store>` is the same shape available inside `store.createSelector` callbacks: each reducer domain is inferred as its state object, not as the reducer function or reducer helper object used to configure the Store.
 
-Svelte-readable, React signal, and StreamingStore selector emissions are driven by a Store-scoped cadence source that defaults to `64` FPS. To tune coalescing, pass Store options as the final constructor argument. The cadence is capped by `throttledSelectorFrequency`; the value must be finite and within the inclusive `1..256` FPS range. Fractional values such as `48.5` are accepted, and invalid values throw instead of clamping.
+Svelte-readable, React signal, and StreamingStore selector emissions derive from one StoreRuntime-owned Kefir store-state property that is driven by a Store-scoped cadence source defaulting to `64` FPS. React and Svelte stores adapt that internal Kefir property to their public signal/readable interfaces, while StreamingStore exposes the Kefir observable shape directly. To tune Store-state coalescing, pass Store options as the final constructor argument. The cadence is capped by `throttledSelectorFrequency`; the value must be finite and within the inclusive `1..256` FPS range. Fractional values such as `48.5` are accepted, and invalid values throw instead of clamping.
 
 ```typescript
 export const store = new Store(
@@ -148,7 +148,7 @@ function TodoTitle({ id }: { id: string }) {
 }
 ```
 
-Direct signal calls and `.useValue(...args)` are driven by the owning `ReactStore`'s Store-scoped cadence source and capped by `throttledSelectorFrequency`. Selector arguments may be plain values or `ReadonlySignal` values; signal arguments are read reactively by the computed selector. Keep `.useValue(...args)` for third-party components, legacy hook boundaries, or other places that must receive plain `R`.
+Direct signal calls and `.useValue(...args)` derive from the owning `ReactStore`'s cadenced state signal and are capped by `throttledSelectorFrequency` for Store-state changes. Selector arguments may be plain values or `ReadonlySignal` values; signal arguments are read reactively by the computed selector and may update the selector result immediately. Keep `.useValue(...args)` for third-party components, legacy hook boundaries, or other places that must receive plain `R`.
 
 ### 3. In Sagas (`.effect()` and selector-channel helpers)
 
@@ -199,7 +199,7 @@ export const selectTodoCountStream = streamStore.createSelector((state) => state
 const todoCount$ = selectTodoCountStream(); // Returns Kefir Observable<number, any>
 ```
 
-Streaming selectors emit their first available value promptly. Subsequent rapid Store state updates or observable selector argument updates are coalesced by the Store-scoped cadence source capped by `throttledSelectorFrequency`, and only the latest pending selector result emits at the scheduled moment.
+Streaming selectors emit their first available value promptly. Subsequent rapid Store state updates are coalesced by the Store-owned state observable on cadence ticks capped by `throttledSelectorFrequency`, and only changed latest-current selector results emit from that cadenced state source. Observable selector argument updates may recompute and emit immediately when the selected result changes.
 
 ---
 
@@ -224,7 +224,7 @@ export const selectTodoById = store.createSelector((state, todoId: string) => {
 
 ### Store-Owned Update Scheduling
 
-Selector emissions are scheduled and coalesced by the Store/selector internals so rapid Redux writes do not force unnecessary UI or stream consumer work. Svelte-readable `Store` selectors, React signal `ReactStore` selectors, and Kefir-based `StreamingStore` selectors subscribe to a Store-scoped cadence source whose maximum tick rate comes from the configured `throttledSelectorFrequency` Store constructor option, defaulting to `64` FPS. Each selector keeps its own latest pending value and emits only that latest value on a cadence tick. Selector trace output is a separate default-off diagnostic; pass `{ traceSelectors: true }` in the same final Store options object only while diagnosing selector scheduling, and omit it or pass `false` for normal silent behavior. There is no public lock/unlock action API; model batching through ordinary action design, saga orchestration, and selectors that derive the final UI value.
+Selector emissions are scheduled and coalesced by a shared StoreRuntime-owned Kefir state property so rapid Redux writes do not force unnecessary UI or stream consumer work. Svelte-readable `Store` selectors, React signal `ReactStore` selectors, and Kefir-based `StreamingStore` selectors derive from that same cadenced Store state source and convert only at their public boundaries; the maximum state tick rate comes from the configured `throttledSelectorFrequency` Store constructor option, defaulting to `64` FPS. Selectors then compute from the latest cadenced state value, compare with the last emitted result where the API supports distinctness, and allow readable/signal/observable selector argument changes to update immediately when only arguments change the result. Because StoreRuntime now owns that Kefir property, all Store variants require the optional `kefir` peer to be present at runtime; package metadata may need to make that contract non-optional in a future dependency-contract update. Selector trace output is a separate default-off diagnostic; pass `{ traceSelectors: true }` in the same final Store options object only while diagnosing selector scheduling, and omit it or pass `false` for normal silent behavior. There is no public lock/unlock action API; model batching through ordinary action design, saga orchestration, and selectors that derive the final UI value.
 
 Because Store-created selectors already cache accessed state paths, track arguments, reuse same-source/same-selector/same-stable-args direct outputs, and coalesce emissions, do not add extra memoization, manual cache maps, debounce/throttle wrappers, `requestAnimationFrame` schedulers, or writable/signal proxies around selector callbacks or selector calls solely for performance. Use normal selector composition with `.select(state, ...args)` inside another selector, pass primitive scalar selector arguments where possible, and tune the public Store constructor options when UI/stream coalescing needs an explicit FPS.
 
