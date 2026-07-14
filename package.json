@@ -322,7 +322,6 @@
   "svelte": "./dist/index.js",
   "peerDependencies": {
     "@preact/signals-react": "^3.10.1",
-    "kefir": "^3.8.8",
     "react": "^18.0.0 || ^19.0.0",
     "svelte": "^5.0.0"
   },
@@ -380,6 +379,7 @@
   ],
   "dependencies": {
     "fast-equals": "^6.0.0",
+    "kefir": "^3.8.8",
     "redux": "^5.0.1",
     "redux-saga": "^1.4.2",
     "typed-redux-saga": "^1.5.0"

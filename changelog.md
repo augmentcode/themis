@@ -5,6 +5,7 @@
 - Simplified scheduled selector throttling around store-owned cadence streams and local selector coalescing.
 - Removed obsolete selector flush, scheduler, cached-selector, and cadence getter internals from runtime/store APIs.
 - Updated selector runtime initialization and store type usage to rely on direct Store APIs.
+- Moved Kefir into runtime dependencies to match StoreRuntime's direct Kefir cadence stream usage.
 - Cleaned up packaged skills and docs guidance for the removed observable state APIs and selector cleanup.
 
 ## 0.0.4 - 2026-07-13
