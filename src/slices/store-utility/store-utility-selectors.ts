@@ -8,10 +8,19 @@ const selectUpdatesLockedCallback = (state: Record<string, any>) => {
   return storeUtilityState?.updatesLocked === true;
 };
 
-const unboundStoreUtilityStateSource: StoreReadableStateSource<Record<string, any>> = {
-  getStateObservable() {
+const unboundStoreUtilityStateSource = {
+  get state(): Record<string, any> {
+    throw new Error("selectUpdatesLocked state access requires a Store-bound selector.");
+  },
+  getStoreStateStream() {
     throw new Error("selectUpdatesLocked readable usage requires a Store-bound selector.");
   },
+  getStoreStateSnapshot() {
+    throw new Error("selectUpdatesLocked readable usage requires a Store-bound selector.");
+  },
+} satisfies StoreReadableStateSource<Record<string, any>> & {
+  getStoreStateStream(): never;
+  getStoreStateSnapshot(): never;
 };
 
 export const selectUpdatesLocked = createSelectorFromReadableState(

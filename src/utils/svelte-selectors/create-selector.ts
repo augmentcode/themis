@@ -19,7 +19,7 @@ import {
   createConstantKefirProperty,
   createKefirPropertyFromSubscribe,
   createKefirSelectorProperty,
-  requireRuntimeKefirStateSource,
+  getRuntimeKefirStateSource,
   type KefirSelectorProperty,
 } from "../selector-core/kefir-selector";
 import {
@@ -71,7 +71,12 @@ const isReadableStateSource = <TState = StoreState>(arg: unknown): arg is StoreR
     return false;
   }
 
-  return "getStateObservable" in arg && typeof arg.getStateObservable === "function";
+  const maybeRuntimeSource = arg as {
+    getStoreStateStream?: unknown;
+    getStoreStateSnapshot?: unknown;
+  };
+  return typeof maybeRuntimeSource.getStoreStateStream === "function"
+    && typeof maybeRuntimeSource.getStoreStateSnapshot === "function";
 };
 
 type StoreSelectorRuntimeSource<TState, R, ARGS extends unknown[]> = {
@@ -116,7 +121,10 @@ export const createSelectorFromReadableState = <TState = StoreState, ARGS extend
     store: StoreReadableStateSource<TState>,
     ...restArgs: ReadableArgs<ARGS>
   ): Readable<R> => {
-    const runtimeStateSource = requireRuntimeKefirStateSource<TState>(store);
+    const runtimeStateSource = getRuntimeKefirStateSource<TState>(store);
+    if (!runtimeStateSource) {
+      throw new TypeError("Store-created selectors require a StoreRuntime Kefir state source.");
+    }
 
     return getOrCreate(store, selectorFunc, restArgs, () => {
       const argProperties = restArgs.map(readableArgToKefirProperty);
