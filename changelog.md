@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2 - 2026-08-10
+
+- Fixed selector notifications so Svelte readables and shared Kefir-backed selector outputs suppress unchanged primitive and shallow-equal values.
+- Evicted Store-scoped selector output caches during disposal, preserving isolation between Store instances and creating fresh Svelte, React, and Streaming outputs after re-initialization.
+- Expanded lifecycle, cache invalidation, and event-driven cadence coverage for explicit tick requests, coalescing, rate limiting, listener cleanup, disposal, and idle timer behavior.
+
 ## 0.1.1 - 2026-07-14
 
 - Fixed selector cadence to be event-driven so selector updates are requested by Redux store changes instead of ticking continuously while idle.
