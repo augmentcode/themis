@@ -549,17 +549,55 @@ describe('Store', () => {
       );
     });
 
-    it('clears the runtime state stream on dispose', () => {
+    it('clears the runtime state stream and cached selector output on dispose', () => {
       const selectUpdatesLocked = store.createSelector(
         (state) => state[INTERNAL_STORE_UTILITY_DOMAIN].updatesLocked
       );
 
       store.init();
+      const output = selectUpdatesLocked();
+      expect(selectUpdatesLocked()).toBe(output);
       store.dispose();
 
       expect(() => selectUpdatesLocked()).toThrow(
         'Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.'
       );
+    });
+
+    it('creates a fresh readable selector output after dispose and re-init', () => {
+      vi.useFakeTimers();
+      vi.stubGlobal('requestAnimationFrame', undefined);
+      vi.stubGlobal('cancelAnimationFrame', undefined);
+      const reducer = Object.assign(
+        (state = { value: 0 }, action: any) => {
+          return action.type === 'counter/set' ? { value: action.payload } : state;
+        },
+        { initialState: { value: 0 } }
+      );
+      const selectorStore = new Store({ counter: reducer });
+      const selectCounter = selectorStore.createSelector((state) => state.counter.value);
+
+      selectorStore.init();
+      const previousOutput = selectCounter();
+      selectorStore.dispose();
+
+      expect(() => selectCounter()).toThrow(
+        'Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.'
+      );
+
+      selectorStore.init({ counter: { value: 5 } });
+      const freshOutput = selectCounter();
+      const values: number[] = [];
+      const unsubscribe = freshOutput.subscribe((value) => values.push(value));
+
+      expect(freshOutput).not.toBe(previousOutput);
+      expect(values).toEqual([5]);
+
+      selectorStore.dispatch({ type: 'counter/set', payload: 6 });
+      vi.advanceTimersByTime(0);
+      unsubscribe();
+
+      expect(values).toEqual([5, 6]);
     });
   });
 
@@ -733,15 +771,19 @@ describe('Store', () => {
   });
 
   describe('dispose', () => {
-    it('does not throw before init', () => {
-      expect(() => store.dispose()).not.toThrow();
+    it('does not throw before init or when called repeatedly', () => {
+      expect(() => {
+        store.dispose();
+        store.dispose();
+      }).not.toThrow();
     });
 
-    it('cancels the manager task started during init', () => {
+    it('cancels the manager task once across repeated dispose calls', () => {
       const managerTask = { cancel: vi.fn() };
       mockedRunStoreSaga.mockReturnValueOnce(managerTask as any);
 
       store.init();
+      store.dispose();
       store.dispose();
 
       expect(managerTask.cancel).toHaveBeenCalledTimes(1);

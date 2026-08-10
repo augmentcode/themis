@@ -218,4 +218,31 @@ describe('StreamingStore', () => {
       'Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.'
     );
   });
+
+  it('creates a fresh streaming selector output after dispose and re-init', () => {
+    const store = new StreamingStore({ counter: counterReducer });
+    const selectCount = store.createSelector((state) => state.counter.count);
+
+    store.init();
+    const previousOutput = selectCount();
+    store.dispose();
+
+    expect(() => selectCount()).toThrow(
+      'Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.'
+    );
+
+    store.init({ counter: { count: 5 } });
+    const freshOutput = selectCount();
+    const values: number[] = [];
+    const subscription = freshOutput.observe((value) => values.push(value));
+
+    expect(freshOutput).not.toBe(previousOutput);
+    expect(values).toEqual([5]);
+
+    store.dispatch({ type: 'counter/set', payload: 6 });
+    vi.advanceTimersByTime(0);
+    subscription.unsubscribe();
+
+    expect(values).toEqual([5, 6]);
+  });
 });
