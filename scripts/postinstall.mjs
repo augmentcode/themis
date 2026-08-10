@@ -5,6 +5,7 @@
  *
  * Safety guarantees:
  *  - Writes only under the consumer project root's .agents/skills/themis/ directory
+ *  - Creates only a compatibility link at .claude/skills/themis; never copies skill files there
  *  - Refreshes a previous install first using the installed-skills.yml manifest
  *  - Preserves user-authored files that are not listed in the manifest
  *  - Removes package-owned copies left in the legacy flat .agents/skills/ location
@@ -19,9 +20,12 @@ import {
   lstatSync,
   mkdirSync,
   readdirSync,
+  readlinkSync,
   readFileSync,
+  realpathSync,
   rmSync,
   rmdirSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
@@ -30,6 +34,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const defaultPackageRoot = resolve(__dirname, "..");
 export const skillInstallDirName = "themis";
+export const claudeSkillsDirName = ".claude";
 export const installedSkillsManifestFileName = "installed-skills.yml";
 export const legacyPackageSkillNames = [
   "svelte-redux-toolkit",
@@ -199,6 +204,140 @@ export function readInstalledSkillsManifest(manifestPath, { logger = console } =
       `[themis] ignoring unreadable ${installedSkillsManifestFileName} manifest (${err.message}); previously installed files will not be refreshed.`
     );
     return undefined;
+  }
+}
+
+function resolveFilesystemPath(path) {
+  try {
+    return resolve(realpathSync(path));
+  } catch {
+    return resolve(path);
+  }
+}
+
+function pathsAreEqual(left, right) {
+  const normalizedLeft = resolveFilesystemPath(left);
+  const normalizedRight = resolveFilesystemPath(right);
+  return process.platform === "win32"
+    ? normalizedLeft.toLowerCase() === normalizedRight.toLowerCase()
+    : normalizedLeft === normalizedRight;
+}
+
+function linkTargetResolvesTo(linkPath, expectedTarget) {
+  let linkTarget;
+  try {
+    linkTarget = resolve(dirname(linkPath), readlinkSync(linkPath, "utf8"));
+  } catch {
+    return false;
+  }
+  return pathsAreEqual(linkTarget, expectedTarget);
+}
+
+function removeEmptyDirectories(paths) {
+  let pruned = 0;
+  for (const directory of [...paths].sort((left, right) => right.length - left.length)) {
+    try {
+      if (lstatSync(directory).isDirectory() && readdirSync(directory).length === 0) {
+        rmdirSync(directory);
+        pruned += 1;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return pruned;
+}
+
+export function ensureClaudeSkillCompatibilityLink({ projectRoot, canonicalInstall, logger = console } = {}) {
+  const resolvedProjectRoot = resolve(projectRoot);
+  const resolvedCanonicalInstall = resolve(canonicalInstall);
+  const claudeRoot = resolve(resolvedProjectRoot, claudeSkillsDirName);
+  const claudeSkillsRoot = resolve(claudeRoot, "skills");
+  const compatibilityPath = resolve(claudeSkillsRoot, skillInstallDirName);
+  const createdDirectories = [];
+
+  for (const directory of [claudeRoot, claudeSkillsRoot]) {
+    try {
+      const stat = lstatSync(directory);
+      if (!stat.isDirectory() || stat.isSymbolicLink()) {
+        logger.warn(`[themis] Claude skill compatibility link skipped: ${directory} is an existing non-owned path.`);
+        removeEmptyDirectories(createdDirectories);
+        return { status: "collision", path: compatibilityPath, target: resolvedCanonicalInstall };
+      }
+    } catch {
+      try {
+        mkdirSync(directory);
+        createdDirectories.push(directory);
+      } catch (err) {
+        logger.warn(`[themis] Claude skill compatibility link could not create ${directory}: ${err.message}`);
+        removeEmptyDirectories(createdDirectories);
+        return { status: "error", path: compatibilityPath, target: resolvedCanonicalInstall };
+      }
+    }
+  }
+
+  try {
+    lstatSync(compatibilityPath);
+    if (linkTargetResolvesTo(compatibilityPath, resolvedCanonicalInstall)) {
+      logger.log("[themis] Claude skill compatibility link reused: .claude/skills/themis -> .agents/skills/themis.");
+      return { status: "reused", path: compatibilityPath, target: resolvedCanonicalInstall };
+    }
+
+    logger.warn(
+      `[themis] Claude skill compatibility link skipped: .claude/skills/themis is an existing non-owned path; it was preserved.`
+    );
+    return { status: "collision", path: compatibilityPath, target: resolvedCanonicalInstall };
+  } catch {
+    try {
+      const linkTarget = process.platform === "win32"
+        ? resolvedCanonicalInstall
+        : toPosixPath(relative(claudeSkillsRoot, resolvedCanonicalInstall));
+      symlinkSync(linkTarget, compatibilityPath, process.platform === "win32" ? "junction" : "dir");
+      logger.log("[themis] Claude skill compatibility link created: .claude/skills/themis -> .agents/skills/themis.");
+      return { status: "created", path: compatibilityPath, target: resolvedCanonicalInstall };
+    } catch (err) {
+      logger.warn(`[themis] Claude skill compatibility link could not be created: ${err.message}`);
+      removeEmptyDirectories(createdDirectories);
+      return { status: "error", path: compatibilityPath, target: resolvedCanonicalInstall };
+    }
+  }
+}
+
+export function removeClaudeSkillCompatibilityLink({ projectRoot, canonicalInstall, logger = console } = {}) {
+  const resolvedProjectRoot = resolve(projectRoot);
+  const resolvedCanonicalInstall = resolve(canonicalInstall);
+  const claudeRoot = resolve(resolvedProjectRoot, claudeSkillsDirName);
+  const claudeSkillsRoot = resolve(claudeRoot, "skills");
+  const compatibilityPath = resolve(claudeSkillsRoot, skillInstallDirName);
+
+  for (const parent of [claudeRoot, claudeSkillsRoot]) {
+    try {
+      const stat = lstatSync(parent);
+      if (stat.isSymbolicLink() || !stat.isDirectory()) {
+        logger.warn(`[themis] cleanup-skills preserved foreign Claude compatibility parent: ${parent}.`);
+        return { status: "foreign", path: compatibilityPath, removed: 0, pruned: 0 };
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  try {
+    const stat = lstatSync(compatibilityPath);
+    if (!stat.isSymbolicLink()) {
+      return { status: "collision", path: compatibilityPath, removed: 0, pruned: 0 };
+    }
+    if (!linkTargetResolvesTo(compatibilityPath, resolvedCanonicalInstall)) {
+      logger.warn("[themis] cleanup-skills preserved foreign .claude/skills/themis link.");
+      return { status: "foreign", path: compatibilityPath, removed: 0, pruned: 0 };
+    }
+
+    rmSync(compatibilityPath, { force: true });
+    const pruned = removeEmptyDirectories([claudeSkillsRoot, claudeRoot]);
+    logger.log(`[themis] cleanup-skills removed the owned Claude skill compatibility link (${pruned} empty dirs pruned).`);
+    return { status: "removed", path: compatibilityPath, removed: 1, pruned };
+  } catch {
+    return { status: "absent", path: compatibilityPath, removed: 0, pruned: 0 };
   }
 }
 
@@ -376,16 +515,22 @@ export function copyPackagedSkillsToProject({
   };
   writeFileSync(manifestPath, serializeInstalledSkillsManifest(manifest));
 
+  const compatibilityLink = ensureClaudeSkillCompatibilityLink({
+    projectRoot: resolvedProjectRoot,
+    canonicalInstall: installDest,
+    logger,
+  });
+
   const removed = refresh.removed + legacy.removed;
   const pruned = refresh.pruned + legacy.pruned;
 	const commandLabel = resolvedSkillInstallTarget === "all" ? "install-skills" : `install-skills:${resolvedSkillInstallTarget}`;
 	logger.log(
-		`[themis] ${commandLabel} copied packaged skills to .agents/skills/themis/ (${copied} copied, ${updated} updated, ${unchanged} unchanged, ${removed} stale removed, ${pruned} empty dirs pruned).`
+		`[themis] ${commandLabel} copied packaged skills to .agents/skills/themis/ (${copied} copied, ${updated} updated, ${unchanged} unchanged, ${removed} stale removed, ${pruned} empty dirs pruned; Claude link ${compatibilityLink.status}).`
 	);
 
   return {
-    installed: copied > 0 || updated > 0,
-    skipped: copied === 0 && updated === 0 && removed === 0 && pruned === 0,
+    installed: copied > 0 || updated > 0 || compatibilityLink.status === "created",
+    skipped: copied === 0 && updated === 0 && removed === 0 && pruned === 0 && compatibilityLink.status !== "created",
     projectRoot: resolvedProjectRoot,
     destination: installDest,
     manifestPath,
@@ -394,6 +539,7 @@ export function copyPackagedSkillsToProject({
     unchanged,
     removed,
     pruned,
+		compatibilityLink,
 		skillInstallTarget: resolvedSkillInstallTarget,
   };
 }

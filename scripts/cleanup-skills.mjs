@@ -20,6 +20,7 @@ import {
   findConsumerProjectRoot,
   installedSkillsManifestFileName,
   readInstalledSkillsManifest,
+  removeClaudeSkillCompatibilityLink,
   removeInstalledManifestFiles,
   removeLegacyFlatSkillCopies,
   skillInstallDirName,
@@ -42,6 +43,14 @@ export function cleanupSkillsFromProject({ packageRoot = defaultPackageRoot, pro
   const manifest = readInstalledSkillsManifest(manifestPath, { logger });
   let removed = 0;
   let pruned = 0;
+
+  const compatibilityLink = removeClaudeSkillCompatibilityLink({
+    projectRoot: resolvedProjectRoot,
+    canonicalInstall: installDest,
+    logger,
+  });
+  removed += compatibilityLink.removed;
+  pruned += compatibilityLink.pruned;
 
   if (manifest) {
     const refresh = removeInstalledManifestFiles({ installDest, files: manifest.files, logger });
@@ -70,18 +79,18 @@ export function cleanupSkillsFromProject({ packageRoot = defaultPackageRoot, pro
     logger.log(
       `[themis] cleanup-skills found no ${installedSkillsManifestFileName} manifest in .agents/skills/themis/; no skill files were removed.`
     );
-    return { removed: 0, skipped: true, reason: "missing-manifest" };
+    return { removed: 0, skipped: true, reason: "missing-manifest", compatibilityLink };
   }
 
   if (removed > 0 || pruned > 0) {
 			logger.log(
-				`[themis] cleanup-skills removed package-installed AI skills from .agents/skills/themis/ (${removed} files removed, ${pruned} empty dirs pruned).`
+				`[themis] cleanup-skills removed package-installed AI skills from .agents/skills/themis/ (${removed} files or links removed, ${pruned} empty dirs pruned; Claude link ${compatibilityLink.status}).`
 			);
 	} else {
 		logger.log("[themis] cleanup-skills found no package-installed skill files; no changes were made.");
   }
 
-  return { removed, pruned, skipped: removed === 0 && pruned === 0 };
+  return { removed, pruned, skipped: removed === 0 && pruned === 0, compatibilityLink };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

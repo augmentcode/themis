@@ -10,7 +10,7 @@ import {
   type StoreReducersInput,
 } from './store-runtime';
 import { createSelector as createReactSelector } from './utils/react-selectors/create-selector';
-import type { StoreReactSelector } from './utils/types';
+import type { StoreReactSelector } from './utils/react-selectors/types';
 
 export type { StoreOptions } from './types';
 

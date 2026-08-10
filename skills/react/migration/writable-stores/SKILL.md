@@ -3,7 +3,7 @@ name: react/migration/writable-stores
 description: >-
   Convert shared mutable React state to actions and reducers. React sources
   include useState/useReducer, context providers, custom hooks, or external
-  mutable stores; Svelte writable/$state primitives are non-applicable contrasts.
+  mutable stores.
 type: sub-skill
 requires:
   - core/actions
@@ -18,7 +18,8 @@ triggers:
 
 Shared mutable React state maps to serializable slice state, action creators, andpure reducers. Keep component-local ephemeral UI state in React.
 
-Svelte `writable`, `readable`, and `$state` examples are not React sourcepatterns. The React equivalents are `useState`, `useReducer`, context providerstate, custom hook state, and external mutable stores.
+React source patterns include `useState`, `useReducer`, context provider state,
+custom hook state, and external mutable stores.
 
 ## Before: shared React context state
 

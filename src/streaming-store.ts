@@ -10,7 +10,7 @@ import {
   type StoreReducersInput,
 } from './store-runtime';
 import { createSelector as createStreamingSelector } from './utils/streaming-selectors/create-selector';
-import type { StoreStreamingSelector } from './utils/types';
+import type { StoreStreamingSelector } from './utils/streaming-selectors/types';
 
 export type { StoreOptions } from './types';
 

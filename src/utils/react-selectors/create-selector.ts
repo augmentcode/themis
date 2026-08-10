@@ -5,7 +5,7 @@ import { select } from "typed-redux-saga";
 import { StoreRuntime } from "../../store-runtime";
 import type { ReactStore } from "../../react-store";
 import type { StoreSelectorCallback, StoreState } from "../../types";
-import type { SignalArgs, StoreReactSelector } from "../types";
+import type { SignalArgs, StoreReactSelector } from "./types";
 import { createCachedSelector } from "../selector-core/create-cached-selector";
 import { getOrCreate } from "../selector-core/selector-output-cache";
 import {
@@ -16,7 +16,7 @@ import {
 import type { KefirSelectorProperty } from "../types";
 
 export { createCachedSelector };
-export type { SignalArgs, StoreReactSelector } from "../types";
+export type { SignalArgs, StoreReactSelector } from "./types";
 
 type SignalState<TStore> = StoreState<TStore>;
 
