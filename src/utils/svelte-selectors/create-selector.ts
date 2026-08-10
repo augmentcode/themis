@@ -1,7 +1,5 @@
 import type {
   StoreState,
-  StoreSelector,
-  ReadableArgs,
   StoreSelectorCallback,
 } from "../../types";
 import { StoreRuntime } from "../../store-runtime";
@@ -17,8 +15,10 @@ import {
   createKefirSelectorProperty,
 } from "../selector-core/kefir-selector";
 import type { KefirSelectorProperty } from "../types";
+import type { SvelteReadableArgs, SvelteStoreSelector } from "./types";
 
 export { createCachedSelector };
+export type { SvelteReadableArgs, SvelteStoreSelector } from "./types";
 
 const isReadable = <T = any>(arg: unknown): arg is Readable<T> => {
   if (!arg || typeof arg !== "object") {
@@ -72,14 +72,14 @@ const isStoreRuntime = (arg: unknown): arg is StoreRuntime<any, any> => arg inst
 export const createSelector = <TStore extends Store<any, any>, ARGS extends any[] = [], R = unknown>(
   store: TStore,
   selectorFunc: StoreSelectorCallback<R, ARGS, SvelteState<TStore>>
-): StoreSelector<R, ARGS, SvelteState<TStore>, TStore> => {
+): SvelteStoreSelector<R, ARGS, SvelteState<TStore>, TStore> => {
   if (!isStoreRuntime(store)) {
     throw new TypeError("createSelector requires a Store-like state source as the first argument.");
   }
 
   const boundSelector = (
     store: TStore,
-    ...restArgs: ReadableArgs<ARGS>
+    ...restArgs: SvelteReadableArgs<ARGS>
   ): Readable<R> => {
     const traceReporter = store.getSelectorTraceReporter<SvelteState<TStore>, R, ARGS>();
 
@@ -96,13 +96,13 @@ export const createSelector = <TStore extends Store<any, any>, ARGS extends any[
     }, store.shouldTraceSelectorCache() ? { traceReporter } : undefined);
   };
 
-  const readableSelector = ((...restArgs: ReadableArgs<ARGS>) => {
+  const readableSelector = ((...restArgs: SvelteReadableArgs<ARGS>) => {
     return boundSelector(store, ...restArgs);
-  }) as StoreSelector<R, ARGS, SvelteState<TStore>, TStore>;
+  }) as SvelteStoreSelector<R, ARGS, SvelteState<TStore>, TStore>;
 
   readableSelector.withStore =
     (store: TStore) =>
-    (...args: ReadableArgs<ARGS>) => {
+    (...args: SvelteReadableArgs<ARGS>) => {
       return boundSelector(store, ...args);
     };
 

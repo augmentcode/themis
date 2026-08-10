@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3 - 2026-08-10
+
+- Isolated React, Svelte, and Streaming skill guidance, decoupled shared runtime imports from UI frameworks, and added regression coverage for the boundary.
+- Added safe Claude-compatible skill linking alongside the canonical `.agents/skills/themis` install tree and clarified package/skill installation workflows.
+
 ## 0.1.2 - 2026-08-10
 
 - Fixed selector notifications so Svelte readables and shared Kefir-backed selector outputs suppress unchanged primitive and shallow-equal values.

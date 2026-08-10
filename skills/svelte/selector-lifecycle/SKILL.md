@@ -28,9 +28,7 @@ triggers:
 - Debugging `lifecycle_outside_component` crashes.
 - Moving selector reads across component initialization boundaries.
 
-Use this lifecycle only for apps that chose the Svelte Store family. Do not apply
-ReactStore/signal `.useValue(...)` or StreamingStore/Kefir selector invocation,
-observation, setup, or teardown rules in the same app/package/code path.
+Use this lifecycle for apps that chose the Svelte Store family.
 
 ## Call-mode map
 
@@ -57,10 +55,8 @@ observation, setup, or teardown rules in the same app/package/code path.
 - Do not import standalone dispatch helpers; use `store.dispatch(action)` on the configured Store instance.
 - Do not pass the selector object itself to saga `select`; use `.effect()` or `.select` intentionally.
 - Do not make selector-channel effects call or subscribe to direct Svelte readables;
-  they read the Redux store from saga context and share the `.select`/`.effect`
-  selector shape with ReactStore and StreamingStore selectors.
-- Do not replace Svelte readable lifecycle rules with React signal or streaming
-  selector lifecycle rules in a Svelte app.
+  they read the Redux store from saga context and use the `.select`/`.effect`
+  selector shape.
 
 ## Examples
 

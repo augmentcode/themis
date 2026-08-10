@@ -26,7 +26,8 @@ Public facade: `@augmentcode/themis/svelte-store` (`store.createSelector` and `S
 
 - Create app selectors with the configured `Store` instance: `store.createSelector(...)`.
 - Tune Svelte-readable selector coalescing only through the final constructor options argument: `new Store(reducers, middleware, { throttledSelectorFrequency })`.
-- Treat this as Svelte Store family scheduling only. Do not use StreamingStore,Kefir stream throttling, or streaming selector lifecycle/setup guidance in thesame app.
+- Treat this as Svelte Store family scheduling. Use the Store-owned scheduler
+  rather than adding a second scheduling layer.
 - Omit `throttledSelectorFrequency` for the default `64` FPS; explicit values must be finite numbers in the inclusive `1..256` range. Fractional values are supported.
 - Selector trace output is disabled by default; pass `{ traceSelectors: true }` in the final Store options object only for temporary diagnostics.
 - In components, call selector readables directly at component init: `const value$ = selectValue()`.
@@ -41,7 +42,6 @@ Public facade: `@augmentcode/themis/svelte-store` (`store.createSelector` and `S
 - Do not wrap Store-created selectors, selector callbacks, selector calls, or selector readables in extra `memoize`, `cache`, debounce/throttle, timer, `requestAnimationFrame`, scheduler, or writable-proxy layers just to reduce recomputes or UI updates.
 - Do not rely on selector readables as audit/event streams; they represent the latest derived state and may coalesce intermediate writes.
 - Do not call selector readable mode from event handlers, callbacks, async functions, services, or tests; use `.select(store.state, ...)` or `.withStore(store)`.
-- Do not replace this Svelte-readable scheduling model with StreamingStore/Kefirselector setup in the same app.
 
 ## Examples
 

@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, readlink, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -42,6 +42,10 @@ function installDir(projectRoot, ...segments) {
   return join(projectRoot, ".agents", "skills", "themis", ...segments);
 }
 
+function claudeInstallDir(projectRoot) {
+  return join(projectRoot, ".claude", "skills", "themis");
+}
+
 afterEach(async () => {
   await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
@@ -80,6 +84,8 @@ describe("lifecycle skill helpers", () => {
 	  await expect(readFile(installDir(projectRoot, "core", "actions", "SKILL.md"), "utf8")).resolves.toBe("actions skill");
 	  await expect(readFile(installDir(projectRoot, "svelte/migration", "setup", "SKILL.md"), "utf8")).resolves.toBe("setup skill");
 	  expect(existsSync(installDir(projectRoot, "_artifacts", "skill_tree.yaml"))).toBe(false);
+		  await expect(realpath(claudeInstallDir(projectRoot))).resolves.toBe(await realpath(installDir(projectRoot)));
+		  expect((await lstat(claudeInstallDir(projectRoot))).isSymbolicLink()).toBe(true);
 
 	  const manifest = parseInstalledSkillsManifest(await readFile(installDir(projectRoot, "installed-skills.yml"), "utf8"));
 	  expect(manifest).toEqual({
@@ -132,6 +138,60 @@ describe("lifecycle skill helpers", () => {
 		expect(manifest).toEqual(expect.objectContaining({ target: "react", files: ["SKILL.md", "core/actions/SKILL.md", "react/SKILL.md", "setup/SKILL.md"] }));
 		expect(logger.log).toHaveBeenCalledWith(expect.stringContaining("install-skills:react copied packaged skills"));
 	});
+
+	it("reuses the correct Claude compatibility link without replacing it", async () => {
+	  const { packageRoot, projectRoot } = await createInstalledPackage();
+	  const logger = { log: vi.fn(), warn: vi.fn() };
+
+	  installIntentSkillGuidance({ packageRoot, env: { INIT_CWD: projectRoot }, logger });
+	  const originalTarget = await readlink(claudeInstallDir(projectRoot));
+  if (process.platform !== "win32") expect(originalTarget).toBe("../../.agents/skills/themis");
+  const result = installIntentSkillGuidance({ packageRoot, env: { INIT_CWD: projectRoot }, logger });
+
+	  expect(result.compatibilityLink.status).toBe("reused");
+	  await expect(readlink(claudeInstallDir(projectRoot))).resolves.toBe(originalTarget);
+	  expect(logger.warn).not.toHaveBeenCalled();
+	});
+
+	it("preserves a Claude compatibility collision and foreign link", async () => {
+	  const { packageRoot, projectRoot } = await createInstalledPackage();
+	  const logger = { log: vi.fn(), warn: vi.fn() };
+	  const collisionPath = claudeInstallDir(projectRoot);
+
+	  await writeFixtureFile(collisionPath, "project-owned");
+  const collisionResult = installIntentSkillGuidance({ packageRoot, env: { INIT_CWD: projectRoot }, logger });
+
+	  expect(collisionResult.compatibilityLink.status).toBe("collision");
+	  await expect(readFile(collisionPath, "utf8")).resolves.toBe("project-owned");
+
+	  await rm(collisionPath);
+	  const foreignTarget = join(projectRoot, "foreign-skills");
+	  await mkdir(foreignTarget);
+	  await symlink(foreignTarget, collisionPath, "dir");
+  const foreignResult = installIntentSkillGuidance({ packageRoot, env: { INIT_CWD: projectRoot }, logger });
+  expect(foreignResult.compatibilityLink.status).toBe("collision");
+
+	  const cleanupResult = cleanupSkillsFromProject({ packageRoot, projectRoot, logger });
+  expect(cleanupResult.compatibilityLink.status).toBe("foreign");
+  await expect(realpath(collisionPath)).resolves.toBe(await realpath(foreignTarget));
+});
+
+	it("removes an owned dangling Claude link and prunes only its empty directories", async () => {
+	  const { packageRoot, projectRoot } = await createInstalledPackage();
+  const logger = { log: vi.fn(), warn: vi.fn() };
+
+	  installIntentSkillGuidance({ packageRoot, env: { INIT_CWD: projectRoot }, logger });
+	  await rm(installDir(projectRoot), { recursive: true, force: true });
+
+	  const result = cleanupSkillsFromProject({ packageRoot, projectRoot, logger });
+
+	  expect(result.compatibilityLink.status).toBe("removed");
+	  expect(result.removed).toBe(1);
+  expect(result.compatibilityLink.pruned).toBe(2);
+  expect(result.pruned).toBe(3);
+	  expect(existsSync(claudeInstallDir(projectRoot))).toBe(false);
+	  expect(existsSync(join(projectRoot, ".claude"))).toBe(false);
+});
 
 	it("copies Svelte, streaming, and core bundles without unrelated domains", async () => {
 		const cases = [
@@ -237,7 +297,7 @@ describe("lifecycle skill helpers", () => {
 
     const result = cleanupSkillsFromProject({ packageRoot, logger });
 
-	  expect(result).toEqual(expect.objectContaining({ removed: 8, skipped: false }));
+    expect(result).toEqual(expect.objectContaining({ removed: 9, skipped: false }));
 		expect(logger.log).toHaveBeenCalledWith(expect.stringContaining("cleanup-skills removed package-installed AI skills from .agents/skills/themis/"));
 	    expect(existsSync(installDir(projectRoot, "SKILL.md"))).toBe(false);
 	    expect(existsSync(installDir(projectRoot, "installed-skills.yml"))).toBe(false);
@@ -261,7 +321,7 @@ describe("lifecycle skill helpers", () => {
 
     const result = cleanupSkillsFromProject({ packageRoot, logger });
 
-	  expect(result).toEqual(expect.objectContaining({ removed: 10, skipped: false }));
+		  expect(result).toEqual(expect.objectContaining({ removed: 11, skipped: false }));
 	    expect(existsSync(installDir(projectRoot))).toBe(false);
 	    expect(existsSync(join(projectRoot, ".agents", "skills", "SKILL.md"))).toBe(false);
 	    expect(existsSync(join(projectRoot, ".agents", "skills", "svelte-redux-toolkit"))).toBe(false);
@@ -274,7 +334,7 @@ describe("lifecycle skill helpers", () => {
 
 		const result = cleanupSkillsFromProject({ packageRoot, logger });
 
-		expect(result).toEqual({ removed: 0, skipped: true, reason: "missing-manifest" });
+		expect(result).toEqual(expect.objectContaining({ removed: 0, skipped: true, reason: "missing-manifest" }));
 		expect(logger.log).toHaveBeenCalledWith(expect.stringContaining("cleanup-skills found no installed-skills.yml manifest"));
 		expect(projectRoot).toBeDefined();
 	});

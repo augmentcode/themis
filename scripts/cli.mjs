@@ -28,13 +28,13 @@ export function helpText(name = binaryName) {
   ${name} <command> [options]
 
 Commands:
-	install-skills             Copy all packaged AI skills into .agents/skills/themis/
+	install-skills             Copy all packaged AI skills into .agents/skills/themis/ and link Claude discovery
 	install-skills:all         Alias for install-skills
 	install-skills:core        Copy root setup/core AI skills into .agents/skills/themis/
 	install-skills:react       Copy root setup/core/react AI skills into .agents/skills/themis/
 	install-skills:svelte      Copy root setup/core/svelte AI skills into .agents/skills/themis/
 	install-skills:streaming   Copy root setup/core/streaming AI skills into .agents/skills/themis/
-  cleanup-skills             Remove package-installed skills from .agents/skills/themis/
+	cleanup-skills             Remove package-installed skills and the owned Claude discovery link
   help                       Show this help text
 
 	Installed app invocation examples:

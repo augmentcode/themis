@@ -3,7 +3,7 @@ import { select } from "typed-redux-saga";
 import { StoreRuntime } from "../../store-runtime";
 import type { StreamingStore } from "../../streaming-store";
 import type { StoreSelectorCallback, StoreState } from "../../types";
-import type { StreamingArgs, StoreStreamingSelector } from "../types";
+import type { StreamingArgs, StoreStreamingSelector } from "./types";
 import { createCachedSelector } from "../selector-core/create-cached-selector";
 import { getOrCreate } from "../selector-core/selector-output-cache";
 import {
@@ -13,7 +13,7 @@ import {
 } from "../selector-core/kefir-selector";
 
 export { createCachedSelector };
-export type { StreamingArgs, StoreStreamingSelector } from "../types";
+export type { StreamingArgs, StoreStreamingSelector } from "./types";
 
 type StreamingState<TStore> = StoreState<TStore>;
 

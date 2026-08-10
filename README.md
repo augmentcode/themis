@@ -21,7 +21,47 @@
 npm install @augmentcode/themis
 ```
 
-`redux`, `redux-saga`, `typed-redux-saga`, and `fast-equals` ship as direct dependencies of the package and are installed automatically. `svelte@^5` is the only peer dependency, required because the Svelte-readable entrypoint ships in the package; Svelte apps and frameworks normally provide it. `ReactStore` consumers should use it from React apps that can load `@preact/signals-react`. For saga tests, `redux-saga-test-plan` is an optional dev dependency (`npm install -D redux-saga-test-plan`).
+`redux`, `redux-saga`, `typed-redux-saga`, and `fast-equals` ship as direct dependencies of the package and are installed automatically. Install `svelte@^5` for the Svelte-readable entrypoint, or the optional `react` and `@preact/signals-react` peers for `ReactStore`, as required by the chosen Store family. For saga tests, `redux-saga-test-plan` is an optional dev dependency (`npm install -D redux-saga-test-plan`).
+
+## Install AI skills
+
+Installing `@augmentcode/themis` does **not** copy AI skills automatically. Skill installation is an explicit consumer workflow, separate from package installation.
+
+### Consumer workflow
+
+1. Install the package from npm:
+
+```bash
+npm install @augmentcode/themis
+```
+
+2. Copy the smallest bundle that matches the app. Each command copies explicitly to `.agents/skills/themis/` and creates or reuses the Claude-compatible `.claude/skills/themis` link to that canonical directory.
+
+| App or need | Command |
+| --- | --- |
+| React | `npx themis install-skills:react` |
+| Svelte/SvelteKit | `npx themis install-skills:svelte` |
+| Node, server, worker, CLI, tests, or no UI | `npx themis install-skills:streaming` |
+| Shared Redux/saga guidance only | `npx themis install-skills:core` |
+| Every package skill family | `npx themis install-skills` or `npx themis install-skills:all` |
+
+3. Verify the installed CLI and canonical bundle:
+
+```bash
+npx themis help
+node -e "const fs=require('node:fs'); for (const p of ['.agents/skills/themis/SKILL.md','.agents/skills/themis/installed-skills.yml','.claude/skills/themis']) console.log(p, fs.realpathSync(p))"
+```
+
+Rerun the same install command to refresh an existing package install. Refresh is idempotent for unchanged files, removes stale package-owned files recorded by the previous manifest, and preserves user-authored or unrelated skills. An existing file, directory, or foreign link at `.claude/skills/themis` is never overwritten; it remains in place with a warning while the canonical `.agents/skills/themis` copy continues.
+
+Before uninstalling, remove copied skills explicitly because npm 7+ does not run dependency-uninstall cleanup scripts:
+
+```bash
+npx themis cleanup-skills
+npm uninstall @augmentcode/themis
+```
+
+Cleanup removes only manifest-listed package files, the owned Claude compatibility link (including an owned dangling link), and empty compatibility directories. It preserves foreign `.claude` paths and unrelated `.agents/skills` content. See [docs/INSTALLATION.md](./docs/INSTALLATION.md) for the complete consumer and maintainer workflows.
 
 ## Quick start
 
@@ -150,7 +190,7 @@ Names prefixed `@internal_` (such as the `@internal_storeUtility` reducer) and t
 
 ## CLI and skills
 
-Run the package bin with `npx themis help` (or `./node_modules/.bin/themis help`) to list commands. In this repository's source checkout the package bin is not linked automatically, so run `node scripts/cli.mjs help` instead. Skill installs — `install-skills:react`, `install-skills:svelte`, `install-skills:streaming`, or `install-skills` (alias of `install-skills:all`) — write the selected bundle into `.agents/skills/themis/` and record an `installed-skills.yml` manifest there. Run `cleanup-skills` before uninstalling; it removes only manifest-listed files plus the manifest itself. See [docs/INSTALLATION.md](./docs/INSTALLATION.md) for full install, refresh, cleanup, and uninstall behavior.
+Run the package bin with `npx themis help` (or `./node_modules/.bin/themis help`) to list commands. In this repository's source checkout the package bin is not linked automatically, so run `node scripts/cli.mjs help` instead. Skill installs — `install-skills:react`, `install-skills:svelte`, `install-skills:streaming`, or `install-skills` (alias of `install-skills:all`) — copy the selected bundle only into canonical `.agents/skills/themis/` and record an `installed-skills.yml` manifest there. They also create or reuse the relative `.claude/skills/themis` compatibility link to that canonical tree; existing files, directories, or foreign links at that path are preserved with a warning. Run `cleanup-skills` before uninstalling; it removes manifest-listed files, the owned Claude compatibility link, and only empty compatibility directories. See [docs/INSTALLATION.md](./docs/INSTALLATION.md) for full install, refresh, cleanup, and uninstall behavior.
 
 ## ESLint
 

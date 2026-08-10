@@ -1,8 +1,5 @@
-import type { ReadonlySignal } from "@preact/signals-react";
-import type { Observable, Property } from "kefir";
+import type { Property } from "kefir";
 import type { UnknownAction } from "redux";
-import type { ReactStore } from "../react-store";
-import type { StreamingStore } from "../streaming-store";
 import type {
   StoreAction,
   StoreActionCreator,
@@ -24,37 +21,6 @@ export type RefsCounter<
   ITEM extends object,
   K extends ITEM[K] extends string ? keyof ITEM : never,
 > = ITEM[K] extends string ? Record<ITEM[K], ITEM> : never;
-
-export type SignalArgs<ARGS extends any[]> = {
-  [K in keyof ARGS]: ARGS[K] | ReadonlySignal<ARGS[K]>;
-};
-
-export type StoreReactSelector<
-  R,
-  ARGS extends any[] = [],
-  TState = StoreState,
-  TStore extends ReactStore<any, any> = ReactStore<any, any>,
-> = ((...args: SignalArgs<ARGS>) => ReadonlySignal<R>) & {
-  useValue: (...args: SignalArgs<ARGS>) => R;
-  withStore: (store: TStore) => (...args: SignalArgs<ARGS>) => ReadonlySignal<R>;
-  select: StoreSelectorCallback<R, ARGS, TState>;
-  effect: StoreSelectorEffect<R, ARGS>;
-};
-
-export type StreamingArgs<ARGS extends any[]> = {
-  [K in keyof ARGS]: ARGS[K] | Observable<ARGS[K], any>;
-};
-
-export type StoreStreamingSelector<
-  R,
-  ARGS extends any[] = [],
-  TState = StoreState,
-  TStore extends StreamingStore<any, any> = StreamingStore<any, any>,
-> = ((...args: StreamingArgs<ARGS>) => Observable<R, any>) & {
-  withStore: (store: TStore) => (...args: StreamingArgs<ARGS>) => Observable<R, any>;
-  select: StoreSelectorCallback<R, ARGS, TState>;
-  effect: StoreSelectorEffect<R, ARGS>;
-};
 
 export type AccessedPath = (string | symbol)[];
 

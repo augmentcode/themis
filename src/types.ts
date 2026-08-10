@@ -1,5 +1,4 @@
 import type { Middleware, Store as ReduxStoreBase, UnknownAction } from 'redux';
-import type { Readable } from 'svelte/store';
 import type { SagaGenerator } from 'typed-redux-saga';
 import type { StoreRuntime } from './store-runtime';
 
@@ -135,12 +134,15 @@ type ReduxStore = ReduxStoreBase<StoreState, UnknownAction>;
 // Selector Types
 // ============================================================================
 
+type ReadableValue<T> = {
+  subscribe(run: (value: T) => void, invalidate?: (value?: T) => void): () => void;
+};
+
 /**
- * Converts an args tuple so that each element can be either a plain value or a Readable.
- * Used by selectors to accept reactive arguments in Svelte components.
+ * Framework-neutral compatibility contract for readable selector arguments.
  */
 export type ReadableArgs<ARGS extends any[]> = {
-  [K in keyof ARGS]: ARGS[K] | Readable<ARGS[K]>;
+  [K in keyof ARGS]: ARGS[K] | ReadableValue<ARGS[K]>;
 };
 
 export type StoreSelectorCallback<R, ARGS extends any[] = [], TState = StoreState> = (
@@ -150,7 +152,7 @@ export type StoreSelectorCallback<R, ARGS extends any[] = [], TState = StoreStat
 
 export type StoreSelectorReadable<R, ARGS extends any[] = []> = (
   ...args: ReadableArgs<ARGS>
-) => Readable<R>;
+) => ReadableValue<R>;
 
 export type StoreSelectorSelect<R, ARGS extends any[] = [], TState = StoreState> = StoreSelectorCallback<R, ARGS, TState>;
 
