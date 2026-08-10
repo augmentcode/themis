@@ -14,6 +14,7 @@ vi.mock("typed-redux-saga", () => ({
 }));
 
 import { createKefirPropertyFromSubscribe } from "../selector-core/kefir-selector";
+import * as kefirSelectorModule from "../selector-core/kefir-selector";
 import { createSelector } from "./create-selector";
 
 type CounterState = StoreState & {
@@ -136,6 +137,55 @@ describe("createSelector", () => {
     unsubscribe();
 
     expect(values).toEqual([6, 8, 20]);
+  });
+
+  it("notifies primitive selector subscribers only when the selected value changes", () => {
+    const storeState = writable(withUtility({ counter: { count: 2 }, unrelated: "initial" }));
+    const selectorStore = createMockStoreBinding(storeState);
+    const selectCount = createSelector(selectorStore, (state) => state.counter.count);
+    const values: number[] = [];
+
+    const unsubscribe = selectCount().subscribe((value) => values.push(value));
+    storeState.set(withUtility({ counter: { count: 2 }, unrelated: "updated" }));
+    vi.advanceTimersByTime(16);
+    storeState.set(withUtility({ counter: { count: 5 }, unrelated: "updated" }));
+    vi.advanceTimersByTime(16);
+    unsubscribe();
+
+    expect(values).toEqual([2, 5]);
+  });
+
+  it("notifies object selector subscribers only when the selected value changes", () => {
+    const storeState = writable(withUtility({ counter: { count: 2 }, unrelated: "initial" }));
+    const selectorStore = createMockStoreBinding(storeState);
+    let selectedValue = { count: 2 };
+    const selectedProperty = createKefirPropertyFromSubscribe(
+      () => selectedValue,
+      (listener) =>
+        storeState.subscribe((state) => {
+          if (state.counter.count !== selectedValue.count) {
+            selectedValue = { count: state.counter.count };
+          }
+          listener(selectedValue);
+        })
+    );
+    const createPropertySpy = vi
+      .spyOn(kefirSelectorModule, "createKefirSelectorProperty")
+      .mockReturnValue({ property: selectedProperty, getSnapshot: () => selectedValue });
+    const selectCounter = createSelector(selectorStore, (state) => ({ count: state.counter.count }));
+    const values: Array<{ count: number }> = [];
+    let unsubscribe: (() => void) | undefined;
+
+    try {
+      unsubscribe = selectCounter().subscribe((value) => values.push(value));
+      storeState.set(withUtility({ counter: { count: 2 }, unrelated: "updated" }));
+      storeState.set(withUtility({ counter: { count: 5 }, unrelated: "updated" }));
+
+      expect(values).toEqual([{ count: 2 }, { count: 5 }]);
+    } finally {
+      unsubscribe?.();
+      createPropertySpy.mockRestore();
+    }
   });
 
   it("reuses selector readable outputs for the same state source, selector, and arguments", () => {

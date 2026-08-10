@@ -49,9 +49,17 @@ type SvelteState<TStore> = StoreState<TStore>;
 const kefirSelectorPropertyToReadable = <R>(
   selected: KefirSelectorProperty<R>
 ): Readable<R> => {
-  return readable(selected.getSnapshot(), (set) => {
-    set(selected.getSnapshot());
-    const subscription = selected.property.observe((value) => set(value));
+  let currentValue = selected.getSnapshot();
+
+  return readable(currentValue, (set) => {
+    const setIfChanged = (value: R) => {
+      if (value !== currentValue) {
+        currentValue = value;
+        set(value);
+      }
+    };
+    setIfChanged(selected.getSnapshot());
+    const subscription = selected.property.observe(setIfChanged);
 
     return () => {
       subscription.unsubscribe();
