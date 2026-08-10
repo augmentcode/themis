@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { getOrCreate } from "./selector-output-cache";
+import { evictSelectorOutputsForStateSource, getOrCreate } from "./selector-output-cache";
 
 const getGarbageCollector = (): (() => void) | undefined =>
   (globalThis as typeof globalThis & { gc?: () => void }).gc;
@@ -43,6 +43,35 @@ describe("selector output cache", () => {
     expect(getOrCreate(source, selector, [arg], factory)).toBe(output);
     expect(getOrCreate(source, selector, [arg], () => ({ value: "other" }))).toBe(output);
     expect(factory).toHaveBeenCalledTimes(1);
+  });
+
+  it("evicts every output for one state source without affecting other sources", () => {
+    const sourceA = { name: "source-a" };
+    const sourceB = { name: "source-b" };
+    const selectorA = (_state: unknown, arg: object) => arg;
+    const selectorB = (_state: unknown, arg: object) => arg;
+    const argA = { id: "item-1" };
+    const argB = { id: "item-2" };
+    const sourceASelectorAArgA = getOrCreate(sourceA, selectorA, [argA], () => ({ value: "a-a-1" }));
+    const sourceASelectorAArgB = getOrCreate(sourceA, selectorA, [argB], () => ({ value: "a-a-2" }));
+    const sourceASelectorBArgA = getOrCreate(sourceA, selectorB, [argA], () => ({ value: "a-b-1" }));
+    const sourceBSelectorAArgA = getOrCreate(sourceB, selectorA, [argA], () => ({ value: "b-a-1" }));
+
+    evictSelectorOutputsForStateSource(sourceA);
+    evictSelectorOutputsForStateSource(sourceA);
+
+    expect(getOrCreate(sourceA, selectorA, [argA], () => ({ value: "fresh-a-a-1" }))).not.toBe(
+      sourceASelectorAArgA
+    );
+    expect(getOrCreate(sourceA, selectorA, [argB], () => ({ value: "fresh-a-a-2" }))).not.toBe(
+      sourceASelectorAArgB
+    );
+    expect(getOrCreate(sourceA, selectorB, [argA], () => ({ value: "fresh-a-b-1" }))).not.toBe(
+      sourceASelectorBArgA
+    );
+    expect(getOrCreate(sourceB, selectorA, [argA], () => ({ value: "fresh-b-a-1" }))).toBe(
+      sourceBSelectorAArgA
+    );
   });
 
   it("traces cache requests without increasing cached count on hits", () => {
