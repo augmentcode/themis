@@ -4,6 +4,7 @@ import type { StoreSelectorCallback, StoreState } from "../../types";
 import { createCachedSelector } from "./create-cached-selector";
 import { areStoreUpdatesLocked } from "./store-update-lock";
 import type { KefirSelectorProperty, SelectorTraceReporter } from "../types";
+import { shallowEqual } from "fast-equals";
 
 export type { KefirSelectorProperty } from "../types";
 
@@ -57,7 +58,9 @@ export const createKefirSelectorProperty = <TStore extends StoreRuntime<any, any
     .map(([storeState, ...args]) => {
       return cachedSelector(storeState as StoreState<TStore>, ...(args as ARGS));
     })
-    .skipDuplicates();
+    .skipDuplicates((a, b) => {
+      return shallowEqual(a, b);
+    });
   const property = (getArgsSnapshot
     ? selected.toProperty(getSnapshot)
     : selected.toProperty()) as Property<R, any>;

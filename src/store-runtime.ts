@@ -42,6 +42,7 @@ import { createSelectorCadenceSource } from './utils/selector-core/throttled-sel
 import {
   renderAccessedPaths,
 } from './utils/selector-core/create-cached-selector';
+import { evictSelectorOutputsForStateSource } from './utils/selector-core/selector-output-cache';
 import type {
   CachedSelector,
   SelectorCadenceSource,
@@ -445,6 +446,8 @@ export abstract class StoreRuntime<
   }
 
   dispose(): void {
+    evictSelectorOutputsForStateSource(this);
+
     if (!this.storeContext) {
       this.disposeCadencedStoreStateStream();
       this.disposeSelectorCadenceSource();

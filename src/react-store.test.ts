@@ -234,4 +234,33 @@ describe('ReactStore', () => {
       'Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.'
     );
   });
+
+  it('creates a fresh signal selector output after dispose and re-init', () => {
+    const store = new ReactStore({ counter: counterReducer });
+    const selectCount = store.createSelector((state) => state.counter.count);
+
+    store.init();
+    const previousOutput = selectCount();
+    store.dispose();
+
+    expect(() => selectCount()).toThrow(
+      'Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.'
+    );
+
+    store.init({ counter: { count: 5 } });
+    const freshOutput = selectCount();
+    const values: number[] = [];
+    const unsubscribe = freshOutput.subscribe((value) => values.push(value));
+
+    expect(freshOutput).not.toBe(previousOutput);
+    expect(freshOutput.value).toBe(5);
+    expect(values).toEqual([5]);
+
+    store.dispatch({ type: 'counter/set', payload: 6 });
+    vi.advanceTimersByTime(0);
+    unsubscribe();
+
+    expect(freshOutput.value).toBe(6);
+    expect(values).toEqual([5, 6]);
+  });
 });

@@ -155,7 +155,7 @@ describe('StreamingStore', () => {
     expect(values).toEqual([0, 2, 3]);
   });
 
-  it('shares one store-scoped cadence source across active stream selectors and disposes scheduled work', () => {
+  it('shares requested cadence ticks across stream selectors and stays idle between updates', () => {
     const store = new StreamingStore(
       { counter: counterReducer },
       undefined,
@@ -179,12 +179,12 @@ describe('StreamingStore', () => {
     vi.advanceTimersByTime(0);
     expect(countValues).toEqual([0, 2]);
     expect(doubleValues).toEqual([0, 4]);
-    expect(vi.getTimerCount()).toBe(1);
+    expect(vi.getTimerCount()).toBe(0);
 
     vi.advanceTimersByTime(500);
     expect(countValues).toEqual([0, 2]);
     expect(doubleValues).toEqual([0, 4]);
-    expect(vi.getTimerCount()).toBe(1);
+    expect(vi.getTimerCount()).toBe(0);
 
     store.dispatch({ type: 'counter/set', payload: 3 });
     expect(vi.getTimerCount()).toBe(1);
@@ -217,5 +217,32 @@ describe('StreamingStore', () => {
     expect(() => selectCount()).toThrow(
       'Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.'
     );
+  });
+
+  it('creates a fresh streaming selector output after dispose and re-init', () => {
+    const store = new StreamingStore({ counter: counterReducer });
+    const selectCount = store.createSelector((state) => state.counter.count);
+
+    store.init();
+    const previousOutput = selectCount();
+    store.dispose();
+
+    expect(() => selectCount()).toThrow(
+      'Cannot access StoreRuntime.getStoreStateStream() before Store.init() has been called.'
+    );
+
+    store.init({ counter: { count: 5 } });
+    const freshOutput = selectCount();
+    const values: number[] = [];
+    const subscription = freshOutput.observe((value) => values.push(value));
+
+    expect(freshOutput).not.toBe(previousOutput);
+    expect(values).toEqual([5]);
+
+    store.dispatch({ type: 'counter/set', payload: 6 });
+    vi.advanceTimersByTime(0);
+    subscription.unsubscribe();
+
+    expect(values).toEqual([5, 6]);
   });
 });
