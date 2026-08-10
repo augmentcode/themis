@@ -67,6 +67,10 @@ const getChild = (node: SelectorOutputCacheNode, key: unknown): SelectorOutputCa
 const root: SelectorOutputCacheNode = {};
 const traceStateBySelector = new WeakMap<SelectorOutputCacheKey, SelectorOutputCacheTraceState>();
 
+export const evictSelectorOutputsForStateSource = (stateSource: object): void => {
+  root.weakChildren?.delete(stateSource);
+};
+
 const getTraceState = (selectorFunc: SelectorOutputCacheKey): SelectorOutputCacheTraceState => {
   const existing = traceStateBySelector.get(selectorFunc);
   if (existing) {
