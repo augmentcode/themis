@@ -210,4 +210,4 @@ for `ReactStore`, that result is a Preact React `ReadonlySignal<R>`.
   startup, component dispatch, and handler examples.
 - `react/selectors/SKILL.md` — authoring ReactStore selectors.
 - `react/store/SKILL.md` — `ReactStore` import and initialization rules.
-- `docs/SELECTORS.md` — human reference for selector call forms.
+- `@augmentcode/themis/docs/SELECTORS.md` — human reference for selector call forms.

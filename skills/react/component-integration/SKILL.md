@@ -256,4 +256,4 @@ fallback boundary.
   rendering, and component-local signal hooks.
 - `react/selector-lifecycle/SKILL.md` — selector call modes across components,handlers, tests, composition, explicit binding, and sagas.
 - `react/selectors/SKILL.md` — selector authoring for Preact React signals.
-- `../setup/SKILL.md` — first-time Store-family selection and setup.
+- `../../setup/SKILL.md` — first-time Store-family selection and setup.

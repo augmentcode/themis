@@ -18,6 +18,7 @@ import {
   packageBlockedImports,
   packageEntrypointFiles,
   packageImportChecks,
+  packageMarkdownFiles,
   packageName,
   packageRemovedEntrypointFiles,
   packageRuntimeFiles,
@@ -27,6 +28,7 @@ import {
   standaloneArchitectureRuleIds,
   validateArchitecturePluginSingleImplementation,
   validateImports,
+  validatePackageMarkdownFiles,
   validatePackContents,
   validateTypeExports,
 } from "./validate-release.mjs";
@@ -141,13 +143,8 @@ const validPack = () => [
   {
     files: [
       packEntry("package/package.json"),
-      packEntry("package/README.md"),
       ...packageEntrypointFiles.map((path) => packEntry(`package/${path}`)),
-      packEntry("package/docs/TESTING.md"),
-      packEntry("package/skills/SKILL.md"),
-      packEntry("package/skills/core/SKILL.md"),
-      packEntry("package/skills/svelte/SKILL.md"),
-      packEntry("package/skills/streaming/SKILL.md"),
+      ...packageMarkdownFiles.map((path) => packEntry(`package/${path}`)),
       ...packageRuntimeFiles.map((path) => packEntry(`package/${path}`)),
     ],
   },
@@ -1241,6 +1238,16 @@ describe("validate-release helpers", () => {
     expect(logger).toHaveBeenCalledWith(`[release-validation] checked ${validPack()[0].files.length} packed files`);
   });
 
+  it("covers the complete Markdown source inventory", async () => {
+    const existingPaths = new Set(packageMarkdownFiles);
+
+    await expect(validatePackageMarkdownFiles((path) => existingPaths.has(path))).resolves.toBeUndefined();
+    existingPaths.delete("docs/WAITFOR.md");
+    await expect(validatePackageMarkdownFiles((path) => existingPaths.has(path))).rejects.toThrow(
+      "Missing required Markdown document in source tree: docs/WAITFOR.md"
+    );
+  });
+
   it("rejects declaration test artifacts, script tests, and generated skill artifacts", () => {
     expect(() =>
       validatePackContents([{ files: [...validPack()[0].files, packEntry("package/dist/foo.test.d.ts")] }])
@@ -1264,6 +1271,15 @@ describe("validate-release helpers", () => {
   it("rejects missing built dist entry points with actionable messages", () => {
     expect(() => validatePackContents(packWithout("dist/svelte-store.js"))).toThrow(
       "Expected dist/svelte-store.js in npm pack dry-run contents. Run npm run build before packing"
+    );
+  });
+
+  it("rejects missing Markdown documents from pack contents", () => {
+    expect(() => validatePackContents(packWithout("docs/WAITFOR.md"))).toThrow(
+      "Expected docs/WAITFOR.md in npm pack dry-run contents"
+    );
+    expect(() => validatePackContents(packWithout("skills/core/SKILL.md"))).toThrow(
+      "Expected skills/core/SKILL.md in npm pack dry-run contents"
     );
   });
 

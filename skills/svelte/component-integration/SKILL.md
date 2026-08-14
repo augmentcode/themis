@@ -282,4 +282,4 @@ store.dispatch(addItem(i));
 
 - `svelte/selector-lifecycle` — the three selector call modes(`selectFoo()` / `.select(state)` / `.effect()`).
 - `core/file-structure` — slice layout and registration order.
-- `../setup/SKILL.md` — first-time greenfield setup.
+- `../../setup/SKILL.md` — first-time greenfield setup.

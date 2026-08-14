@@ -23,7 +23,7 @@ triggers:
 ---
 # Actions — `createAction` / `createAsyncAction`
 
-> Operational guidance for action creator work. API details and longer examples live in `docs/REDUCERS.md` → Actions and Async Actions. Public API: `@augmentcode/themis/utils/store/create-action`; related family guidance: `../SKILL.md` §3.
+> Operational guidance for action creator work. API details and longer examples live in `@augmentcode/themis/docs/REDUCERS.md` → Actions and Async Actions. Public API: `@augmentcode/themis/utils/store/create-action`; related family guidance: `../SKILL.md` §3.
 
 ## Use when
 
@@ -151,7 +151,7 @@ const [{ id, title }] = renameTodoFromList({ id: "todo-1", title: "Ship docs" })
 
 ## See also
 
-- `docs/REDUCERS.md` — human reference for action and async-action examples.
+- `@augmentcode/themis/docs/REDUCERS.md` — human reference for action and async-action examples.
 - `core/reducers/SKILL.md` — consuming actions in `.with()` handlers.
 - `core/sagas/SKILL.md` — watcher patterns and typed-redux-saga usage.
 - `core/state-integrity/SKILL.md` — duplicate-owner search protocol.

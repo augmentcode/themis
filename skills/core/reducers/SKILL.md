@@ -22,7 +22,7 @@ triggers:
 ---
 # Reducers — `createReducer`
 
-> Operational guidance for reducer implementation. Full API walkthrough and examples: `docs/REDUCERS.md` → Creating Reducers. Public API: `@augmentcode/themis/utils/store/create-reducer`; related guidance: `../SKILL.md` §3, §14.
+> Operational guidance for reducer implementation. Full API walkthrough and examples: `@augmentcode/themis/docs/REDUCERS.md` → Creating Reducers. Public API: `@augmentcode/themis/utils/store/create-reducer`; related guidance: `../SKILL.md` §3, §14.
 
 ## Use when
 
@@ -161,7 +161,7 @@ export const reducer = createReducer({ filters: { query: "" } }).with(setSearch,
 
 ## See also
 
-- `docs/REDUCERS.md` — human reference for reducer and action examples.
+- `@augmentcode/themis/docs/REDUCERS.md` — human reference for reducer and action examples.
 - `core/actions/SKILL.md` — action creator contracts consumed by `.with()`.
 - `core/collections/SKILL.md` — immutable entity updates.
 - Selected Store family selector skill — derived values belong in selectors.

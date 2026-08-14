@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.4
+
+- Normalize documentation links and validate package metadata for the release.
+
 ## 0.1.3 - 2026-08-10
 
 - Isolated React, Svelte, and Streaming skill guidance, decoupled shared runtime imports from UI frameworks, and added regression coverage for the boundary.

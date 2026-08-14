@@ -11,8 +11,8 @@ type: core
 requires:
   - core
 sources:
-  - augmentcode/themis:README.md
-  - augmentcode/themis:docs/SELECTORS.md
+  - @augmentcode/themis/README.md
+  - @augmentcode/themis/docs/SELECTORS.md
   - "@augmentcode/themis/streaming-store"
   - package-internal streaming selector implementation
 triggers:

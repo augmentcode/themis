@@ -58,9 +58,9 @@ repositories, route by the files and behavior being changed.
   choosing silently.
 
 Detailed docs to consult when a task needs conceptual background:
-`docs/ARCHITECTURE.md`, `docs/SELECTORS.md`, `docs/SAGAS.md`,
-`docs/WAITFOR.md`, `docs/REDUCERS.md`, `docs/COLLECTIONS.md`,
-`docs/TESTING.md`, and `docs/INSTALLATION.md`.
+`@augmentcode/themis/docs/ARCHITECTURE.md`, `@augmentcode/themis/docs/SELECTORS.md`, `@augmentcode/themis/docs/SAGAS.md`,
+`@augmentcode/themis/docs/WAITFOR.md`, `@augmentcode/themis/docs/REDUCERS.md`, `@augmentcode/themis/docs/COLLECTIONS.md`,
+`@augmentcode/themis/docs/TESTING.md`, and `@augmentcode/themis/docs/INSTALLATION.md`.
 
 ## Agent Preflight Compliance Contract
 
@@ -274,5 +274,5 @@ const incompleteRouting = {
 
 - First-time app setup: `../setup/SKILL.md`.
 - Migration playbook: `./migration/SKILL.md`.
-- Install/uninstall side effects and maintainer validation: `docs/INSTALLATION.md`.
+- Install/uninstall side effects and maintainer validation: `@augmentcode/themis/docs/INSTALLATION.md`.
 - Generic plain redux-saga API reference, outside this package's typed-redux-saga conventions: `../core/redux-saga/SKILL.md`.

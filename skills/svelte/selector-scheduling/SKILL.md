@@ -20,7 +20,7 @@ triggers:
 
 > Selector scheduler helpers are implementation details. Do not import them from package subpaths or teach consumers to wrap selector readables manually.
 
-Public facade: `@augmentcode/themis/svelte-store` (`store.createSelector` and `Store` selector options). Selector implementation and scheduler internals are package-private; see `docs/SELECTORS.md` for behavior.
+Public facade: `@augmentcode/themis/svelte-store` (`store.createSelector` and `Store` selector options). Selector implementation and scheduler internals are package-private; see `@augmentcode/themis/docs/SELECTORS.md` for behavior.
 
 ## Store-first rule
 
@@ -191,4 +191,4 @@ export function* pointerAuditSaga() {
 ## See also
 
 - `svelte/selectors` — building Store-bound selectors.
-- `docs/SELECTORS.md` — selector memoization and lifecycle rules.
+- `@augmentcode/themis/docs/SELECTORS.md` — selector memoization and lifecycle rules.
