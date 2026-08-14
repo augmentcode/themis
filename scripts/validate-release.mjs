@@ -190,6 +190,76 @@ export const packageEntrypointFiles = [
   "dist/utils/sagas/selector-channel-effects.d.ts",
 ];
 
+export const packageMarkdownFiles = [
+  "README.md",
+  "CONTRIBUTING.md",
+  "docs/ARCHITECTURE.md",
+  "docs/COLLECTIONS.md",
+  "docs/INSTALLATION.md",
+  "docs/REDUCERS.md",
+  "docs/SAGAS.md",
+  "docs/SELECTORS.md",
+  "docs/TESTING.md",
+  "docs/WAITFOR.md",
+  "skills/SKILL.md",
+  "skills/core/SKILL.md",
+  "skills/core/actions/SKILL.md",
+  "skills/core/boolean-preference/SKILL.md",
+  "skills/core/channel-effects/SKILL.md",
+  "skills/core/collections/SKILL.md",
+  "skills/core/core-policy/SKILL.md",
+  "skills/core/debugging/SKILL.md",
+  "skills/core/domain-scoped-state/SKILL.md",
+  "skills/core/file-structure/SKILL.md",
+  "skills/core/import-boundaries/SKILL.md",
+  "skills/core/local-storage/SKILL.md",
+  "skills/core/reducers/SKILL.md",
+  "skills/core/redux-saga/SKILL.md",
+  "skills/core/saga-manager/SKILL.md",
+  "skills/core/sagas/SKILL.md",
+  "skills/core/selector-channels/SKILL.md",
+  "skills/core/state-integrity/SKILL.md",
+  "skills/core/state-serialization/SKILL.md",
+  "skills/core/store-pruning/SKILL.md",
+  "skills/core/testing/SKILL.md",
+  "skills/core/verifier/SKILL.md",
+  "skills/core/wait-for/SKILL.md",
+  "skills/react/SKILL.md",
+  "skills/react/component-integration/SKILL.md",
+  "skills/react/migration/SKILL.md",
+  "skills/react/migration/assessment/SKILL.md",
+  "skills/react/migration/cleanup/SKILL.md",
+  "skills/react/migration/component-migration/SKILL.md",
+  "skills/react/migration/derived-stores/SKILL.md",
+  "skills/react/migration/setup/SKILL.md",
+  "skills/react/migration/side-effects/SKILL.md",
+  "skills/react/migration/writable-stores/SKILL.md",
+  "skills/react/selector-lifecycle/SKILL.md",
+  "skills/react/selector-scheduling/SKILL.md",
+  "skills/react/selectors/SKILL.md",
+  "skills/react/signals/SKILL.md",
+  "skills/react/store/SKILL.md",
+  "skills/setup/SKILL.md",
+  "skills/streaming/SKILL.md",
+  "skills/streaming/selector-lifecycle/SKILL.md",
+  "skills/streaming/selectors/SKILL.md",
+  "skills/streaming/store/SKILL.md",
+  "skills/svelte/SKILL.md",
+  "skills/svelte/component-integration/SKILL.md",
+  "skills/svelte/migration/SKILL.md",
+  "skills/svelte/migration/assessment/SKILL.md",
+  "skills/svelte/migration/cleanup/SKILL.md",
+  "skills/svelte/migration/component-migration/SKILL.md",
+  "skills/svelte/migration/derived-stores/SKILL.md",
+  "skills/svelte/migration/setup/SKILL.md",
+  "skills/svelte/migration/side-effects/SKILL.md",
+  "skills/svelte/migration/writable-stores/SKILL.md",
+  "skills/svelte/selector-lifecycle/SKILL.md",
+  "skills/svelte/selector-scheduling/SKILL.md",
+  "skills/svelte/selectors/SKILL.md",
+  "skills/svelte/store/SKILL.md",
+];
+
 export const packageRemovedEntrypointFiles = [
   "dist/middleware.js",
   "dist/middleware.d.ts",
@@ -657,6 +727,14 @@ async function defaultPathExists(path) {
   }
 }
 
+export async function validatePackageMarkdownFiles(pathExists = defaultPathExists) {
+  for (const file of packageMarkdownFiles) {
+    if (!(await pathExists(file))) {
+      throw validationError(`Missing required Markdown document in source tree: ${file}`);
+    }
+  }
+}
+
 function assertArrayEqual(actual, expected, message) {
   const actualJson = JSON.stringify(actual);
   const expectedJson = JSON.stringify(expected);
@@ -874,6 +952,10 @@ export function validatePackContents(packages, logger = console.log) {
   for (const file of packageRuntimeFiles) {
     assertPacked(paths, file, scriptGuidance);
   }
+  const markdownGuidance = ". Verify package.json's files array includes the complete docs/ and skills/ Markdown inventory.";
+  for (const file of packageMarkdownFiles) {
+    assertPacked(paths, file, markdownGuidance);
+  }
 
   if (![...paths].some((path) => path.startsWith("docs/"))) {
     throw validationError("Expected docs/ files in npm pack dry-run contents");
@@ -956,6 +1038,9 @@ export async function validateTypeExports(readDeclaration = (path) => readFile(p
 export async function main() {
   log("checking architecture quality gate");
   run(npm, ["run", "validate:architecture"]);
+
+  log("checking required Markdown source files");
+  await validatePackageMarkdownFiles();
 
   log("checking single-file ESLint plugin implementations");
   await validateArchitecturePluginSingleImplementation();

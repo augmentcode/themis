@@ -30,7 +30,7 @@ Before editing code or docs under this skill:
 - **MUST** decide and record exactly one concrete Store family for the app/package/code path before creating or editing setup files.
 - **MUST** collect concrete routing evidence first: Svelte/SvelteKit evidence chooses `Store`; React evidence chooses `ReactStore`; Node/server/worker/CLI/test/no-UI or observable evidence chooses `StreamingStore` by default.
 - **MUST** keep `Store`, `ReactStore`, and `StreamingStore` mutually exclusive inside one app/package/code path. Separate apps in a mixed repository may choose different families only when their files and runtime lifecycles are isolated.
-- **MUST** keep active greenfield setup routing on this root setup path, not under `../svelte/setup/SKILL.md`.
+- **MUST** keep active greenfield setup routing on this root setup skill, not under a family-specific setup path.
 - **SHOULD** stop and ask when rules conflict or scope is unclear.
 - **NEVER** claim completion when a required skill/doc was skipped or the handoff lacks compliance evidence.
 
@@ -167,7 +167,7 @@ npx themis install-skills
 npx themis help
 ```
 
-The selected files are copied to canonical `.agents/skills/themis/`; a `.claude/skills/themis` compatibility link is created or reused. Repeating the command refreshes package-owned files; collisions and user-authored files are preserved. For the canonical destination, verification, cleanup-before-uninstall, and separate source-checkout maintainer workflow, read [docs/INSTALLATION.md](../../docs/INSTALLATION.md):
+The selected files are copied to canonical `.agents/skills/themis/`; a `.claude/skills/themis` compatibility link is created or reused. Repeating the command refreshes package-owned files; collisions and user-authored files are preserved. For the canonical destination, verification, cleanup-before-uninstall, and separate source-checkout maintainer workflow, read [@augmentcode/themis/docs/INSTALLATION.md](@augmentcode/themis/docs/INSTALLATION.md):
 
 ```bash
 npm exec -- themis install-skills:svelte
@@ -181,7 +181,7 @@ npm uninstall @augmentcode/themis
 npm uninstall redux redux-saga typed-redux-saga fast-equals # only if your app no longer uses them
 ```
 
-Do not replace consumer commands with the repository's maintainer validation scripts; those are documented separately in `docs/INSTALLATION.md`.
+Do not replace consumer commands with the repository's maintainer validation scripts; those are documented separately in `@augmentcode/themis/docs/INSTALLATION.md`.
 
 ## Step 2 — Create the Store and Register App Sagas
 

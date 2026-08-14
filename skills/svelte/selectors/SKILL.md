@@ -21,7 +21,7 @@ triggers:
 ---
 # Selectors — `store.createSelector` / collection utility reads
 
-> Operational guidance for selector work. Full API reference and examples: `docs/SELECTORS.md`. Public facade: `store.createSelector(...)` from `@augmentcode/themis/svelte-store`; selector/cache internals are package-private implementation context; related guidance: `../SKILL.md` §3.
+> Operational guidance for selector work. Full API reference and examples: `@augmentcode/themis/docs/SELECTORS.md`. Public facade: `store.createSelector(...)` from `@augmentcode/themis/svelte-store`; selector/cache internals are package-private implementation context; related guidance: `../SKILL.md` §3.
 
 ## Use when
 
@@ -193,7 +193,7 @@ export const selectVisibleTodosOnce = store.createSelector((state) => {
 
 ## See also
 
-- `docs/SELECTORS.md` — human reference and examples for all call forms.
+- `@augmentcode/themis/docs/SELECTORS.md` — human reference and examples for all call forms.
 - `svelte/selector-lifecycle/SKILL.md` — lifecycle crash prevention.
 - `core/selector-channels/SKILL.md` — reacting to selector changes from sagas.
 - `core/collections/SKILL.md` — normalized state shape and collection utilities used by selectors.

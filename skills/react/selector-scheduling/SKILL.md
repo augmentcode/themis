@@ -222,4 +222,4 @@ export function* pointerAuditSaga() {
 
 - `react/selectors` — building `ReactStore` selectors.
 - `react/selector-lifecycle` — choosing direct signal, `.useValue`, `.select`, `.effect`, and `.withStore` call modes.
-- `docs/SELECTORS.md` — selector memoization and lifecycle rules.
+- `@augmentcode/themis/docs/SELECTORS.md` — selector memoization and lifecycle rules.

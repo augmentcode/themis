@@ -20,7 +20,7 @@ triggers:
 ---
 # Selector Lifecycle — call-mode guardrails
 
-> Operational checklist for avoiding `lifecycle_outside_component`. Human reference and examples: `docs/SELECTORS.md` → Using Selectors and Selector Lifecycle Rules. Source: `../SKILL.md` §4, §7.
+> Operational checklist for avoiding `lifecycle_outside_component`. Human reference and examples: `@augmentcode/themis/docs/SELECTORS.md` → Using Selectors and Selector Lifecycle Rules. Source: `../SKILL.md` §4, §7.
 
 ## Use when
 
@@ -157,7 +157,7 @@ async function onSaveLaterSafely(itemId: string) {
 
 ## See also
 
-- `docs/SELECTORS.md` — examples for each selector call form.
+- `@augmentcode/themis/docs/SELECTORS.md` — examples for each selector call form.
 - `svelte/selectors/SKILL.md` — selector authoring and composition.
 - `svelte/component-integration/SKILL.md` — component store/dispatch wiring.
 - `core/selector-channels/SKILL.md` — selector reads from sagas.

@@ -35,17 +35,17 @@ Installing `@augmentcode/themis` does **not** copy AI skills automatically. Skil
 npm install @augmentcode/themis
 ```
 
-2. Copy the smallest bundle that matches the app. Each command copies explicitly to `.agents/skills/themis/` and creates or reuses the Claude-compatible `.claude/skills/themis` link to that canonical directory.
+1. Copy the smallest bundle that matches the app. Each command copies explicitly to `.agents/skills/themis/` and creates or reuses the Claude-compatible `.claude/skills/themis` link to that canonical directory.
 
 | App or need | Command |
 | --- | --- |
-| React | `npx themis install-skills:react` |
-| Svelte/SvelteKit | `npx themis install-skills:svelte` |
-| Node, server, worker, CLI, tests, or no UI | `npx themis install-skills:streaming` |
-| Shared Redux/saga guidance only | `npx themis install-skills:core` |
-| Every package skill family | `npx themis install-skills` or `npx themis install-skills:all` |
+| React | npx themis install-skills:react |
+| Svelte/SvelteKit | npx themis install-skills:svelte |
+| Node, server, worker, CLI, tests, or no UI | npx themis install-skills:streaming |
+| Shared Redux/saga guidance only | npx themis install-skills:core |
+| Every package skill family | npx themis install-skills or npx themis install-skills:all |
 
-3. Verify the installed CLI and canonical bundle:
+1. Verify the installed CLI and canonical bundle:
 
 ```bash
 npx themis help
@@ -61,7 +61,7 @@ npx themis cleanup-skills
 npm uninstall @augmentcode/themis
 ```
 
-Cleanup removes only manifest-listed package files, the owned Claude compatibility link (including an owned dangling link), and empty compatibility directories. It preserves foreign `.claude` paths and unrelated `.agents/skills` content. See [docs/INSTALLATION.md](./docs/INSTALLATION.md) for the complete consumer and maintainer workflows.
+Cleanup removes only manifest-listed package files, the owned Claude compatibility link (including an owned dangling link), and empty compatibility directories. It preserves foreign `.claude` paths and unrelated `.agents/skills` content. See [docs/INSTALLATION.md](https://github.com/augmentcode/themis/blob/main/docs/INSTALLATION.md) for the complete consumer and maintainer workflows.
 
 ## Quick start
 
@@ -190,7 +190,7 @@ Names prefixed `@internal_` (such as the `@internal_storeUtility` reducer) and t
 
 ## CLI and skills
 
-Run the package bin with `npx themis help` (or `./node_modules/.bin/themis help`) to list commands. In this repository's source checkout the package bin is not linked automatically, so run `node scripts/cli.mjs help` instead. Skill installs — `install-skills:react`, `install-skills:svelte`, `install-skills:streaming`, or `install-skills` (alias of `install-skills:all`) — copy the selected bundle only into canonical `.agents/skills/themis/` and record an `installed-skills.yml` manifest there. They also create or reuse the relative `.claude/skills/themis` compatibility link to that canonical tree; existing files, directories, or foreign links at that path are preserved with a warning. Run `cleanup-skills` before uninstalling; it removes manifest-listed files, the owned Claude compatibility link, and only empty compatibility directories. See [docs/INSTALLATION.md](./docs/INSTALLATION.md) for full install, refresh, cleanup, and uninstall behavior.
+Run the package bin with `npx themis help` (or `./node_modules/.bin/themis help`) to list commands. In this repository's source checkout the package bin is not linked automatically, so run `node scripts/cli.mjs help` instead. Skill installs — `install-skills:react`, `install-skills:svelte`, `install-skills:streaming`, or `install-skills` (alias of `install-skills:all`) — copy the selected bundle only into canonical `.agents/skills/themis/` and record an `installed-skills.yml` manifest there. They also create or reuse the relative `.claude/skills/themis` compatibility link to that canonical tree; existing files, directories, or foreign links at that path are preserved with a warning. Run `cleanup-skills` before uninstalling; it removes manifest-listed files, the owned Claude compatibility link, and only empty compatibility directories. See [docs/INSTALLATION.md](https://github.com/augmentcode/themis/blob/main/docs/INSTALLATION.md) for full install, refresh, cleanup, and uninstall behavior.
 
 ## ESLint
 
@@ -198,20 +198,20 @@ Import exactly one composed domain root config from `@augmentcode/themis/eslint-
 
 ## Learn more
 
-`docs/` is the human-facing source of truth; `skills/` is concise agent-facing execution guidance that links back to the docs.
+[docs/](https://github.com/augmentcode/themis/tree/main/docs/) is the human-facing source of truth; [skills/](https://github.com/augmentcode/themis/tree/main/skills/) is concise agent-facing execution guidance that links back to the docs.
 
-- `docs/ARCHITECTURE.md` — store setup, data flow, selector tracking, and saga lifecycle.
-- `docs/INSTALLATION.md` — manual Skills installation, cleanup/uninstall behavior, and maintainer validation.
-- `docs/SELECTORS.md` — selector creation, memoization, component reads, non-component reads, and saga usage.
-- `docs/SAGAS.md` — typed saga patterns for async workflows.
-- `docs/COLLECTIONS.md` — normalized entity state helpers.
-- `docs/TESTING.md` — reducer, selector, and saga testing strategies.
-- `skills/SKILL.md` — root router for choosing Core, Svelte, React, or Streaming skill families.
-- `skills/core/` — framework-independent Redux and redux-saga agent guidance.
-- `skills/svelte/` — Svelte-specific agent execution guidance, including `skills/svelte/migration/`.
-- `skills/react/` — ReactStore and Preact signal selector guidance.
-- `skills/streaming/` — StreamingStore and Kefir/observable selector guidance.
-- `skills/setup/` — canonical greenfield setup workflow.
+- [docs/ARCHITECTURE.md](https://github.com/augmentcode/themis/blob/main/docs/ARCHITECTURE.md) — store setup, data flow, selector tracking, and saga lifecycle.
+- [docs/INSTALLATION.md](https://github.com/augmentcode/themis/blob/main/docs/INSTALLATION.md) — manual Skills installation, cleanup/uninstall behavior, and maintainer validation.
+- [docs/SELECTORS.md](https://github.com/augmentcode/themis/blob/main/docs/SELECTORS.md) — selector creation, memoization, component reads, non-component reads, and saga usage.
+- [docs/SAGAS.md](https://github.com/augmentcode/themis/blob/main/docs/SAGAS.md) — typed saga patterns for async workflows.
+- [docs/COLLECTIONS.md](https://github.com/augmentcode/themis/blob/main/docs/COLLECTIONS.md) — normalized entity state helpers.
+- [docs/TESTING.md](https://github.com/augmentcode/themis/blob/main/docs/TESTING.md) — reducer, selector, and saga testing strategies.
+- [skills/SKILL.md](https://github.com/augmentcode/themis/blob/main/skills/SKILL.md) — root router for choosing Core, Svelte, React, or Streaming skill families.
+- [skills/core/](https://github.com/augmentcode/themis/tree/main/skills/core/) — framework-independent Redux and redux-saga agent guidance.
+- [skills/svelte/](https://github.com/augmentcode/themis/tree/main/skills/svelte/) — Svelte-specific agent execution guidance, including [skills/svelte/migration/](https://github.com/augmentcode/themis/tree/main/skills/svelte/migration/).
+- [skills/react/](https://github.com/augmentcode/themis/tree/main/skills/react/) — ReactStore and Preact signal selector guidance.
+- [skills/streaming/](https://github.com/augmentcode/themis/tree/main/skills/streaming/) — StreamingStore and Kefir/observable selector guidance.
+- [skills/setup/](https://github.com/augmentcode/themis/tree/main/skills/setup/) — canonical greenfield setup workflow.
 
 ## Maintainer validation
 
@@ -224,7 +224,7 @@ npm run build
 npm run validate:release
 ```
 
-See [docs/INSTALLATION.md](./docs/INSTALLATION.md) for what each gate checks and the expected passing output.
+See [docs/INSTALLATION.md](https://github.com/augmentcode/themis/blob/main/docs/INSTALLATION.md) for what each gate checks and the expected passing output.
 
 ## License
 

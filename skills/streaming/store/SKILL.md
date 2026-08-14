@@ -10,8 +10,8 @@ requires:
   - core/import-boundaries
 sources:
   - "@augmentcode/themis/streaming-store"
-  - augmentcode/themis:docs/ARCHITECTURE.md
-  - augmentcode/themis:README.md
+  - @augmentcode/themis/docs/ARCHITECTURE.md
+  - @augmentcode/themis/README.md
 triggers:
   - StreamingStore
   - streaming-store import

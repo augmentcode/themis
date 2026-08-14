@@ -16,7 +16,7 @@ sources:
   - "@augmentcode/themis/react-store"
   - "@preact/signals-react"
   - "@preact/signals-react/runtime"
-  - augmentcode/themis:docs/SELECTORS.md
+  - @augmentcode/themis/docs/SELECTORS.md
   - ../signals/SKILL.md
 triggers:
   - React selector
@@ -267,5 +267,5 @@ React selector direct calls return Preact React signals, not plain values. Use
 ## See also
 
 - `react/store/SKILL.md` — Store class and import choice.
-- `docs/SELECTORS.md` — human reference and examples for all call forms.
+- `@augmentcode/themis/docs/SELECTORS.md` — human reference and examples for all call forms.
 - `core/state-integrity/SKILL.md` — canonical derived-value ownership.

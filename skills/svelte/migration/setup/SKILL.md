@@ -31,11 +31,11 @@ npx themis install-skills:svelte
 npx themis help
 ```
 
-The equivalent npm exec form is `npm exec -- themis install-skills:svelte`. Repeating the command refreshes package-owned files in `.agents/skills/themis/`; cleanup preserves unrelated skills and the owned Claude compatibility link is removed only by `npx themis cleanup-skills`. For the canonical installation, collision, verification, cleanup, and maintainer workflow, read [docs/INSTALLATION.md](../../../../docs/INSTALLATION.md).
+The equivalent npm exec form is `npm exec -- themis install-skills:svelte`. Repeating the command refreshes package-owned files in `.agents/skills/themis/`; cleanup preserves unrelated skills and the owned Claude compatibility link is removed only by `npx themis cleanup-skills`. For the canonical installation, collision, verification, cleanup, and maintainer workflow, read [@augmentcode/themis/docs/INSTALLATION.md](@augmentcode/themis/docs/INSTALLATION.md).
 
 On rollback, run `npx themis cleanup-skills` before uninstalling `@augmentcode/themis`; remove peer dependencies only if the app no longer uses them.
 
-See `docs/INSTALLATION.md` for the complete consumer install/uninstall flow and the separate maintainer `pnpm install --frozen-lockfile` validation flow.
+See `@augmentcode/themis/docs/INSTALLATION.md` for the complete consumer install/uninstall flow and the separate maintainer `pnpm install --frozen-lockfile` validation flow.
 
 ## Step 2 — Import the Package Runtime
 
