@@ -231,7 +231,7 @@ Because Store-created selectors already cache accessed state paths, track argume
 
 ### Selector Tracing Diagnostics
 
-Selector tracing is a development-only, opt-in diagnostic. Configure it in the third (options) argument of `Store`, `ReactStore`, or `StreamingStore`; pass `undefined` for middleware when there is no middleware to configure:
+Selector tracing is a default-off, opt-in diagnostic available in development and production builds. Configure it in the third (options) argument of `Store`, `ReactStore`, or `StreamingStore`; pass `undefined` for middleware when there is no middleware to configure:
 
 ```typescript
 import { Store } from "@augmentcode/themis/svelte-store";
@@ -255,7 +255,7 @@ The public contract is flat: `traceSelectors` accepts `undefined`, `false`, `tru
 | `traceResults` | `false` | Whether a recomputation produced the initial, changed, or retained-reference result. |
 | `traceCadence` | `false` | Store scheduling subscription and cadence-tick messages. |
 | `minDurationMs` | `0` | Minimum execution duration (inclusive) for an execution console record. |
-| `summaryEnabled` | `false` | Development-only in-memory aggregate collection and periodic summary output. |
+| `summaryEnabled` | `false` | In-memory aggregate collection and periodic summary output. |
 | `summaryIntervalMs` | `1000` | Milliseconds between periodic summary records when `summaryEnabled` is true. |
 
 `traceSelectors: true` is the compatibility preset: it enables all six event categories with `minDurationMs: 0`, while leaving aggregate summaries disabled. `traceSelectors: false` and an omitted option disable every category. In object form, each category is independent, so enabling `traceInvalidation` does not implicitly enable execution, argument, result, cache, or cadence output. `minDurationMs` and `summaryIntervalMs` must be finite numbers greater than or equal to zero; the category and `summaryEnabled` fields must be booleans.
@@ -317,13 +317,13 @@ Tracing never captures or logs selector argument values, selector results, or st
 
 #### Aggregate summaries
 
-Set `summaryEnabled: true` to collect privacy-preserving, per-selector summaries in development. Read the current snapshot at any time with the inherited, read-only Store API:
+Set `summaryEnabled: true` to collect privacy-preserving, per-selector summaries in any build where tracing is explicitly enabled. Read the current snapshot at any time with the inherited, read-only Store API:
 
 ```typescript
 const summaries = store.getSelectorTraceSummary();
 ```
 
-The result is a deep-frozen snapshot and calling it does not reset or mutate the collector. With no summary data (including disabled or production tracing), it returns an empty array. Each selector entry contains:
+The result is a deep-frozen snapshot and calling it does not reset or mutate the collector. With no summary data (including disabled tracing), it returns an empty array. Each selector entry contains:
 
 | Field | Contents |
 | --- | --- |
@@ -339,13 +339,13 @@ Duration `count`, total, average, and maximum are lifetime aggregates. The p95 c
 
 After `store.init()`, `summaryEnabled` starts one interval using `summaryIntervalMs` and writes `[themis] selector trace summary` records with the same read-only snapshot shape. Repeated `init()` calls do not create duplicate intervals. The initializer disposer and `store.dispose()` stop the interval and dispose normal selector cadence resources.
 
-#### Development and production safety
+#### Default-off and production behavior
 
-Tracing is disabled by default in development and is fully gated out of production builds. For compatibility, calling the legacy `store.traceSelectors()` method in development on a Store constructed with omitted or `false` tracing options activates the same event preset as `traceSelectors: true`; a configured flat object remains authoritative. In production, `true`, an object with every category enabled, and the legacy method cannot activate a reporter, summary collector, summary timer, console output, or category-specific tracing work. Keep the option omitted or `false` in normal development builds, enable it temporarily while diagnosing a real interaction, and remove it (or set it back to `false`) afterward.
+Tracing is disabled by default in every build. For compatibility, calling the legacy `store.traceSelectors()` method on a Store constructed with omitted or `false` tracing options activates the same event preset as `traceSelectors: true`; a configured flat object remains authoritative. The option, reporter, summary collector, summary timer, console output, and category-specific tracing work are available in production when explicitly enabled. Keep the option omitted or `false` in normal builds, enable it only while diagnosing a real interaction, and remove it (or set it back to `false`) afterward.
 
 #### Performance diagnosis workflow
 
-1. Enable the smallest useful set of categories in a development build, initialize the Store, and reproduce the slow interaction through the real selector call path.
+1. Enable the smallest useful set of categories in a development or production build, initialize the Store, and reproduce the slow interaction through the real selector call path.
 2. Filter the console for `[themis] selector trace`. Start with execution records that have high `executionDurationMs` or unexpectedly increasing `recomputationCount`; inspect `selectorSource` and `accessedPaths` for broad reads.
 3. Use invalidation, argument, and result metadata to distinguish state-path changes, unstable argument identities, and recomputations that retain the previous reference. Compare cache hit/miss records for direct output reuse.
 4. Use `getSelectorTraceSummary()` or periodic summary records to compare aggregate duration, p95, invalidation, result, and cache statistics before and after a selector change. Remove `traceSelectors` (or set it to `false`) after the investigation.

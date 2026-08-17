@@ -26,7 +26,7 @@ runtime behavior are implementation evidence, not a second public API.
 
 ## 1. Scope and safety rules
 
-- Tracing is a development diagnostic and is disabled by default. Enable it only
+- Tracing is an opt-in diagnostic and is disabled by default in every build. Enable it only
   for a focused reproduction, then remove it or set it back to `false`.
 - Tracing never provides selector argument values, selector result values, or
   Redux state values. Do not ask a user to capture them from logs, infer them
@@ -80,7 +80,7 @@ execution, arguments, results, cache, or cadence. Both numeric fields must be
 finite and non-negative; category and `summaryEnabled` fields must be boolean.
 
 The legacy `store.traceSelectors()` compatibility method can activate the same
-development preset only when construction used omitted or `false` tracing
+event preset in any build when construction used omitted or `false` tracing
 options. A configured object remains authoritative; do not use the method to
 override it.
 
@@ -174,8 +174,8 @@ read a non-resetting snapshot with:
 const summaries = store.getSelectorTraceSummary();
 ```
 
-The snapshot is deep-frozen. With tracing disabled, in production, or before
-any summary data exists, it is an empty array. Each selector entry contains:
+The snapshot is deep-frozen. With tracing disabled or before any summary data
+exists, it is an empty array. Each selector entry contains:
 
 | Group | Fields and interpretation |
 | --- | --- |
@@ -200,8 +200,9 @@ interval and normal selector cadence resources.
 
 ## 5. Store-family symmetry and lifecycle
 
-The tracing options, events, summary shape, privacy behavior, and production
-gates are shared by all three Store families:
+The tracing options, events, summary shape, privacy behavior, and
+default-off/explicit-activation semantics are shared by all three Store
+families:
 
 | Family | Public direct selector output |
 | --- | --- |
@@ -226,14 +227,15 @@ outputs, stops summary intervals, disposes cadence resources, and stops running
 sagas. Do not infer a tracing failure from the absence of records before
 `init()` or after disposal.
 
-## 6. Production and privacy gates
+## 6. Default-off production behavior and privacy
 
-Production builds gate tracing out completely. In production, constructor
-options, the legacy activation method, reporters, summary collectors, summary
-timers, console output, and category-specific tracing work cannot activate.
-Default and `false` development configurations are also silent and should not
-allocate diagnostic work. Keep tracing omitted or `false` in normal builds and
-remove temporary diagnostic configuration after the investigation.
+Tracing remains disabled by default in production as well as development. When
+explicitly enabled, production constructor options, the legacy activation
+method, reporters, summary collectors, summary timers, console output, and
+category-specific tracing work are active. Default and `false` configurations
+are silent and should not allocate diagnostic work. Keep tracing omitted or
+`false` in normal builds and remove temporary diagnostic configuration after the
+investigation.
 
 Path metadata is redacted before it is reported. Dynamic property keys derived
 from selector arguments—including identifier-like keys—are rendered as

@@ -9,12 +9,12 @@ const counterReducer = Object.assign(
   { initialState: { count: 0 } }
 );
 
-describe.runIf(isProductionBuild)('production selector tracing guard', () => {
+describe.runIf(isProductionBuild)('production selector tracing', () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('cannot activate tracing or summaries through the Store option or legacy method', () => {
+  it('activates tracing and summaries through the Store option in production', () => {
     const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined);
     const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
     const store = new StreamingStore(
@@ -28,17 +28,23 @@ describe.runIf(isProductionBuild)('production selector tracing guard', () => {
     const dispose = store.init();
     const subscription = selectCount().observe(() => undefined);
     subscription.unsubscribe();
-    dispose();
 
-    expect(store.getSelectorTraceReporter()).toBeUndefined();
+    expect(store.getSelectorTraceReporter()).toEqual(expect.any(Function));
     expect('getSelectorExecutionTraceReporter' in store).toBe(false);
     expect('getSelectorComputationTraceOptions' in store).toBe(false);
     expect('getSelectorCacheTraceReporter' in store).toBe(false);
-    expect(store.shouldTraceSelectorCache()).toBe(false);
-    expect(store.getSelectorTraceSummary()).toEqual([]);
-    expect((store as any).selectorTraceSummaryCollector).toBeUndefined();
+    expect(store.shouldTraceSelectorCache()).toBe(true);
+    expect((store as any).selectorTraceSummaryCollector).toBeDefined();
+    expect((store as any).selectorTraceSummaryInterval).toBeDefined();
+    expect(setIntervalSpy).toHaveBeenCalled();
+    expect(consoleInfo).toHaveBeenCalledWith(
+      '[themis] selector trace',
+      expect.objectContaining({ selectorSource: expect.any(String) })
+    );
+    expect(store.getSelectorTraceSummary()).not.toEqual([]);
+
+    dispose();
+
     expect((store as any).selectorTraceSummaryInterval).toBeUndefined();
-    expect(setIntervalSpy).not.toHaveBeenCalled();
-    expect(consoleInfo).not.toHaveBeenCalled();
   });
 });
