@@ -60,8 +60,6 @@ import type {
 
 const MAX_SELECTOR_SOURCE_SNIPPET_LINES = 5;
 const MAX_SELECTOR_SOURCE_SNIPPET_LENGTH = 500;
-const isProductionBuild = (): boolean =>
-  (import.meta as ImportMeta & { readonly env: { readonly PROD: boolean } }).env.PROD;
 
 const getSelectorSourceSnippet = (selectorFunc: CachedSelector<any, any, any[]>): string => {
   return selectorFunc
@@ -205,7 +203,6 @@ export abstract class StoreRuntime<
     | RuntimeStoreStateStream<StoreBoundState<TStateMap>>
     | undefined;
   private disposeDevTools: (() => void) | undefined;
-  private readonly selectorTracingDevelopmentEnabled: boolean;
   private selectorTracingEnabled = false;
   private readonly selectorTraceReporter: SelectorTraceReporter<any, any, any[]> | undefined;
   private readonly selectorTraceSummaryCollector: SelectorTraceSummaryCollector | undefined;
@@ -223,9 +220,8 @@ export abstract class StoreRuntime<
     this.selectorTracingOptions = this.storeOptions.traceSelectors;
     this.legacySelectorTracingActivationAllowed =
       options?.traceSelectors === undefined || options.traceSelectors === false;
-    this.selectorTracingDevelopmentEnabled = !isProductionBuild();
     this.selectorTraceSummaryCollector =
-      this.selectorTracingDevelopmentEnabled && this.selectorTracingOptions.summaryEnabled
+      this.selectorTracingOptions.summaryEnabled
         ? new SelectorTraceSummaryCollector(getSelectorSourceSnippet)
         : undefined;
     this.selectorTracingEnabled =
@@ -236,11 +232,8 @@ export abstract class StoreRuntime<
         this.selectorTracingOptions.traceArguments ||
         this.selectorTracingOptions.traceResults ||
         this.selectorTraceSummaryCollector !== undefined
-      ) &&
-      this.selectorTracingDevelopmentEnabled;
-    this.selectorTraceReporter = this.selectorTracingDevelopmentEnabled
-      ? (trace) => this.reportSelectorTrace(trace)
-      : undefined;
+      );
+    this.selectorTraceReporter = (trace) => this.reportSelectorTrace(trace);
     if (this.selectorTracingEnabled) {
       this.registerSelectorTracingBridge();
     }
@@ -309,8 +302,7 @@ export abstract class StoreRuntime<
       this.selectorCadenceSource = createSelectorCadenceSource(
         this.storeOptions.throttledSelectorFrequency,
         {
-          traceSelectors:
-            this.selectorTracingDevelopmentEnabled && this.selectorTracingOptions.traceCadence,
+          traceSelectors: this.selectorTracingOptions.traceCadence,
         }
       );
     }
@@ -549,7 +541,6 @@ export abstract class StoreRuntime<
 
   traceSelectors(): void {
     if (
-      !this.selectorTracingDevelopmentEnabled ||
       !this.legacySelectorTracingActivationAllowed ||
       !this.selectorTraceReporter
     ) {
