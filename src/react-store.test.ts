@@ -67,10 +67,13 @@ describe('ReactStore', () => {
     const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
     try {
-      const store = new ReactStore({ counter: counterReducer });
+      const store = new ReactStore(
+        { counter: counterReducer },
+        undefined,
+        { traceSelectors: true }
+      );
       const selectCount = store.createSelector((state) => state.counter.count);
 
-      store.traceSelectors();
       store.init();
       const selected = selectCount();
 
@@ -92,6 +95,12 @@ describe('ReactStore', () => {
         expect.objectContaining({
           accessedPathCount: 2,
           accessedPaths: ['counter', 'counter.count'],
+          executionDurationMs: expect.any(Number),
+          invalidationReason: 'first-execution',
+          argumentsChanged: false,
+          changedArguments: [],
+          resultOutcome: 'initial',
+          recomputationCount: 1,
           selectorSource: expect.stringContaining('state.counter.count'),
         }),
       ]);
@@ -104,10 +113,13 @@ describe('ReactStore', () => {
     const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
     try {
-      const store = new ReactStore({ counter: counterReducer });
+      const store = new ReactStore(
+        { counter: counterReducer },
+        undefined,
+        { traceSelectors: true }
+      );
       const selectCount = store.createSelector((state) => state.counter.count);
 
-      store.traceSelectors();
       store.init();
       const first = selectCount();
       const second = selectCount();
@@ -120,6 +132,12 @@ describe('ReactStore', () => {
         .map((call) => call[1] as any)
         .filter((payload) => payload && 'observableCacheRequestCount' in payload);
       expect(cacheTraces).toHaveLength(3);
+      expect(cacheTraces.map((trace) => trace.outputCacheStatus)).toEqual(['miss', 'hit', 'hit']);
+      expect(cacheTraces[2]).toEqual(expect.objectContaining({
+        outputCacheRequestCount: 3,
+        outputCacheHitCount: 2,
+        outputCacheMissCount: 1,
+      }));
       expect(cacheTraces[1].observableCacheRequestCount).toBe(
         cacheTraces[0].observableCacheRequestCount + 1
       );
@@ -131,6 +149,31 @@ describe('ReactStore', () => {
     } finally {
       consoleInfoSpy.mockRestore();
     }
+  });
+
+  it('isolates signal selector cache trace counts between ReactStore instances', () => {
+    const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const storeA = new ReactStore({ counter: counterReducer }, undefined, { traceSelectors: true });
+    const storeB = new ReactStore({ counter: counterReducer }, undefined, { traceSelectors: true });
+    const selectCount = storeA.createSelector((state) => state.counter.count);
+
+    storeA.init();
+    storeB.init();
+    selectCount();
+    selectCount.withStore(storeB)();
+
+    const cacheTraces = consoleInfoSpy.mock.calls
+      .map((call) => call[1] as any)
+      .filter((payload) => payload && 'observableCacheRequestCount' in payload);
+    expect(cacheTraces.map((trace) => ({
+      requests: trace.outputCacheRequestCount,
+      hits: trace.outputCacheHitCount,
+      misses: trace.outputCacheMissCount,
+    }))).toEqual([
+      { requests: 1, hits: 0, misses: 1 },
+      { requests: 1, hits: 0, misses: 1 },
+    ]);
+    consoleInfoSpy.mockRestore();
   });
 
   it('starts the saga manager with the Redux store', () => {

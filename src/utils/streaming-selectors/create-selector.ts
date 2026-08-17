@@ -7,6 +7,10 @@ import type { StreamingArgs, StoreStreamingSelector } from "./types";
 import { createCachedSelector } from "../selector-core/create-cached-selector";
 import { getOrCreate } from "../selector-core/selector-output-cache";
 import {
+  getSelectorCacheTraceReporter,
+  getSelectorComputationTraceOptions,
+} from "../selector-core/selector-tracing-bridge";
+import {
   createConstantKefirProperty,
   createKefirSelectorProperty,
   isKefirObservable,
@@ -41,7 +45,8 @@ export const createSelector = <TStore extends StreamingStore<any, any>, ARGS ext
     store: TStore,
     ...restArgs: StreamingArgs<ARGS>
   ): Observable<R, any> => {
-    const traceReporter = store.getSelectorTraceReporter<StreamingState<TStore>, R, ARGS>();
+    const traceOptions = getSelectorComputationTraceOptions<StreamingState<TStore>, R, ARGS>(store);
+    const traceCacheReporter = getSelectorCacheTraceReporter<StreamingState<TStore>, R, ARGS>(store);
 
     return getOrCreate(store, selectorFunc, restArgs, () => {
       const hasObservableSelectorArgs = hasObservableArgs(restArgs);
@@ -50,10 +55,10 @@ export const createSelector = <TStore extends StreamingStore<any, any>, ARGS ext
         selectorFunc,
         restArgs.map(toKefirObservable),
         hasObservableSelectorArgs ? undefined : () => restArgs as ARGS,
-        traceReporter
+        traceOptions
       );
       return selected.property;
-    }, store.shouldTraceSelectorCache() ? { traceReporter } : undefined);
+    }, traceCacheReporter ? { traceReporter: traceCacheReporter } : undefined);
   };
 
   const streamSelector = ((...restArgs: StreamingArgs<ARGS>) => {

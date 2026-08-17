@@ -59,25 +59,43 @@ describe('Store selector trace rendering', () => {
     expect(Array.from(trace.accessedPaths)).toEqual(['["trace"]', '["trace","count"]']);
   });
 
-  it('does not render accessed paths when tracing is disabled', () => {
+  it('activates legacy tracing from default and explicit false options before init', () => {
     const store = new Store({ trace: reducer });
+    const explicitlyDisabledStore = new Store(
+      { trace: reducer },
+      undefined,
+      { traceSelectors: false }
+    );
     const selectCount = store.createSelector((state) => state.trace.count);
+    const selectExplicitCount = explicitlyDisabledStore.createSelector((state) => state.trace.count);
 
+    store.traceSelectors();
+    explicitlyDisabledStore.traceSelectors();
     store.init();
+    explicitlyDisabledStore.init();
     selectCount().subscribe(() => {})();
+    selectExplicitCount().subscribe(() => {})();
 
-    expect(renderAccessedPathsSpy).not.toHaveBeenCalled();
-    expect(console.info).not.toHaveBeenCalled();
+    expect(store.getSelectorTraceReporter()).toEqual(expect.any(Function));
+    expect(explicitlyDisabledStore.getSelectorTraceReporter()).toEqual(expect.any(Function));
+    expect(renderAccessedPathsSpy).toHaveBeenCalledTimes(2);
+    expect(console.info).toHaveBeenCalledWith(
+      '[themis] selector trace',
+      expect.objectContaining({ accessedPaths: ['trace', 'trace.count'] })
+    );
   });
 
-  it('renders accessed paths only after enabled tracing reaches a new maximum', () => {
-    const store = new Store({ trace: reducer });
+  it('renders accessed paths for every enabled selector execution', () => {
+    const store = new Store(
+      { trace: reducer },
+      undefined,
+      { traceSelectors: true }
+    );
     const selectCount = store.createSelector((state) => state.trace.count);
     const selectLabel = store.createSelector((state) => state.trace.label);
     const selectTrace = store.createSelector((state) => state.trace);
     const selectUserName = store.createSelector((state) => state.trace.user.name);
 
-    store.traceSelectors();
     store.init();
 
     const accessedPathTraces = () =>
@@ -91,11 +109,54 @@ describe('Store selector trace rendering', () => {
 
     selectLabel().subscribe(() => {})();
     selectTrace().subscribe(() => {})();
-    expect(renderAccessedPathsSpy).toHaveBeenCalledTimes(1);
-    expect(accessedPathTraces()).toHaveLength(1);
+    expect(renderAccessedPathsSpy).toHaveBeenCalledTimes(3);
+    expect(accessedPathTraces()).toHaveLength(3);
 
     selectUserName().subscribe(() => {})();
-    expect(renderAccessedPathsSpy).toHaveBeenCalledTimes(2);
-    expect(accessedPathTraces()).toHaveLength(2);
+    expect(renderAccessedPathsSpy).toHaveBeenCalledTimes(4);
+    expect(accessedPathTraces()).toHaveLength(4);
+  });
+
+  it('keeps configured flat categories unchanged when the legacy method is called', () => {
+    const store = new Store(
+      { trace: reducer },
+      undefined,
+      { traceSelectors: { traceInvalidation: true } }
+    );
+    const selectCount = store.createSelector((state) => state.trace.count);
+
+    store.traceSelectors();
+    store.init();
+    selectCount().subscribe(() => {})();
+
+    const payloads = vi.mocked(console.info).mock.calls.map(([, payload]) => payload);
+    expect(payloads).toEqual([
+      expect.objectContaining({ invalidationReason: 'first-execution' }),
+    ]);
+    expect(payloads[0]).not.toHaveProperty('accessedPaths');
+    expect(renderAccessedPathsSpy).not.toHaveBeenCalled();
+  });
+
+  it('reports execution timing and recomputation count only when the selector executes', () => {
+    const traceReporter = vi.fn();
+    const now = vi.spyOn(performance, 'now')
+      .mockReturnValueOnce(10)
+      .mockReturnValueOnce(12.5)
+      .mockReturnValueOnce(20)
+      .mockReturnValueOnce(24);
+    const selector = createCachedSelector<{ count: number }, [], number>(
+      (state) => state.count,
+      { traceReporter }
+    );
+
+    selector({ count: 1 });
+    selector({ count: 1 });
+    selector({ count: 2 });
+
+    expect(now).toHaveBeenCalledTimes(4);
+    expect(traceReporter.mock.calls.map(([trace]) => trace)).toEqual([
+      expect.objectContaining({ executionDurationMs: 2.5, recomputationCount: 1 }),
+      expect.objectContaining({ executionDurationMs: 4, recomputationCount: 2 }),
+    ]);
   });
 });

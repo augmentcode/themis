@@ -65,9 +65,12 @@ describe('StreamingStore', () => {
     const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
     try {
-      const store = new StreamingStore({ counter: counterReducer });
+      const store = new StreamingStore(
+        { counter: counterReducer },
+        undefined,
+        { traceSelectors: true }
+      );
 
-      store.traceSelectors();
       store.init();
       const selectCount = store.createSelector((state) => state.counter.count);
       const subscription = selectCount().observe(() => {});
@@ -86,6 +89,12 @@ describe('StreamingStore', () => {
         expect.objectContaining({
           accessedPathCount: 2,
           accessedPaths: ['counter', 'counter.count'],
+          executionDurationMs: expect.any(Number),
+          invalidationReason: 'first-execution',
+          argumentsChanged: false,
+          changedArguments: [],
+          resultOutcome: 'initial',
+          recomputationCount: 1,
           selectorSource: expect.stringContaining('state.counter.count'),
         })
       );
@@ -98,9 +107,12 @@ describe('StreamingStore', () => {
     const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
     try {
-      const store = new StreamingStore({ counter: counterReducer });
+      const store = new StreamingStore(
+        { counter: counterReducer },
+        undefined,
+        { traceSelectors: true }
+      );
 
-      store.traceSelectors();
       store.init();
       const selectCount = store.createSelector((state) => state.counter.count);
       const first = selectCount();
@@ -114,6 +126,12 @@ describe('StreamingStore', () => {
         .map((call) => call[1])
         .filter((payload) => payload && 'observableCacheRequestCount' in payload);
       expect(cacheTraces).toHaveLength(3);
+      expect(cacheTraces.map((trace) => trace.outputCacheStatus)).toEqual(['miss', 'hit', 'hit']);
+      expect(cacheTraces[2]).toEqual(expect.objectContaining({
+        outputCacheRequestCount: 3,
+        outputCacheHitCount: 2,
+        outputCacheMissCount: 1,
+      }));
       expect(cacheTraces[1].observableCacheRequestCount).toBe(
         cacheTraces[0].observableCacheRequestCount + 1
       );
@@ -125,6 +143,39 @@ describe('StreamingStore', () => {
     } finally {
       consoleInfoSpy.mockRestore();
     }
+  });
+
+  it('isolates observable selector cache trace counts between StreamingStore instances', () => {
+    const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const storeA = new StreamingStore(
+      { counter: counterReducer },
+      undefined,
+      { traceSelectors: true }
+    );
+    const storeB = new StreamingStore(
+      { counter: counterReducer },
+      undefined,
+      { traceSelectors: true }
+    );
+    const selectCount = storeA.createSelector((state) => state.counter.count);
+
+    storeA.init();
+    storeB.init();
+    selectCount();
+    selectCount.withStore(storeB)();
+
+    const cacheTraces = consoleInfoSpy.mock.calls
+      .map((call) => call[1])
+      .filter((payload) => payload && 'observableCacheRequestCount' in payload);
+    expect(cacheTraces.map((trace) => ({
+      requests: trace.outputCacheRequestCount,
+      hits: trace.outputCacheHitCount,
+      misses: trace.outputCacheMissCount,
+    }))).toEqual([
+      { requests: 1, hits: 0, misses: 1 },
+      { requests: 1, hits: 0, misses: 1 },
+    ]);
+    consoleInfoSpy.mockRestore();
   });
 
   it('throttles selector emissions with the configured Store option', () => {
@@ -150,7 +201,11 @@ describe('StreamingStore', () => {
     expect((store as any).storeOptions).toEqual({
       throttledSelectorFrequency: 10,
       sagaMonitor: false,
-      traceSelectors: false,
+      traceSelectors: expect.objectContaining({
+        traceExecution: false,
+        traceCache: false,
+        traceCadence: false,
+      }),
     });
     expect(values).toEqual([0, 2, 3]);
   });

@@ -87,6 +87,18 @@ describe("selector output cache", () => {
     expect(factory).toHaveBeenCalledTimes(1);
     const firstTrace = traceReporter.mock.calls[0][0];
     const secondTrace = traceReporter.mock.calls[1][0];
+    expect(firstTrace).toEqual(expect.objectContaining({
+      outputCacheStatus: "miss",
+      outputCacheRequestCount: 1,
+      outputCacheHitCount: 0,
+      outputCacheMissCount: 1,
+    }));
+    expect(secondTrace).toEqual(expect.objectContaining({
+      outputCacheStatus: "hit",
+      outputCacheRequestCount: 2,
+      outputCacheHitCount: 1,
+      outputCacheMissCount: 1,
+    }));
     expect(secondTrace.observableCacheRequestCount).toBe(firstTrace.observableCacheRequestCount + 1);
     expect(secondTrace.observableCacheCachedCount).toBe(firstTrace.observableCacheCachedCount);
     expect(firstTrace.selectorFunc).toBe(selector);
@@ -143,6 +155,37 @@ describe("selector output cache", () => {
         observableCacheCachedCount: 1,
       })
     );
+  });
+
+  it("traces cache counts independently per state source for the same selector", () => {
+    const sourceA = { name: "source-a" };
+    const sourceB = { name: "source-b" };
+    const selector = (_state: unknown) => 1;
+    const traceReporter = vi.fn();
+
+    getOrCreate(sourceA, selector, [], () => "a", { traceReporter });
+    getOrCreate(sourceA, selector, [], () => "cached-a", { traceReporter });
+    getOrCreate(sourceB, selector, [], () => "b", { traceReporter });
+
+    const [firstA, secondA, firstB] = traceReporter.mock.calls.map(([trace]) => trace);
+    expect(firstA).toEqual(expect.objectContaining({
+      outputCacheStatus: "miss",
+      outputCacheRequestCount: 1,
+      outputCacheHitCount: 0,
+      outputCacheMissCount: 1,
+    }));
+    expect(secondA).toEqual(expect.objectContaining({
+      outputCacheStatus: "hit",
+      outputCacheRequestCount: 2,
+      outputCacheHitCount: 1,
+      outputCacheMissCount: 1,
+    }));
+    expect(firstB).toEqual(expect.objectContaining({
+      outputCacheStatus: "miss",
+      outputCacheRequestCount: 1,
+      outputCacheHitCount: 0,
+      outputCacheMissCount: 1,
+    }));
   });
 
   it("separates outputs by state source, selector function, and argument identity", () => {

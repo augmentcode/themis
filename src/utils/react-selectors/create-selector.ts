@@ -9,6 +9,10 @@ import type { SignalArgs, StoreReactSelector } from "./types";
 import { createCachedSelector } from "../selector-core/create-cached-selector";
 import { getOrCreate } from "../selector-core/selector-output-cache";
 import {
+  getSelectorCacheTraceReporter,
+  getSelectorComputationTraceOptions,
+} from "../selector-core/selector-tracing-bridge";
+import {
   createConstantKefirProperty,
   createKefirPropertyFromSubscribe,
   createKefirSelectorProperty,
@@ -98,7 +102,8 @@ export const createSelector = <TStore extends ReactStore<any, any>, ARGS extends
     store: TStore,
     ...restArgs: SignalArgs<ARGS>
   ): ReadonlySignal<R> => {
-    const traceReporter = store.getSelectorTraceReporter<SignalState<TStore>, R, ARGS>();
+    const traceOptions = getSelectorComputationTraceOptions<SignalState<TStore>, R, ARGS>(store);
+    const traceCacheReporter = getSelectorCacheTraceReporter<SignalState<TStore>, R, ARGS>(store);
 
     return getOrCreate(store, selectorFunc, restArgs, () => {
       const argProperties = restArgs.map(signalArgToKefirProperty);
@@ -107,10 +112,10 @@ export const createSelector = <TStore extends ReactStore<any, any>, ARGS extends
         selectorFunc,
         argProperties,
         () => restArgs.map(readSignalArg) as ARGS,
-        traceReporter
+        traceOptions
       );
       return kefirSelectorPropertyToSignal(selected);
-    }, store.shouldTraceSelectorCache() ? { traceReporter } : undefined);
+    }, traceCacheReporter ? { traceReporter: traceCacheReporter } : undefined);
   };
 
   const signalSelector = ((...restArgs: SignalArgs<ARGS>) => {

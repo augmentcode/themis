@@ -3,7 +3,7 @@ import type { StoreRuntime } from "../../store-runtime";
 import type { StoreSelectorCallback, StoreState } from "../../types";
 import { createCachedSelector } from "./create-cached-selector";
 import { areStoreUpdatesLocked } from "./store-update-lock";
-import type { KefirSelectorProperty, SelectorTraceReporter } from "../types";
+import type { KefirSelectorProperty, SelectorComputationTraceOptions } from "../types";
 import { shallowEqual } from "fast-equals";
 
 export type { KefirSelectorProperty } from "../types";
@@ -41,11 +41,11 @@ export const createKefirSelectorProperty = <TStore extends StoreRuntime<any, any
   selectorFunc: StoreSelectorCallback<R, ARGS, StoreState<TStore>>,
   argProperties: Array<Observable<any, any>>,
   getArgsSnapshot: (() => ARGS) | undefined,
-  traceReporter?: SelectorTraceReporter<StoreState<TStore>, R, ARGS>
+  traceOptions?: SelectorComputationTraceOptions<StoreState<TStore>, R, ARGS>
 ): KefirSelectorProperty<R> => {
   const cachedSelector = createCachedSelector<StoreState<TStore>, ARGS, R>(selectorFunc, {
     lockUpdatesPredicate: areStoreUpdatesLocked,
-    traceReporter,
+    ...traceOptions,
   });
   const getSnapshot = () => {
     if (!getArgsSnapshot) {

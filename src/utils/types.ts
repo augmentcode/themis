@@ -1,6 +1,8 @@
 import type { Property } from "kefir";
 import type { UnknownAction } from "redux";
 import type {
+  SelectorTraceInvalidationReason,
+  SelectorTraceResultOutcome,
   StoreAction,
   StoreActionCreator,
   StoreSelectorCallback,
@@ -29,17 +31,38 @@ export type CachedSelector<STATE, R, ARGS extends unknown[] = []> = (
   ...args: ARGS
 ) => R;
 
+export type SelectorInvalidationReason = SelectorTraceInvalidationReason;
+
+export type SelectorArgumentChange = {
+  position: number;
+  previousType: string;
+  currentType: string;
+};
+
+export type SelectorResultOutcome = SelectorTraceResultOutcome;
+
 export type SelectorAccessTrace<STATE, R, ARGS extends unknown[] = []> = {
   selectorFunc: CachedSelector<STATE, R, ARGS>;
-  accessedPathCount: number;
-  accessedPaths: Set<string>;
-  parsedPaths: Map<string, AccessedPath>;
+  recomputationCount: number;
+  accessedPathCount?: number;
+  accessedPaths?: Set<string>;
+  parsedPaths?: Map<string, AccessedPath>;
+  executionDurationMs?: number;
+  invalidationReason?: SelectorInvalidationReason;
+  changedAccessedPaths?: Set<string>;
+  argumentsChanged?: boolean;
+  changedArguments?: SelectorArgumentChange[];
+  resultOutcome?: SelectorResultOutcome;
 };
 
 export type SelectorOutputCacheTrace<STATE, R, ARGS extends unknown[] = []> = {
   selectorFunc: CachedSelector<STATE, R, ARGS>;
   observableCacheRequestCount: number;
   observableCacheCachedCount: number;
+  outputCacheStatus: "hit" | "miss";
+  outputCacheRequestCount: number;
+  outputCacheHitCount: number;
+  outputCacheMissCount: number;
 };
 
 export type SelectorTrace<STATE, R, ARGS extends unknown[] = []> =
@@ -50,9 +73,21 @@ export type SelectorTraceReporter<STATE, R, ARGS extends unknown[] = []> = (
   trace: SelectorTrace<STATE, R, ARGS>
 ) => void;
 
+export type SelectorComputationTraceOptions<STATE, R, ARGS extends unknown[] = []> = {
+  traceReporter: SelectorTraceReporter<STATE, R, ARGS>;
+  traceExecution: boolean;
+  traceInvalidation: boolean;
+  traceArguments: boolean;
+  traceResults: boolean;
+};
+
 export type CreateCachedSelectorOptions<STATE, R = unknown, ARGS extends unknown[] = []> = {
   lockUpdatesPredicate?: (state: STATE) => boolean;
   traceReporter?: SelectorTraceReporter<STATE, R, ARGS>;
+  traceExecution?: boolean;
+  traceInvalidation?: boolean;
+  traceArguments?: boolean;
+  traceResults?: boolean;
 };
 
 export type SelectorCadenceTickListener = (timestamp: number) => void;
