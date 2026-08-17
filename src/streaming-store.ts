@@ -12,7 +12,7 @@ import {
 import { createSelector as createStreamingSelector } from './utils/streaming-selectors/create-selector';
 import type { StoreStreamingSelector } from './utils/streaming-selectors/types';
 
-export type { StoreOptions } from './types';
+export type { SelectorTraceSummary, StoreOptions } from './types';
 
 /**
  * Kefir/observable Store variant. Its selectors return Kefir streams when

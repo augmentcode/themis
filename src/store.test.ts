@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { setContext } from 'svelte';
+import { writable } from 'svelte/store';
 import createSagaMiddleware from 'redux-saga';
 import { Store } from './svelte-store';
 import { getStoreContext } from './utils/runtime-svelte/utils';
@@ -120,7 +121,12 @@ describe('Store', () => {
       expect((mappedStore as any).storeOptions).toEqual({
         throttledSelectorFrequency: 12.5,
         sagaMonitor: false,
-        traceSelectors: false,
+        traceSelectors: expect.objectContaining({
+          traceExecution: false,
+          traceCache: false,
+          traceCadence: false,
+          summaryEnabled: false,
+        }),
       });
     });
 
@@ -133,7 +139,11 @@ describe('Store', () => {
       expect((mappedStore as any).storeOptions).toEqual({
         throttledSelectorFrequency: DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
         sagaMonitor: true,
-        traceSelectors: true,
+        traceSelectors: expect.objectContaining({
+          traceExecution: true,
+          traceCache: true,
+          traceCadence: true,
+        }),
       });
     });
 
@@ -141,7 +151,11 @@ describe('Store', () => {
       expect((store as any).storeOptions).toEqual({
         throttledSelectorFrequency: DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
         sagaMonitor: false,
-        traceSelectors: false,
+        traceSelectors: expect.objectContaining({
+          traceExecution: false,
+          traceCache: false,
+          traceCadence: false,
+        }),
       });
     });
 
@@ -150,7 +164,14 @@ describe('Store', () => {
     });
 
     it('leaves selector tracing disabled by default', () => {
-      expect((store as any).storeOptions.traceSelectors).toBe(false);
+      expect((store as any).storeOptions.traceSelectors).toEqual(
+        expect.objectContaining({
+          traceExecution: false,
+          traceCache: false,
+          traceCadence: false,
+          summaryEnabled: false,
+        })
+      );
     });
 
     it('normalizes false tracing options as disabled', () => {
@@ -162,8 +183,58 @@ describe('Store', () => {
       expect((mappedStore as any).storeOptions).toEqual({
         throttledSelectorFrequency: DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
         sagaMonitor: false,
-        traceSelectors: false,
+        traceSelectors: expect.objectContaining({
+          traceExecution: false,
+          traceCache: false,
+          traceCadence: false,
+        }),
       });
+    });
+
+    it('normalizes flat selector tracing options and preserves unspecified categories as disabled', () => {
+      const mappedStore = new Store(undefined, undefined, {
+        traceSelectors: {
+          traceExecution: true,
+          traceCache: true,
+          traceCadence: true,
+          minDurationMs: 2.5,
+          summaryEnabled: true,
+          summaryIntervalMs: 250,
+        },
+      });
+
+      expect((mappedStore as any).storeOptions.traceSelectors).toEqual({
+        traceExecution: true,
+        traceCache: true,
+        traceInvalidation: false,
+        traceArguments: false,
+        traceResults: false,
+        traceCadence: true,
+        minDurationMs: 2.5,
+        summaryEnabled: true,
+        summaryIntervalMs: 250,
+      });
+    });
+
+    it('rejects malformed flat selector tracing options', () => {
+      expect(
+        () =>
+          new Store(undefined, undefined, {
+            traceSelectors: { traceExecution: 'yes' as unknown as boolean },
+          })
+      ).toThrow('Store option "traceSelectors.traceExecution" must be a boolean.');
+      expect(
+        () =>
+          new Store(undefined, undefined, {
+            traceSelectors: { minDurationMs: -1 },
+          })
+      ).toThrow('Store option "traceSelectors.minDurationMs"');
+      expect(
+        () =>
+          new Store(undefined, undefined, {
+            traceSelectors: { summaryIntervalMs: Number.NaN },
+          })
+      ).toThrow('Store option "traceSelectors.summaryIntervalMs"');
     });
 
     it('throws for non-finite or out-of-range selector throttling options', () => {
@@ -178,6 +249,9 @@ describe('Store', () => {
       expect('addReducer' in store).toBe(false);
       expect('addSaga' in store).toBe(false);
       expect('registerSagas' in store).toBe(false);
+      expect('getSelectorExecutionTraceReporter' in store).toBe(false);
+      expect('getSelectorComputationTraceOptions' in store).toBe(false);
+      expect('getSelectorCacheTraceReporter' in store).toBe(false);
     });
 
     it('reserves the internal store utility reducer key', () => {
@@ -254,11 +328,115 @@ describe('Store', () => {
 
       expect(consoleInfo).toHaveBeenCalledWith('SUBSCRIBE SELECTOR CADENCE', 1);
       expect(consoleInfo).toHaveBeenCalledWith('SELECTOR CADENCE TICK', 0, 1);
+      expect(consoleInfo).toHaveBeenCalledWith(
+        '[themis] selector trace',
+        expect.objectContaining({
+          accessedPaths: ['counter', 'counter.value'],
+          executionDurationMs: expect.any(Number),
+          recomputationCount: expect.any(Number),
+        })
+      );
+      consoleInfo.mockRestore();
+    });
+
+    it('reports invalidation independently and ignores unchanged accessed paths', () => {
+      vi.useFakeTimers();
+      vi.stubGlobal('requestAnimationFrame', undefined);
+      vi.stubGlobal('cancelAnimationFrame', undefined);
+      const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+      const counterReducer = Object.assign(
+        (state = { value: 0 }, action: any) =>
+          action.type === 'counter/set' ? { value: action.payload } : state,
+        { initialState: { value: 0 } }
+      );
+      const otherReducer = Object.assign(
+        (state = { value: 0 }, action: any) =>
+          action.type === 'other/set' ? { value: action.payload } : state,
+        { initialState: { value: 0 } }
+      );
+      const selectorStore = new Store(
+        { counter: counterReducer, other: otherReducer },
+        undefined,
+        { traceSelectors: { traceInvalidation: true } }
+      );
+      const selectCounter = selectorStore.createSelector((state) => state.counter.value);
+
+      selectorStore.init();
+      const unsubscribe = selectCounter().subscribe(() => undefined);
+      selectorStore.dispatch({ type: 'other/set', payload: 1 });
+      vi.advanceTimersByTime(0);
+      selectorStore.dispatch({ type: 'counter/set', payload: 1 });
+      vi.advanceTimersByTime(16);
+      unsubscribe();
+
+      const traces = consoleInfo.mock.calls
+        .map((call) => call[1] as Record<string, unknown>)
+        .filter((payload) => payload && 'invalidationReason' in payload);
+      expect(traces).toEqual([
+        expect.objectContaining({
+          invalidationReason: 'first-execution',
+          changedAccessedPaths: [],
+        }),
+        expect.objectContaining({
+          invalidationReason: 'accessed-state-paths-changed',
+          changedAccessedPaths: ['counter', 'counter.value'],
+        }),
+      ]);
+      expect(traces[0]).not.toHaveProperty('executionDurationMs');
+      expect(traces[0]).not.toHaveProperty('argumentsChanged');
+      expect(traces[0]).not.toHaveProperty('resultOutcome');
       expect(consoleInfo).toHaveBeenCalledTimes(2);
       consoleInfo.mockRestore();
     });
-    
-    it('traces Store-created selector path growth only when enabled', () => {
+
+    it('reports changed selector argument types and result outcomes without values', () => {
+      vi.useFakeTimers();
+      vi.stubGlobal('requestAnimationFrame', undefined);
+      vi.stubGlobal('cancelAnimationFrame', undefined);
+      const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+      const counterReducer = Object.assign(
+        (state = { value: 2 }) => state,
+        { initialState: { value: 2 } }
+      );
+      const selectorStore = new Store(
+        { counter: counterReducer },
+        undefined,
+        { traceSelectors: { traceArguments: true, traceResults: true } }
+      );
+      const multiplier = writable(1);
+      const selectScaled = selectorStore.createSelector(
+        (state, factor: number) => state.counter.value * factor
+      );
+
+      selectorStore.init();
+      const unsubscribe = selectScaled(multiplier).subscribe(() => undefined);
+      multiplier.set(2);
+      vi.advanceTimersByTime(16);
+      unsubscribe();
+
+      const traces = consoleInfo.mock.calls.map((call) => call[1] as Record<string, unknown>);
+      expect(traces).toEqual([
+        expect.objectContaining({
+          argumentsChanged: false,
+          changedArguments: [],
+          resultOutcome: 'initial',
+        }),
+        expect.objectContaining({
+          argumentsChanged: true,
+          changedArguments: [
+            { position: 0, previousType: 'number', currentType: 'number' },
+          ],
+          resultOutcome: 'changed',
+        }),
+      ]);
+      expect(traces[1]).not.toHaveProperty('invalidationReason');
+      expect(traces[1]).not.toHaveProperty('executionDurationMs');
+      expect(traces[1]).not.toHaveProperty('arguments');
+      expect(traces[1]).not.toHaveProperty('result');
+      consoleInfo.mockRestore();
+    });
+
+    it('traces every Store-created selector execution only when enabled', () => {
       const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
       const initialState = {
         count: 0,
@@ -275,7 +453,11 @@ describe('Store', () => {
 
         expect(consoleInfoSpy).not.toHaveBeenCalled();
 
-        const selectorStore = new Store({ trace: reducer });
+        const selectorStore = new Store(
+          { trace: reducer },
+          undefined,
+          { traceSelectors: true }
+        );
         const selectCount = selectorStore.createSelector((state) => state.trace.count);
         const selectEqualPathCount = selectorStore.createSelector((state) => state.trace.label);
         const selectFewerPaths = selectorStore.createSelector((state) => state.trace);
@@ -283,14 +465,13 @@ describe('Store', () => {
           (state) => `${state.trace.user.name}:${state.trace.count}`
         );
 
-        selectorStore.traceSelectors();
         selectorStore.init();
         selectCount().subscribe(() => {})();
 
         const accessTraces = () =>
           consoleInfoSpy.mock.calls
             .map((call) => call[1] as any)
-            .filter((payload) => payload && 'accessedPathCount' in payload);
+            .filter((payload) => payload && typeof payload === 'object' && 'accessedPathCount' in payload);
 
         expect(accessTraces()).toEqual([
           expect.objectContaining({
@@ -302,11 +483,11 @@ describe('Store', () => {
 
         selectEqualPathCount().subscribe(() => {})();
         selectFewerPaths().subscribe(() => {})();
-        expect(accessTraces()).toHaveLength(1);
+        expect(accessTraces()).toHaveLength(3);
 
         selectMorePaths().subscribe(() => {})();
-        expect(accessTraces()).toHaveLength(2);
-        expect(accessTraces()[1]).toEqual(
+        expect(accessTraces()).toHaveLength(4);
+        expect(accessTraces()[3]).toEqual(
           expect.objectContaining({
             accessedPathCount: 4,
             accessedPaths: ['trace', 'trace.count', 'trace.user', 'trace.user.name'],
@@ -324,10 +505,13 @@ describe('Store', () => {
       const reducer = Object.assign((state = initialState) => state, { initialState });
 
       try {
-        const selectorStore = new Store({ trace: reducer });
+        const selectorStore = new Store(
+          { trace: reducer },
+          undefined,
+          { traceSelectors: true }
+        );
         const selectCount = selectorStore.createSelector((state) => state.trace.count);
 
-        selectorStore.traceSelectors();
         selectorStore.init();
         const first = selectCount();
         const second = selectCount();
@@ -340,6 +524,12 @@ describe('Store', () => {
           .map((call) => call[1] as any)
           .filter((payload) => payload && 'observableCacheRequestCount' in payload);
         expect(cacheTraces).toHaveLength(3);
+        expect(cacheTraces.map((trace) => trace.outputCacheStatus)).toEqual(['miss', 'hit', 'hit']);
+        expect(cacheTraces[2]).toEqual(expect.objectContaining({
+          outputCacheRequestCount: 3,
+          outputCacheHitCount: 2,
+          outputCacheMissCount: 1,
+        }));
         expect(cacheTraces[1].observableCacheRequestCount).toBe(
           cacheTraces[0].observableCacheRequestCount + 1
         );
@@ -351,6 +541,33 @@ describe('Store', () => {
       } finally {
         consoleInfoSpy.mockRestore();
       }
+    });
+
+    it('isolates readable selector cache trace counts between Store instances', () => {
+      const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const initialState = { count: 0 };
+      const reducer = Object.assign((state = initialState) => state, { initialState });
+      const storeA = new Store({ trace: reducer }, undefined, { traceSelectors: true });
+      const storeB = new Store({ trace: reducer }, undefined, { traceSelectors: true });
+      const selectCount = storeA.createSelector((state) => state.trace.count);
+
+      storeA.init();
+      storeB.init();
+      selectCount();
+      selectCount.withStore(storeB)();
+
+      const cacheTraces = consoleInfoSpy.mock.calls
+        .map((call) => call[1] as any)
+        .filter((payload) => payload && 'observableCacheRequestCount' in payload);
+      expect(cacheTraces.map((trace) => ({
+        requests: trace.outputCacheRequestCount,
+        hits: trace.outputCacheHitCount,
+        misses: trace.outputCacheMissCount,
+      }))).toEqual([
+        { requests: 1, hits: 0, misses: 1 },
+        { requests: 1, hits: 0, misses: 1 },
+      ]);
+      consoleInfoSpy.mockRestore();
     });
 
     it('uses configured Svelte selector FPS for readable emissions', () => {

@@ -10,6 +10,10 @@ import { select } from "typed-redux-saga";
 import { createCachedSelector } from "../selector-core/create-cached-selector";
 import { getOrCreate } from "../selector-core/selector-output-cache";
 import {
+  getSelectorCacheTraceReporter,
+  getSelectorComputationTraceOptions,
+} from "../selector-core/selector-tracing-bridge";
+import {
   createConstantKefirProperty,
   createKefirPropertyFromSubscribe,
   createKefirSelectorProperty,
@@ -81,7 +85,8 @@ export const createSelector = <TStore extends Store<any, any>, ARGS extends any[
     store: TStore,
     ...restArgs: SvelteReadableArgs<ARGS>
   ): Readable<R> => {
-    const traceReporter = store.getSelectorTraceReporter<SvelteState<TStore>, R, ARGS>();
+    const traceOptions = getSelectorComputationTraceOptions<SvelteState<TStore>, R, ARGS>(store);
+    const traceCacheReporter = getSelectorCacheTraceReporter<SvelteState<TStore>, R, ARGS>(store);
 
     return getOrCreate(store, selectorFunc, restArgs, () => {
       const argProperties = restArgs.map(readableArgToKefirProperty);
@@ -90,10 +95,10 @@ export const createSelector = <TStore extends Store<any, any>, ARGS extends any[
         selectorFunc,
         argProperties,
         () => restArgs.map(readReadableArg) as ARGS,
-        traceReporter
+        traceOptions
       );
       return kefirSelectorPropertyToReadable(selected);
-    }, store.shouldTraceSelectorCache() ? { traceReporter } : undefined);
+    }, traceCacheReporter ? { traceReporter: traceCacheReporter } : undefined);
   };
 
   const readableSelector = ((...restArgs: SvelteReadableArgs<ARGS>) => {

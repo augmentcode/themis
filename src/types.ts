@@ -84,6 +84,66 @@ type StateDomain = string;
 export type StoreStateMap = Record<StateDomain, any>;
 export type StoreReducerFunction<TState = any> = (state: any, action: any) => TState;
 export type ReducersMap = Record<string, StoreReducerFunction>;
+
+export type SelectorTracingOptions = {
+  traceExecution?: boolean;
+  traceCache?: boolean;
+  traceInvalidation?: boolean;
+  traceArguments?: boolean;
+  traceResults?: boolean;
+  traceCadence?: boolean;
+  minDurationMs?: number;
+  summaryEnabled?: boolean;
+  summaryIntervalMs?: number;
+};
+
+export type NormalizedSelectorTracingOptions = {
+  traceExecution: boolean;
+  traceCache: boolean;
+  traceInvalidation: boolean;
+  traceArguments: boolean;
+  traceResults: boolean;
+  traceCadence: boolean;
+  minDurationMs: number;
+  summaryEnabled: boolean;
+  summaryIntervalMs: number;
+};
+
+export type SelectorTraceInvalidationReason =
+  | 'first-execution'
+  | 'selector-arguments-changed'
+  | 'accessed-state-paths-changed'
+  | 'previous-result-unavailable';
+
+export type SelectorTraceResultOutcome = 'initial' | 'changed' | 'retained-reference';
+
+export type SelectorTraceDurationSummary = Readonly<{
+  count: number;
+  totalMs: number;
+  averageMs: number;
+  maximumMs: number;
+  p95Ms: number;
+}>;
+
+export type SelectorTraceCacheSummary = Readonly<{
+  requestCount: number;
+  hitCount: number;
+  missCount: number;
+  hitRatio: number | null;
+}>;
+
+export type SelectorTraceSelectorSummary = Readonly<{
+  selectorSource: string;
+  executionCount: number;
+  recomputationCount: number;
+  invalidationReasons: Readonly<Record<SelectorTraceInvalidationReason, number>>;
+  resultOutcomes: Readonly<Record<SelectorTraceResultOutcome, number>>;
+  duration: SelectorTraceDurationSummary;
+  cache: SelectorTraceCacheSummary;
+}>;
+
+export type SelectorTraceSummary = ReadonlyArray<SelectorTraceSelectorSummary>;
+
 export type StoreOptions = {
   /**
    * Reactive selector emission frequency in frames per second.
@@ -99,12 +159,12 @@ export type StoreOptions = {
    * Enables diagnostic selector flush tracing.
    * Defaults to false, leaving selector tracing silent.
    */
-  traceSelectors?: boolean;
+  traceSelectors?: boolean | SelectorTracingOptions;
 };
 export type NormalizedStoreOptions = {
   throttledSelectorFrequency: number;
   sagaMonitor: boolean;
-  traceSelectors: boolean;
+  traceSelectors: NormalizedSelectorTracingOptions;
 };
 export type StoreReducerState<Reducer> = Reducer extends StoreReducerFunction<infer State> ? State : never;
 export type StoreStateFromStateMap<TStateMap extends StoreStateMap> = {

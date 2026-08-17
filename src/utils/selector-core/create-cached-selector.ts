@@ -3,6 +3,9 @@ import type {
   AccessedPath,
   CachedSelector,
   CreateCachedSelectorOptions,
+  SelectorArgumentChange,
+  SelectorInvalidationReason,
+  SelectorResultOutcome,
 } from "../types";
 
 export type {
@@ -10,7 +13,11 @@ export type {
   CachedSelector,
   CreateCachedSelectorOptions,
   SelectorAccessTrace,
+  SelectorArgumentChange,
+  SelectorComputationTraceOptions,
+  SelectorInvalidationReason,
   SelectorOutputCacheTrace,
+  SelectorResultOutcome,
   SelectorTrace,
   SelectorTraceReporter,
 } from "../types";
@@ -18,6 +25,7 @@ export type {
 const proxyValuesWeakMap = new WeakMap<object, unknown>();
 const collectionFieldsSet = new Set(["idField", "ids", "map", "refsCount"]);
 const safePropertyNameRegex = /^[A-Za-z_$][0-9A-Za-z_$]*$/;
+const redactedArgumentPathSegment = "<selector-argument>";
 
 const renderAccessedPathSegment = (segment: string | symbol, index: number): string => {
   if (typeof segment === "symbol") {
@@ -47,6 +55,38 @@ export const renderAccessedPaths = (
     .filter((path): path is AccessedPath => Boolean(path))
     .map(renderAccessedPath)
     .sort();
+
+const getArgumentPropertyKeys = (args: readonly unknown[]): Set<string | symbol> => {
+  const keys = new Set<string | symbol>();
+  for (const arg of args) {
+    if (typeof arg === "symbol") {
+      keys.add(arg);
+    } else if (arg === null || typeof arg !== "object" && typeof arg !== "function") {
+      keys.add(String(arg));
+    }
+  }
+  return keys;
+};
+
+const redactAccessedPathMetadata = (
+  accessedPaths: Set<string> | undefined,
+  parsedPaths: Map<string, AccessedPath>,
+  argumentPropertyKeys: Set<string | symbol>
+): { accessedPaths: Set<string>; parsedPaths: Map<string, AccessedPath> } => {
+  const redactedPaths = new Set<string>();
+  const redactedParsedPaths = new Map<string, AccessedPath>();
+  for (const pathString of accessedPaths ?? []) {
+    const path = parsedPaths.get(pathString);
+    if (!path) continue;
+    const redactedPath = path.map((segment) =>
+      argumentPropertyKeys.has(segment) ? redactedArgumentPathSegment : segment
+    );
+    const redactedPathString = JSON.stringify(redactedPath);
+    redactedPaths.add(redactedPathString);
+    redactedParsedPaths.set(redactedPathString, redactedPath);
+  }
+  return { accessedPaths: redactedPaths, parsedPaths: redactedParsedPaths };
+};
 
 export const getRawValue = <R>(maybeProxy: R): R => {
   if (maybeProxy === null || (typeof maybeProxy !== "object" && typeof maybeProxy !== "function")) {
@@ -149,8 +189,10 @@ export const hasStateChanged = <STATE>(
   oldState: STATE,
   newState: STATE,
   accessedPaths: Set<string>,
-  parsedPaths: Map<string, AccessedPath>
+  parsedPaths: Map<string, AccessedPath>,
+  changedAccessedPaths?: Set<string>
 ): boolean => {
+  let stateChanged = false;
   for (const pathStr of accessedPaths) {
     const path = parsedPaths.get(pathStr);
     if (!path) {
@@ -158,17 +200,65 @@ export const hasStateChanged = <STATE>(
     }
 
     if (isValueChangedAtPath(oldState, newState, path)) {
-      return true;
+      if (!changedAccessedPaths) {
+        return true;
+      }
+      changedAccessedPaths.add(pathStr);
+      stateChanged = true;
     }
   }
 
-  return false;
+  return stateChanged;
+};
+
+const getArgumentType = (args: readonly unknown[], position: number): string => {
+  if (position >= args.length) return "missing";
+  const argument = args[position];
+  if (argument === null) return "null";
+  if (Array.isArray(argument)) return "array";
+  return typeof argument;
+};
+
+const getChangedArguments = (
+  previousArgs: readonly unknown[],
+  currentArgs: readonly unknown[]
+): SelectorArgumentChange[] => {
+  const changes: SelectorArgumentChange[] = [];
+  const argumentCount = Math.max(previousArgs.length, currentArgs.length);
+  for (let position = 0; position < argumentCount; position += 1) {
+    if (
+      position < previousArgs.length &&
+      position < currentArgs.length &&
+      Object.is(previousArgs[position], currentArgs[position])
+    ) {
+      continue;
+    }
+    changes.push({
+      position,
+      previousType: getArgumentType(previousArgs, position),
+      currentType: getArgumentType(currentArgs, position),
+    });
+  }
+  return changes;
 };
 
 export const createCachedSelector = <STATE, ARGS extends unknown[] = [], R = undefined>(
   selectorFunc: CachedSelector<STATE, R, ARGS>,
   options?: CreateCachedSelectorOptions<STATE, R, ARGS>
 ): CachedSelector<STATE, R, ARGS> => {
+  const traceReporter = options?.traceReporter;
+  const hasExplicitTraceCategories =
+    options?.traceExecution !== undefined ||
+    options?.traceInvalidation !== undefined ||
+    options?.traceArguments !== undefined ||
+    options?.traceResults !== undefined;
+  const traceExecution = Boolean(
+    traceReporter && (options?.traceExecution ?? !hasExplicitTraceCategories)
+  );
+  const traceInvalidation = Boolean(traceReporter && options?.traceInvalidation);
+  const traceArguments = Boolean(traceReporter && options?.traceArguments);
+  const traceResults = Boolean(traceReporter && options?.traceResults);
+  const traceState = traceReporter ? { recomputationCount: 0 } : undefined;
   let previousSelectResult: R | undefined = undefined;
   let previousArgs: ARGS | undefined = undefined;
   let previousState: STATE | undefined = undefined;
@@ -181,10 +271,21 @@ export const createCachedSelector = <STATE, ARGS extends unknown[] = [], R = und
       return previousSelectResult;
     }
 
-    const argsChanged = !previousArgs || !shallowEqual(args, previousArgs);
+    const firstExecution = previousArgs === undefined;
+    const argsChanged = firstExecution || !shallowEqual(args, previousArgs);
+    const changedAccessedPaths =
+      traceInvalidation && !argsChanged && previousState
+        ? new Set<string>()
+        : undefined;
     const stateChanged =
       !argsChanged && previousState
-        ? hasStateChanged(previousState, rawValue, accessedPaths, parsedPaths)
+        ? hasStateChanged(
+            previousState,
+            rawValue,
+            accessedPaths,
+            parsedPaths,
+            changedAccessedPaths
+          )
         : true;
 
     if (!argsChanged && !stateChanged && previousSelectResult !== undefined) {
@@ -201,19 +302,80 @@ export const createCachedSelector = <STATE, ARGS extends unknown[] = [], R = und
 
     const newAccessedPaths = new Set<string>();
     const trackedState = createTrackingProxy(state, newAccessedPaths, parsedPaths);
+    const executionStartedAt = traceExecution ? performance.now() : undefined;
     const maybeProxyResult = selectorFunc(trackedState, ...args);
     const result = getRawValue(maybeProxyResult);
-    options?.traceReporter?.({
-      selectorFunc,
-      accessedPathCount: newAccessedPaths.size,
-      accessedPaths: newAccessedPaths,
-      parsedPaths,
-    });
+    const executionDurationMs =
+      executionStartedAt === undefined ? undefined : performance.now() - executionStartedAt;
+    const retainedPreviousReference =
+      previousSelectResult !== undefined && shallowEqual(previousSelectResult, result);
+    const finalResult: R = retainedPreviousReference ? previousSelectResult as R : result;
 
-    const finalResult =
-      previousSelectResult !== undefined && shallowEqual(previousSelectResult, result)
-        ? previousSelectResult
-        : result;
+    if (traceState) {
+      traceState.recomputationCount += 1;
+      const invalidationReason: SelectorInvalidationReason | undefined = traceInvalidation
+        ? firstExecution
+          ? "first-execution"
+          : argsChanged
+            ? "selector-arguments-changed"
+            : stateChanged
+              ? "accessed-state-paths-changed"
+              : "previous-result-unavailable"
+        : undefined;
+      const resultOutcome: SelectorResultOutcome | undefined = traceResults
+        ? firstExecution
+          ? "initial"
+          : retainedPreviousReference
+            ? "retained-reference"
+            : "changed"
+        : undefined;
+      const argumentPropertyKeys = getArgumentPropertyKeys(args);
+      const redactedAccessedPathMetadata = redactAccessedPathMetadata(
+        traceExecution ? newAccessedPaths : undefined,
+        parsedPaths,
+        argumentPropertyKeys
+      );
+      const redactedChangedPathMetadata = redactAccessedPathMetadata(
+        traceInvalidation ? changedAccessedPaths : undefined,
+        parsedPaths,
+        argumentPropertyKeys
+      );
+      const traceParsedPaths = new Map([
+        ...redactedAccessedPathMetadata.parsedPaths,
+        ...redactedChangedPathMetadata.parsedPaths,
+      ]);
+      traceReporter?.({
+        selectorFunc,
+        recomputationCount: traceState.recomputationCount,
+        ...(traceExecution
+          ? {
+              accessedPathCount: redactedAccessedPathMetadata.accessedPaths.size,
+              accessedPaths: redactedAccessedPathMetadata.accessedPaths,
+              parsedPaths: traceParsedPaths,
+              executionDurationMs,
+            }
+          : {}),
+        ...(traceInvalidation
+          ? {
+              invalidationReason,
+              changedAccessedPaths: changedAccessedPaths
+                ? redactedChangedPathMetadata.accessedPaths
+                : undefined,
+              parsedPaths: traceParsedPaths,
+            }
+          : {}),
+        ...(traceArguments
+          ? {
+              argumentsChanged: !firstExecution && argsChanged,
+              changedArguments:
+                !firstExecution && argsChanged && previousArgs
+                  ? getChangedArguments(previousArgs, args)
+                  : [],
+            }
+          : {}),
+        ...(traceResults ? { resultOutcome } : {}),
+      });
+    }
 
     previousSelectResult = finalResult;
     previousArgs = args;
