@@ -1,6 +1,7 @@
 import type {
   SelectorTraceInvalidationReason,
   SelectorTraceResultOutcome,
+  SelectorTracePeriodSummary,
   SelectorTraceSelectorSummary,
   SelectorTraceSummary,
 } from './types';
@@ -22,9 +23,12 @@ type MutableSelectorSummary = {
   cacheRequestCount: number;
   cacheHitCount: number;
   cacheMissCount: number;
+  argumentCount: number;
+  argumentChangedCount: number;
 };
 
 const EMPTY_SELECTOR_TRACE_SUMMARY = Object.freeze([]) as SelectorTraceSummary;
+const EMPTY_SELECTOR_TRACE_PERIOD_SUMMARY = Object.freeze([]) as ReadonlyArray<SelectorTracePeriodSummary>;
 
 const createMutableSummary = (selectorSource: string): MutableSelectorSummary => ({
   selectorSource,
@@ -49,6 +53,8 @@ const createMutableSummary = (selectorSource: string): MutableSelectorSummary =>
   cacheRequestCount: 0,
   cacheHitCount: 0,
   cacheMissCount: 0,
+  argumentCount: 0,
+  argumentChangedCount: 0,
 });
 
 const addDuration = (summary: MutableSelectorSummary, durationMs: number): void => {
@@ -106,34 +112,105 @@ const createSnapshotEntry = (summary: MutableSelectorSummary): SelectorTraceSele
 
 export class SelectorTraceSummaryCollector {
   private readonly summaries = new Map<CachedSelector<any, any, any[]>, MutableSelectorSummary>();
+  private readonly periodSummaries = new Map<
+    CachedSelector<any, any, any[]>,
+    MutableSelectorSummary
+  >();
 
   constructor(
-    private readonly getSelectorSource: (selector: CachedSelector<any, any, any[]>) => string
+    private readonly getSelectorSource: (selector: CachedSelector<any, any, any[]>) => string,
+    private readonly collectLifetime = true
   ) {}
 
   record(trace: SelectorTrace<any, any, any[]>): void {
-    let summary = this.summaries.get(trace.selectorFunc);
-    if (!summary) {
-      summary = createMutableSummary(this.getSelectorSource(trace.selectorFunc));
-      this.summaries.set(trace.selectorFunc, summary);
-    }
+    const periodSummary = this.getOrCreateSummary(this.periodSummaries, trace.selectorFunc);
+    const summary = this.collectLifetime
+      ? this.getOrCreateSummary(this.summaries, trace.selectorFunc)
+      : undefined;
 
     if ('observableCacheRequestCount' in trace) {
-      summary.cacheRequestCount += 1;
-      if (trace.outputCacheStatus === 'hit') summary.cacheHitCount += 1;
-      else summary.cacheMissCount += 1;
+      for (const target of [summary, periodSummary]) {
+        if (!target) continue;
+        target.cacheRequestCount += 1;
+        if (trace.outputCacheStatus === 'hit') target.cacheHitCount += 1;
+        else target.cacheMissCount += 1;
+      }
       return;
     }
 
-    summary.recomputationCount += 1;
-    if (trace.executionDurationMs !== undefined) addDuration(summary, trace.executionDurationMs);
-    if (trace.invalidationReason) summary.invalidationReasons[trace.invalidationReason] += 1;
-    if (trace.resultOutcome) summary.resultOutcomes[trace.resultOutcome] += 1;
+    for (const target of [summary, periodSummary]) {
+      if (!target) continue;
+      target.recomputationCount += 1;
+      if (trace.executionDurationMs !== undefined) addDuration(target, trace.executionDurationMs);
+      if (trace.invalidationReason) target.invalidationReasons[trace.invalidationReason] += 1;
+      if (trace.resultOutcome) target.resultOutcomes[trace.resultOutcome] += 1;
+      if (trace.argumentsChanged !== undefined) {
+        target.argumentCount += 1;
+        if (trace.argumentsChanged) target.argumentChangedCount += 1;
+      }
+    }
+  }
+
+  private getOrCreateSummary(
+    summaries: Map<CachedSelector<any, any, any[]>, MutableSelectorSummary>,
+    selectorFunc: CachedSelector<any, any, any[]>
+  ): MutableSelectorSummary {
+    let summary = summaries.get(selectorFunc);
+    if (!summary) {
+      summary = createMutableSummary(this.getSelectorSource(selectorFunc));
+      summaries.set(selectorFunc, summary);
+    }
+    return summary;
   }
 
   snapshot(): SelectorTraceSummary {
     if (this.summaries.size === 0) return EMPTY_SELECTOR_TRACE_SUMMARY;
     return Object.freeze(Array.from(this.summaries.values(), createSnapshotEntry));
+  }
+
+  consumePeriod(): ReadonlyArray<SelectorTracePeriodSummary> {
+    if (this.periodSummaries.size === 0) return EMPTY_SELECTOR_TRACE_PERIOD_SUMMARY;
+    const snapshot = Object.freeze(
+      Array.from(this.periodSummaries.values(), (summary) => {
+        const invalidationReasons = Object.freeze({ ...summary.invalidationReasons });
+        const resultOutcomes = Object.freeze({ ...summary.resultOutcomes });
+        const duration = Object.freeze({
+          count: summary.durationCount,
+          totalMs: summary.durationTotalMs,
+          averageMs:
+            summary.durationCount === 0 ? 0 : summary.durationTotalMs / summary.durationCount,
+          maximumMs: summary.durationMaximumMs,
+        });
+        const cache = Object.freeze({
+          requestCount: summary.cacheRequestCount,
+          hitCount: summary.cacheHitCount,
+          missCount: summary.cacheMissCount,
+          hitRatio:
+            summary.cacheRequestCount === 0
+              ? null
+              : summary.cacheHitCount / summary.cacheRequestCount,
+        });
+        return Object.freeze({
+          selectorSource: summary.selectorSource,
+          executionCount: summary.executionCount,
+          recomputationCount: summary.recomputationCount,
+          invalidationReasons,
+          resultOutcomes,
+          arguments: Object.freeze({
+            count: summary.argumentCount,
+            changedCount: summary.argumentChangedCount,
+          }),
+          duration,
+          cache,
+        });
+      }) as SelectorTracePeriodSummary[]
+    );
+    this.periodSummaries.clear();
+    return snapshot;
+  }
+
+  resetPeriod(): void {
+    this.periodSummaries.clear();
   }
 }
 

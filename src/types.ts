@@ -93,6 +93,8 @@ export type SelectorTracingOptions = {
   traceResults?: boolean;
   traceCadence?: boolean;
   minDurationMs?: number;
+  minRecomputationCount?: number;
+  minCacheMissCount?: number;
   summaryEnabled?: boolean;
   summaryIntervalMs?: number;
 };
@@ -105,6 +107,8 @@ export type NormalizedSelectorTracingOptions = {
   traceResults: boolean;
   traceCadence: boolean;
   minDurationMs: number;
+  minRecomputationCount: number;
+  minCacheMissCount: number;
   summaryEnabled: boolean;
   summaryIntervalMs: number;
 };
@@ -144,6 +148,25 @@ export type SelectorTraceSelectorSummary = Readonly<{
 
 export type SelectorTraceSummary = ReadonlyArray<SelectorTraceSelectorSummary>;
 
+export type SelectorTracePeriodSummary = Readonly<{
+  selectorSource: string;
+  executionCount: number;
+  recomputationCount: number;
+  invalidationReasons: Readonly<Record<SelectorTraceInvalidationReason, number>>;
+  resultOutcomes: Readonly<Record<SelectorTraceResultOutcome, number>>;
+  arguments: Readonly<{
+    count: number;
+    changedCount: number;
+  }>;
+  duration: Readonly<Omit<SelectorTraceDurationSummary, 'p95Ms'>>;
+  cache: SelectorTraceCacheSummary;
+}>;
+
+export type SelectorTraceAggregate = Readonly<{
+  intervalMs: number;
+  selectors: ReadonlyArray<SelectorTracePeriodSummary>;
+}>;
+
 export type StoreOptions = {
   /**
    * Reactive selector emission frequency in frames per second.
@@ -156,6 +179,10 @@ export type StoreOptions = {
    */
   sagaMonitor?: boolean;
   /**
+   * Enables Store-owned Redux action logging. Defaults to false.
+   */
+  logReduxActions?: boolean;
+  /**
    * Enables diagnostic selector flush tracing.
    * Defaults to false, leaving selector tracing silent.
    */
@@ -164,6 +191,7 @@ export type StoreOptions = {
 export type NormalizedStoreOptions = {
   throttledSelectorFrequency: number;
   sagaMonitor: boolean;
+  logReduxActions: boolean;
   traceSelectors: NormalizedSelectorTracingOptions;
 };
 export type StoreReducerState<Reducer> = Reducer extends StoreReducerFunction<infer State> ? State : never;

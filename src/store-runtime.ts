@@ -23,6 +23,7 @@ import {
   type StoreStateMap,
   type SelectorTraceSummary,
 } from './types';
+import { createLoggerMiddleware } from './redux-logger';
 import type { ReduxStoreContext } from './internal-types';
 import {
   INTERNAL_SAGA_MANAGER_NAME,
@@ -41,15 +42,13 @@ import { registerGlobalDevTools } from './global-dev-tools';
 import { deriveSagaName } from './utils/sagas/derive-saga-name';
 import { normalizeSelectorTracingOptions, normalizeStoreOptions } from './store-options';
 import { createSelectorCadenceSource } from './utils/selector-core/throttled-selector-options';
-import {
-  renderAccessedPaths,
-} from './utils/selector-core/create-cached-selector';
 import { evictSelectorOutputsForStateSource } from './utils/selector-core/selector-output-cache';
 import { registerSelectorTracingBridge } from './utils/selector-core/selector-tracing-bridge';
 import {
   getEmptySelectorTraceSummary,
   SelectorTraceSummaryCollector,
 } from './selector-trace-summary';
+import type { SelectorTraceAggregate, SelectorTracePeriodSummary } from './types';
 import type {
   CachedSelector,
   SelectorCadenceSource,
@@ -196,6 +195,7 @@ export abstract class StoreRuntime<
   } as StoreReducersMap<TStateMap, TReducers>;
   private middlewares: StoreMiddleware[] = [];
   private readonly sagaMiddleware: ReturnType<typeof createSagaMiddleware>;
+  private readonly reduxLoggerMiddleware: StoreMiddleware | undefined;
   private tasksStarted: Task[] = [];
   private storeContext: ReduxStoreContext | undefined;
   private selectorCadenceSource: SelectorCadenceSource | undefined;
@@ -205,7 +205,7 @@ export abstract class StoreRuntime<
   private disposeDevTools: (() => void) | undefined;
   private selectorTracingEnabled = false;
   private readonly selectorTraceReporter: SelectorTraceReporter<any, any, any[]> | undefined;
-  private readonly selectorTraceSummaryCollector: SelectorTraceSummaryCollector | undefined;
+  private selectorTraceSummaryCollector: SelectorTraceSummaryCollector | undefined;
   private selectorTraceSummaryInterval: ReturnType<typeof setInterval> | undefined;
   private selectorTracingOptions: NormalizedSelectorTracingOptions;
   private readonly legacySelectorTracingActivationAllowed: boolean;
@@ -221,8 +221,16 @@ export abstract class StoreRuntime<
     this.legacySelectorTracingActivationAllowed =
       options?.traceSelectors === undefined || options.traceSelectors === false;
     this.selectorTraceSummaryCollector =
-      this.selectorTracingOptions.summaryEnabled
-        ? new SelectorTraceSummaryCollector(getSelectorSourceSnippet)
+      this.selectorTracingOptions.summaryEnabled ||
+      this.selectorTracingOptions.traceExecution ||
+      this.selectorTracingOptions.traceCache ||
+      this.selectorTracingOptions.traceInvalidation ||
+      this.selectorTracingOptions.traceArguments ||
+      this.selectorTracingOptions.traceResults
+        ? new SelectorTraceSummaryCollector(
+            getSelectorSourceSnippet,
+            this.selectorTracingOptions.summaryEnabled
+          )
         : undefined;
     this.selectorTracingEnabled =
       (
@@ -240,6 +248,9 @@ export abstract class StoreRuntime<
     this.sagaMiddleware = this.storeOptions.sagaMonitor
       ? createSagaMiddleware({ sagaMonitor: createStoreSagaMonitor() })
       : createSagaMiddleware();
+    this.reduxLoggerMiddleware = this.storeOptions.logReduxActions
+      ? createLoggerMiddleware()
+      : undefined;
     for (const [name, reducer] of Object.entries(reducersMap ?? {})) {
       this.registerReducer(name, reducer);
     }
@@ -267,7 +278,11 @@ export abstract class StoreRuntime<
   }
 
   private getMiddlewarePipeline(): StoreMiddleware[] {
-    return [...this.middlewares, this.sagaMiddleware];
+    return [
+      ...this.middlewares,
+      ...(this.reduxLoggerMiddleware ? [this.reduxLoggerMiddleware] : []),
+      this.sagaMiddleware,
+    ];
   }
 
   private runSagaSafely<S extends Saga>(saga: S, ...args: Parameters<S>): Task {
@@ -427,7 +442,9 @@ export abstract class StoreRuntime<
   }
 
   getSelectorTraceSummary(): SelectorTraceSummary {
-    return this.selectorTraceSummaryCollector?.snapshot() ?? getEmptySelectorTraceSummary();
+    return this.selectorTracingOptions.summaryEnabled
+      ? this.selectorTraceSummaryCollector?.snapshot() ?? getEmptySelectorTraceSummary()
+      : getEmptySelectorTraceSummary();
   }
 
   private registerSelectorTracingBridge(): void {
@@ -453,14 +470,14 @@ export abstract class StoreRuntime<
           traceReporter,
           traceExecution:
             this.selectorTracingOptions.traceExecution ||
-            this.selectorTraceSummaryCollector !== undefined,
+            this.selectorTracingOptions.summaryEnabled,
           traceInvalidation:
             this.selectorTracingOptions.traceInvalidation ||
-            this.selectorTraceSummaryCollector !== undefined,
+            this.selectorTracingOptions.summaryEnabled,
           traceArguments: this.selectorTracingOptions.traceArguments,
           traceResults:
             this.selectorTracingOptions.traceResults ||
-            this.selectorTraceSummaryCollector !== undefined,
+            this.selectorTracingOptions.summaryEnabled,
         } satisfies SelectorComputationTraceOptions<STATE, R, ARGS>;
       },
       getCacheTraceReporter: <STATE, R, ARGS extends unknown[]>() =>
@@ -480,63 +497,6 @@ export abstract class StoreRuntime<
 
     this.selectorTraceSummaryCollector?.record(trace);
 
-    if ('observableCacheRequestCount' in trace) {
-      if (!this.selectorTracingOptions.traceCache) {
-        return;
-      }
-      console.info('[themis] selector trace', {
-        observableCacheRequestCount: trace.observableCacheRequestCount,
-        observableCacheCachedCount: trace.observableCacheCachedCount,
-        outputCacheStatus: trace.outputCacheStatus,
-        outputCacheRequestCount: trace.outputCacheRequestCount,
-        outputCacheHitCount: trace.outputCacheHitCount,
-        outputCacheMissCount: trace.outputCacheMissCount,
-        selectorSource: getSelectorSourceSnippet(trace.selectorFunc),
-      });
-      return;
-    }
-
-    const reportExecution =
-      this.selectorTracingOptions.traceExecution &&
-      trace.executionDurationMs !== undefined &&
-      trace.executionDurationMs >= this.selectorTracingOptions.minDurationMs &&
-      trace.accessedPaths !== undefined &&
-      trace.parsedPaths !== undefined;
-    const reportInvalidation =
-      this.selectorTracingOptions.traceInvalidation && trace.invalidationReason !== undefined;
-    const reportArguments =
-      this.selectorTracingOptions.traceArguments && trace.argumentsChanged !== undefined;
-    const reportResults =
-      this.selectorTracingOptions.traceResults && trace.resultOutcome !== undefined;
-
-    if (!reportExecution && !reportInvalidation && !reportArguments && !reportResults) {
-      return;
-    }
-
-    const payload: Record<string, unknown> = {
-      recomputationCount: trace.recomputationCount,
-      selectorSource: getSelectorSourceSnippet(trace.selectorFunc),
-    };
-    if (reportExecution && trace.accessedPaths && trace.parsedPaths) {
-      payload.accessedPathCount = trace.accessedPathCount;
-      payload.accessedPaths = renderAccessedPaths(trace.accessedPaths, trace.parsedPaths);
-      payload.executionDurationMs = trace.executionDurationMs;
-    }
-    if (reportInvalidation) {
-      payload.invalidationReason = trace.invalidationReason;
-      payload.changedAccessedPaths =
-        trace.changedAccessedPaths && trace.parsedPaths
-          ? renderAccessedPaths(trace.changedAccessedPaths, trace.parsedPaths)
-          : [];
-    }
-    if (reportArguments) {
-      payload.argumentsChanged = trace.argumentsChanged;
-      payload.changedArguments = trace.changedArguments ?? [];
-    }
-    if (reportResults) {
-      payload.resultOutcome = trace.resultOutcome;
-    }
-    console.info('[themis] selector trace', payload);
   }
 
   traceSelectors(): void {
@@ -547,23 +507,69 @@ export abstract class StoreRuntime<
       return;
     }
     this.selectorTracingOptions = normalizeSelectorTracingOptions(true);
+    this.selectorTraceSummaryCollector ??= new SelectorTraceSummaryCollector(
+      getSelectorSourceSnippet,
+      false
+    );
     this.selectorTracingEnabled = true;
     this.registerSelectorTracingBridge();
+    if (this.storeContext) this.startSelectorTraceSummaryInterval();
   }
 
   private startSelectorTraceSummaryInterval(): void {
-    if (!this.selectorTraceSummaryCollector || this.selectorTraceSummaryInterval !== undefined) {
+    if (!this.selectorTracingEnabled || this.selectorTraceSummaryInterval !== undefined) {
       return;
     }
     this.selectorTraceSummaryInterval = setInterval(() => {
-      console.info('[themis] selector trace summary', this.getSelectorTraceSummary());
+      const period = this.selectorTraceSummaryCollector?.consumePeriod() ?? [];
+      const selectors = period.filter((summary) => this.isPeriodSummaryEligible(summary));
+      if (selectors.length === 0) return;
+      const aggregate: SelectorTraceAggregate = Object.freeze({
+        intervalMs: this.selectorTracingOptions.summaryIntervalMs,
+        selectors: Object.freeze(selectors),
+      });
+      const formatParts = ['[themis] selector trace summary'];
+      const styles: string[] = [];
+      for (const selector of selectors) {
+        formatParts.push(`\n%c${selector.selectorSource.replaceAll('%', '%%')}%c`);
+        styles.push(selector.cache.missCount > 0 ? 'font-weight: bold' : '', '');
+      }
+      console.info(formatParts.join(''), ...styles, aggregate);
     }, this.selectorTracingOptions.summaryIntervalMs);
   }
 
+  private isPeriodSummaryEligible(summary: SelectorTracePeriodSummary): boolean {
+    const options = this.selectorTracingOptions;
+    const traceExecution = options.traceExecution || options.summaryEnabled;
+    const traceCache = options.traceCache || options.summaryEnabled;
+    const traceInvalidation = options.traceInvalidation || options.summaryEnabled;
+    const traceResults = options.traceResults || options.summaryEnabled;
+    const hasInvalidation = Object.values(summary.invalidationReasons).some((count) => count > 0);
+    const hasResult = Object.values(summary.resultOutcomes).some((count) => count > 0);
+    const executionEligible =
+      traceExecution &&
+      summary.duration.count > 0 &&
+      summary.duration.maximumMs >= options.minDurationMs &&
+      summary.recomputationCount >= options.minRecomputationCount;
+    const cacheEligible =
+      traceCache &&
+      summary.cache.requestCount > 0 &&
+      summary.cache.missCount >= options.minCacheMissCount;
+    return (
+      executionEligible ||
+      (traceInvalidation && hasInvalidation) ||
+      (options.traceArguments && summary.arguments.count > 0) ||
+      (traceResults && hasResult) ||
+      cacheEligible
+    );
+  }
+
   private disposeSelectorTraceSummaryInterval(): void {
-    if (this.selectorTraceSummaryInterval === undefined) return;
-    clearInterval(this.selectorTraceSummaryInterval);
-    this.selectorTraceSummaryInterval = undefined;
+    if (this.selectorTraceSummaryInterval !== undefined) {
+      clearInterval(this.selectorTraceSummaryInterval);
+      this.selectorTraceSummaryInterval = undefined;
+    }
+    this.selectorTraceSummaryCollector?.resetPeriod();
   }
 
   protected startSagaManager(storeContext: ReduxStoreContext): void {

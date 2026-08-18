@@ -75,29 +75,16 @@ describe('StreamingStore', () => {
       const selectCount = store.createSelector((state) => state.counter.count);
       const subscription = selectCount().observe(() => {});
       subscription.unsubscribe();
-
-      expect(consoleInfoSpy).toHaveBeenCalledWith(
-        '[themis] selector trace',
-        expect.objectContaining({
-          observableCacheRequestCount: expect.any(Number),
-          observableCacheCachedCount: expect.any(Number),
-          selectorSource: expect.stringContaining('state.counter.count'),
-        })
-      );
-      expect(consoleInfoSpy).toHaveBeenCalledWith(
-        '[themis] selector trace',
-        expect.objectContaining({
-          accessedPathCount: 2,
-          accessedPaths: ['counter', 'counter.count'],
-          executionDurationMs: expect.any(Number),
-          invalidationReason: 'first-execution',
-          argumentsChanged: false,
-          changedArguments: [],
-          resultOutcome: 'initial',
-          recomputationCount: 1,
-          selectorSource: expect.stringContaining('state.counter.count'),
-        })
-      );
+      vi.advanceTimersByTime(1000);
+      const aggregate = consoleInfoSpy.mock.calls
+        .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selector trace summary'))
+        .at(-1)?.at(-1) as any;
+      expect(aggregate.selectors[0]).toEqual(expect.objectContaining({
+        recomputationCount: 1,
+        duration: expect.objectContaining({ count: 1 }),
+        cache: expect.objectContaining({ requestCount: 1, missCount: 1 }),
+        selectorSource: expect.stringContaining('state.counter.count'),
+      }));
     } finally {
       consoleInfoSpy.mockRestore();
     }
@@ -121,25 +108,17 @@ describe('StreamingStore', () => {
 
       expect(second).toBe(first);
       expect(third).toBe(first);
+      vi.advanceTimersByTime(1000);
 
       const cacheTraces = consoleInfoSpy.mock.calls
-        .map((call) => call[1])
-        .filter((payload) => payload && 'observableCacheRequestCount' in payload);
-      expect(cacheTraces).toHaveLength(3);
-      expect(cacheTraces.map((trace) => trace.outputCacheStatus)).toEqual(['miss', 'hit', 'hit']);
-      expect(cacheTraces[2]).toEqual(expect.objectContaining({
-        outputCacheRequestCount: 3,
-        outputCacheHitCount: 2,
-        outputCacheMissCount: 1,
-      }));
-      expect(cacheTraces[1].observableCacheRequestCount).toBe(
-        cacheTraces[0].observableCacheRequestCount + 1
-      );
-      expect(cacheTraces[2].observableCacheRequestCount).toBe(
-        cacheTraces[0].observableCacheRequestCount + 2
-      );
-      expect(cacheTraces[1].observableCacheCachedCount).toBe(cacheTraces[0].observableCacheCachedCount);
-      expect(cacheTraces[2].observableCacheCachedCount).toBe(cacheTraces[0].observableCacheCachedCount);
+        .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selector trace summary'))
+        .at(-1)?.at(-1) as any;
+      expect(cacheTraces.selectors[0].cache).toEqual({
+        requestCount: 3,
+        hitCount: 2,
+        missCount: 1,
+        hitRatio: 2 / 3,
+      });
     } finally {
       consoleInfoSpy.mockRestore();
     }
@@ -163,17 +142,15 @@ describe('StreamingStore', () => {
     storeB.init();
     selectCount();
     selectCount.withStore(storeB)();
+    vi.advanceTimersByTime(1000);
 
     const cacheTraces = consoleInfoSpy.mock.calls
-      .map((call) => call[1])
-      .filter((payload) => payload && 'observableCacheRequestCount' in payload);
-    expect(cacheTraces.map((trace) => ({
-      requests: trace.outputCacheRequestCount,
-      hits: trace.outputCacheHitCount,
-      misses: trace.outputCacheMissCount,
-    }))).toEqual([
-      { requests: 1, hits: 0, misses: 1 },
-      { requests: 1, hits: 0, misses: 1 },
+      .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selector trace summary'))
+      .map((call) => call.at(-1) as any);
+    expect(cacheTraces).toHaveLength(2);
+    expect(cacheTraces.map((aggregate) => aggregate.selectors[0].cache)).toEqual([
+      { requestCount: 1, hitCount: 0, missCount: 1, hitRatio: 0 },
+      { requestCount: 1, hitCount: 0, missCount: 1, hitRatio: 0 },
     ]);
     consoleInfoSpy.mockRestore();
   });
@@ -201,6 +178,7 @@ describe('StreamingStore', () => {
     expect((store as any).storeOptions).toEqual({
       throttledSelectorFrequency: 10,
       sagaMonitor: false,
+      logReduxActions: false,
       traceSelectors: expect.objectContaining({
         traceExecution: false,
         traceCache: false,

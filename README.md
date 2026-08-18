@@ -180,9 +180,39 @@ Use the public subpackage entrypoints in application code. There is no package r
 
 - `throttledSelectorFrequency` — Store-scoped selector cadence cap for all three variants; defaults to `64` FPS, accepts any finite value in the inclusive `1..256` range, and coalesces rapid updates to the latest pending selector result.
 - `sagaMonitor: true` — enables Store-owned redux-saga monitoring; disabled by default, diagnostics only.
-- `traceSelectors: true` — enables selector trace output; disabled by default, diagnostics only.
+- `logReduxActions: true` — enables grouped Redux action/state logging; disabled by default and configured only when constructing the Store.
+- `traceSelectors: true` — enables selector trace aggregates; disabled by default, diagnostics only. Use the flat object form for category selection, thresholds, interval, and lifetime summaries.
 
 Names prefixed `@internal_` (such as the `@internal_storeUtility` reducer) and the internal saga manager are package-owned; do not register `@internal_` reducers, start internal sagas, or read those state domains from app code.
+
+## Diagnostic logging
+
+Selector tracing and Redux action logging are separate, opt-in diagnostics. All three Store families use the same third constructor argument for options; pass `undefined` as the middleware placeholder when no middleware is configured:
+
+```typescript
+const diagnosticOptions = {
+  traceSelectors: {
+    traceExecution: true,
+    traceCache: true,
+    summaryEnabled: true,
+    summaryIntervalMs: 1000,
+  },
+  logReduxActions: true,
+};
+
+const store = new Store(reducers, undefined, diagnosticOptions);
+// Use the same options with ReactStore or StreamingStore when that is the app's Store family:
+// const store = new ReactStore(reducers, undefined, diagnosticOptions);
+// const store = new StreamingStore(reducers, undefined, diagnosticOptions);
+```
+
+Use one concrete Store family per app. Both options default to `false`; omit them in normal builds and enable them only for a focused reproduction. Selector tracing is available in development and production when explicitly enabled. After `store.init()`, each non-empty selector interval emits one `[themis] selector trace summary` aggregate with `{ intervalMs, selectors }`; rows contain interval counts, duration aggregates, invalidation/result/argument counts, and cache hit/miss metrics. `summaryEnabled: true` additionally retains a deep-frozen lifetime snapshot from `store.getSelectorTraceSummary()`. Period rows reset after emission while lifetime summaries continue accumulating, and idle periods are silent. Thresholds are inclusive and category-specific (`minDurationMs` and `minRecomputationCount` gate execution evidence; `minCacheMissCount` gates cache evidence). Selector records never contain state, selector arguments, selector results, or internal paths.
+
+Redux action logging is a different stream. When `logReduxActions: true`, the logger prints a one-time `🔧 Redux Logger Active` legend and one collapsed console group per dispatch. Expand the group to read the action title and the styled `action` record, then the styled `state` record. Primitive payloads (or a one-element primitive array) may appear in the action title; complex payloads do not. Changed state uses a lazy, path-keyed `changes` payload containing `prev`/`next` entries. Unchanged state uses the gray `state (no changes)` record with `{ state: nextState }`; it means the reducer returned the same state reference, not that logging failed. Redux diffs can contain application values, so redact secrets and personal data before sharing them. Selector aggregates and Redux action groups should not be interpreted as interchangeable evidence.
+
+Both diagnostics follow Store lifecycle boundaries: initialize before dispatching or using direct reactive selectors, retain the disposer returned by `store.init()`, and call it (or `store.dispose()`) when the Store is no longer used. Disposal stops selector aggregate intervals and clears pending period data. Diagnostic options are construction-time configuration: to disable selector tracing, omit `traceSelectors` or set it to `false` on a newly constructed Store; to disable Redux action logging, omit `logReduxActions` or set it to `false` and construct a new Store. There is no Redux logger dev-mode, localStorage, global debug-console, or runtime toggle. The legacy `store.traceSelectors()` method can activate the compatibility tracing preset only for a Store constructed with omitted/`false` tracing options; a configured tracing object remains authoritative.
+
+For a slow selector, start with the smallest useful tracing categories, initialize the Store, reproduce the real interaction, and filter for `[themis] selector trace summary`. For a dispatch issue, enable `logReduxActions`, expand the relevant action group, inspect only the needed lazy diff paths, redact captured values, then dispose the diagnostic Store and remove the temporary options.
 
 ## Lifecycle
 

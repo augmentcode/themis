@@ -11,10 +11,12 @@ const counterReducer = Object.assign(
 
 describe.runIf(isProductionBuild)('production selector tracing', () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
   it('activates tracing and summaries through the Store option in production', () => {
+    vi.useFakeTimers();
     const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined);
     const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
     const store = new StreamingStore(
@@ -37,10 +39,13 @@ describe.runIf(isProductionBuild)('production selector tracing', () => {
     expect((store as any).selectorTraceSummaryCollector).toBeDefined();
     expect((store as any).selectorTraceSummaryInterval).toBeDefined();
     expect(setIntervalSpy).toHaveBeenCalled();
-    expect(consoleInfo).toHaveBeenCalledWith(
-      '[themis] selector trace',
-      expect.objectContaining({ selectorSource: expect.any(String) })
-    );
+    expect(consoleInfo).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1000);
+    expect(consoleInfo).toHaveBeenCalledTimes(1);
+    expect(consoleInfo.mock.calls[0][0]).toContain('[themis] selector trace summary');
+    expect(consoleInfo.mock.calls[0].at(-1)).toEqual(expect.objectContaining({
+      selectors: [expect.objectContaining({ selectorSource: expect.any(String) })],
+    }));
     expect(store.getSelectorTraceSummary()).not.toEqual([]);
 
     dispose();

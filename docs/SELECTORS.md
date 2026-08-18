@@ -11,10 +11,11 @@
 3. [Using Selectors](#using-selectors)
 4. [Proxy-Based Memoization](#proxy-based-memoization)
 5. [Selector Tracing Diagnostics](#selector-tracing-diagnostics)
-6. [Collection Selectors](#collection-selectors)
-7. [Selector Lifecycle Rules](#selector-lifecycle-rules)
-8. [Best Practices](#best-practices)
-9. [Anti-Patterns](#anti-patterns)
+6. [Redux Action Logging Diagnostics](#redux-action-logging-diagnostics)
+7. [Collection Selectors](#collection-selectors)
+8. [Selector Lifecycle Rules](#selector-lifecycle-rules)
+9. [Best Practices](#best-practices)
+10. [Anti-Patterns](#anti-patterns)
 
 ---
 
@@ -244,21 +245,23 @@ export const store = new Store(
 );
 ```
 
-The public contract is flat: `traceSelectors` accepts `undefined`, `false`, `true`, or one object whose properties are the nine fields below. The object is not nested and arrays or unknown properties are rejected. Omitted object fields use the defaults shown here:
+The public contract is flat: `traceSelectors` accepts `undefined`, `false`, `true`, or one object whose properties are the eleven fields below. The object is not nested and arrays or unknown properties are rejected. Omitted object fields use the defaults shown here:
 
 | Field | Default | Controls |
 | --- | --- | --- |
-| `traceExecution` | `false` | Selector execution records: accessed paths, path count, duration, and recomputation count. |
-| `traceCache` | `false` | Direct readable/signal/observable output-cache records and hit/miss counters. |
-| `traceInvalidation` | `false` | Why a selector recomputed and which accessed paths changed. |
-| `traceArguments` | `false` | Whether selector argument identities changed and type-only change metadata. |
-| `traceResults` | `false` | Whether a recomputation produced the initial, changed, or retained-reference result. |
+| `traceExecution` | `false` | Selector execution counts, recomputation counts, and duration aggregates in period rows. |
+| `traceCache` | `false` | Direct readable/signal/observable output-cache request, hit, miss, and ratio metrics in period rows. |
+| `traceInvalidation` | `false` | Counts for each selector invalidation reason in period rows. |
+| `traceArguments` | `false` | Selector argument-computation and changed-argument counts in period rows. |
+| `traceResults` | `false` | Counts for initial, changed, and retained-reference outcomes in period rows. |
 | `traceCadence` | `false` | Store scheduling subscription and cadence-tick messages. |
-| `minDurationMs` | `0` | Minimum execution duration (inclusive) for an execution console record. |
-| `summaryEnabled` | `false` | In-memory aggregate collection and periodic summary output. |
-| `summaryIntervalMs` | `1000` | Milliseconds between periodic summary records when `summaryEnabled` is true. |
+| `minDurationMs` | `0` | Inclusive minimum period maximum duration for an execution row. |
+| `minRecomputationCount` | `0` | Inclusive minimum period recomputation count for an execution row. |
+| `minCacheMissCount` | `0` | Inclusive minimum period cache-miss count for a cache row. |
+| `summaryEnabled` | `false` | Retains the lifetime, non-resetting `getSelectorTraceSummary()` snapshot. Period aggregates are automatic whenever tracing is enabled. |
+| `summaryIntervalMs` | `1000` | Milliseconds between automatic period aggregate records whenever tracing is enabled. |
 
-`traceSelectors: true` is the compatibility preset: it enables all six event categories with `minDurationMs: 0`, while leaving aggregate summaries disabled. `traceSelectors: false` and an omitted option disable every category. In object form, each category is independent, so enabling `traceInvalidation` does not implicitly enable execution, argument, result, cache, or cadence output. `minDurationMs` and `summaryIntervalMs` must be finite numbers greater than or equal to zero; the category and `summaryEnabled` fields must be booleans.
+`traceSelectors: true` is the compatibility preset: it enables all six event categories with all three thresholds at `0`, automatic period aggregates, and no lifetime snapshot. `traceSelectors: false` and an omitted option disable every category and aggregate timer. In object form, each category is independent, so enabling `traceInvalidation` does not implicitly enable execution, argument, result, cache, or cadence output. The three threshold fields and `summaryIntervalMs` must be finite numbers greater than or equal to zero; the category and `summaryEnabled` fields must be booleans.
 
 For example, this enables only invalidation and result metadata, filters execution records shorter than 2 ms, and starts one-second aggregate reporting:
 
@@ -279,51 +282,59 @@ const store = new Store(
 
 The same options object and defaults apply to all three Store families. `Store` direct selector calls return Svelte `Readable` values, `ReactStore` calls return Preact `ReadonlySignal` values, and `StreamingStore` calls return Kefir `Observable` values; tracing observes the same selector computation and output-cache events regardless of that public adapter. The existing selector lifecycle rules still apply: initialize the Store before direct reactive calls, and dispose the returned initializer disposer (or call `store.dispose()`) when the Store is no longer used.
 
-#### Console event records
+#### Console aggregate records
 
-Enabled event records are written with `console.info` and the `[themis] selector trace` prefix. Selector access records always identify the callback with `selectorSource`, a source snippet limited to the first five lines and 500 characters. Depending on the independently enabled categories, they can include:
-
-| Field | Category | Meaning |
-| --- | --- | --- |
-| `recomputationCount` | execution/invalidation/arguments/results | Cumulative recomputation number for this selector; memoized reads do not increment it. |
-| `accessedPathCount` | execution | Number of state paths observed during the execution. |
-| `accessedPaths` | execution | Sorted rendered paths such as `todos` and `todos.collection`; dynamic selector-argument keys use a stable `<selector-argument>` marker. |
-| `executionDurationMs` | execution | Selector callback duration in milliseconds. It is emitted only when it meets `minDurationMs`. |
-| `invalidationReason` | invalidation | One of `first-execution`, `selector-arguments-changed`, `accessed-state-paths-changed`, or `previous-result-unavailable`. |
-| `changedAccessedPaths` | invalidation | Sorted rendered paths that changed for the recomputation; the first execution has an empty list. |
-| `argumentsChanged` | arguments | Whether selector argument identity changed for this computation. |
-| `changedArguments` | arguments | Entries containing only `position`, `previousType`, and `currentType`; argument values are omitted. |
-| `resultOutcome` | results | `initial`, `changed`, or `retained-reference`; no result value is included. |
-
-`minDurationMs` filters only execution-category console records. Invalidation, argument, and result records remain independently observable even when a computation is shorter than the duration threshold. Summary collection (when enabled) records valid execution durations regardless of this console filter.
-
-Direct readable, signal, and observable output-cache records use the same prefix and contain:
+Selector trace metadata is collected without per-call console noise. On each
+non-empty interval, one `console.info` call uses the
+`[themis] selector trace summary` prefix and has the exact aggregate shape
+`{ intervalMs, selectors }`. Each selector row has the exact
+`SelectorTracePeriodSummary` shape:
 
 | Field | Meaning |
 | --- | --- |
-| `selectorSource` | The selector callback source snippet. |
-| `observableCacheRequestCount` | Number of direct output-cache requests observed for this selector. |
-| `observableCacheCachedCount` | Number of direct outputs created and stored in the cache. |
-| `outputCacheStatus` | `"hit"` when an existing output is reused, or `"miss"` when a new output is created. |
-| `outputCacheRequestCount` | Cumulative direct output-cache request count. |
-| `outputCacheHitCount` | Cumulative cache-hit count. |
-| `outputCacheMissCount` | Cumulative cache-miss count. |
+| `selectorSource` | Safe callback source snippet used as selector identity. |
+| `executionCount` | Number of execution samples collected during this interval. |
+| `recomputationCount` | Selector recomputations during this interval; this is an interval delta, not a lifetime total. |
+| `invalidationReasons` | Counts for `first-execution`, `selector-arguments-changed`, `accessed-state-paths-changed`, and `previous-result-unavailable`. |
+| `resultOutcomes` | Counts for `initial`, `changed`, and `retained-reference`. |
+| `arguments` | `{ count, changedCount }` for argument-related computations during this interval. |
+| `duration` | `{ count, totalMs, averageMs, maximumMs }` for this interval. |
+| `cache` | `{ requestCount, hitCount, missCount, hitRatio }` for this interval; `hitRatio` is `null` when there are no requests. |
+
+Rows are emitted when at least one enabled category qualifies. `minDurationMs`
+and `minRecomputationCount` use inclusive comparisons against the interval's
+maximum duration and recomputation count for execution eligibility.
+`minCacheMissCount` uses an inclusive comparison against the interval miss count
+for cache eligibility. Thresholds filter emitted rows, not collected samples;
+invalidation, argument, and result categories are represented by their counts,
+not individual metadata records. No accessed paths, changed-path metadata,
+argument types, output-cache status, or cumulative cache counters are present in
+the aggregate payload.
+
+Cache miss styling is selector-specific: a selector label is bold when its
+interval `cache.missCount` is greater than zero, while hit-only labels remain
+ordinary. Cache `requestCount`, `hitCount`, and `missCount` are interval deltas.
 
 Cadence diagnostics are separate scheduling messages: `SUBSCRIBE SELECTOR CADENCE` reports subscriber count and `SELECTOR CADENCE TICK` reports the tick timestamp and listener count. They describe Store scheduling, not selector payloads.
 
 #### Privacy guarantee
 
-Tracing never captures or logs selector argument values, selector results, or state values. Dynamic property keys matching selector arguments are replaced with the stable `<selector-argument>` marker in both accessed and changed path metadata, including identifier-like keys. Tracing otherwise reports only callback source identity, rendered state-path names, durations, counts, type names, identity/change indicators, cache status, and the result-outcome labels above. A `selectorSource` snippet identifies the callback code; it is not a runtime state snapshot.
+Tracing never captures or logs selector argument values, selector results, or state
+values. The aggregate payload reports only callback source identity, interval
+counts, duration aggregates, cache counters, ratios, and fixed invalidation,
+argument, and result labels. A `selectorSource` snippet identifies callback code;
+it is not a runtime state snapshot. Internal path metadata is not included in the
+period aggregate or lifetime summary.
 
 #### Aggregate summaries
 
-Set `summaryEnabled: true` to collect privacy-preserving, per-selector summaries in any build where tracing is explicitly enabled. Read the current snapshot at any time with the inherited, read-only Store API:
+Period aggregation is automatic for every explicitly enabled selector-tracing category, including `traceSelectors: true`; it does not require `summaryEnabled`. Set `summaryEnabled: true` when you also need privacy-preserving, per-selector lifetime summaries. Read that non-resetting snapshot at any time with the inherited, read-only Store API:
 
 ```typescript
 const summaries = store.getSelectorTraceSummary();
 ```
 
-The result is a deep-frozen snapshot and calling it does not reset or mutate the collector. With no summary data (including disabled tracing), it returns an empty array. Each selector entry contains:
+The result is a deep-frozen lifetime snapshot and calling it does not reset or mutate the collector. With no lifetime summary data (including `summaryEnabled: false`), it returns an empty array. Each selector entry contains:
 
 | Field | Contents |
 | --- | --- |
@@ -335,9 +346,9 @@ The result is a deep-frozen snapshot and calling it does not reset or mutate the
 | `duration` | `count`, `totalMs`, `averageMs`, `maximumMs`, and `p95Ms`. |
 | `cache` | `requestCount`, `hitCount`, `missCount`, and `hitRatio` (`null` when there are no requests). |
 
-Duration `count`, total, average, and maximum are lifetime aggregates. The p95 calculation retains at most 64 duration samples in a bounded ring buffer, so `p95Ms` is a bounded-window percentile rather than storage of every duration. Cache, invalidation, and result aggregates likewise retain metadata only; they never retain argument, result, or state values.
+Duration `count`, total, average, and maximum are lifetime aggregates. The p95 calculation retains at most 64 duration samples in a bounded ring buffer, so `p95Ms` is a bounded-window percentile rather than storage of every duration. Cache, invalidation, and result aggregates likewise retain metadata only; they never retain argument, result, or state values. Period aggregate rows contain resettable interval deltas (`executionCount`, `recomputationCount`, duration metrics, invalidation/result counts, and cache request/hit/miss metrics); after each interval they reset, while the lifetime snapshot continues accumulating.
 
-After `store.init()`, `summaryEnabled` starts one interval using `summaryIntervalMs` and writes `[themis] selector trace summary` records with the same read-only snapshot shape. Repeated `init()` calls do not create duplicate intervals. The initializer disposer and `store.dispose()` stop the interval and dispose normal selector cadence resources.
+After `store.init()`, enabled tracing starts one interval using `summaryIntervalMs` and writes exactly one `[themis] selector trace summary` record for each non-empty period. Empty or idle periods are silent. Repeated `init()` calls do not create duplicate intervals. The initializer disposer and `store.dispose()` stop the interval, clear pending period data, and dispose normal selector cadence resources. Cadence subscribe and tick diagnostics remain immediate and are not aggregated.
 
 #### Default-off and production behavior
 
@@ -346,9 +357,63 @@ Tracing is disabled by default in every build. For compatibility, calling the le
 #### Performance diagnosis workflow
 
 1. Enable the smallest useful set of categories in a development or production build, initialize the Store, and reproduce the slow interaction through the real selector call path.
-2. Filter the console for `[themis] selector trace`. Start with execution records that have high `executionDurationMs` or unexpectedly increasing `recomputationCount`; inspect `selectorSource` and `accessedPaths` for broad reads.
-3. Use invalidation, argument, and result metadata to distinguish state-path changes, unstable argument identities, and recomputations that retain the previous reference. Compare cache hit/miss records for direct output reuse.
+2. Filter the console for `[themis] selector trace summary`. Start with aggregate selector rows that have high period maximum duration or unexpectedly increasing recomputation counts; inspect `selectorSource` and the category counts.
+3. Use invalidation, argument, and result counts to distinguish recomputation reasons, argument churn, and retained references. Compare interval cache hit/miss metrics for direct output reuse.
 4. Use `getSelectorTraceSummary()` or periodic summary records to compare aggregate duration, p95, invalidation, result, and cache statistics before and after a selector change. Remove `traceSelectors` (or set it to `false`) after the investigation.
+
+---
+
+## Redux Action Logging Diagnostics
+
+Redux action logging is separate from selector tracing, saga monitoring, and the
+devtools inspection API. It is a default-off, construction-time diagnostic shared
+by `Store`, `ReactStore`, and `StreamingStore`. Pass it in the third constructor
+argument and use `undefined` for the middleware placeholder when no middleware is
+configured:
+
+```typescript
+const options = { logReduxActions: true };
+
+const svelteStore = new Store(reducers, undefined, options);
+const reactStore = new ReactStore(reducers, undefined, options);
+const streamingStore = new StreamingStore(reducers, undefined, options);
+```
+
+Use the constructor for the one Store family selected by the app; the three lines
+above show the shared signature, not a recommendation to combine families. The
+option is disabled when omitted or `false`, and there is no dev-mode, localStorage,
+global debug-console, or runtime toggle. To disable it, omit the option or set it to
+`false` and construct a new Store. Changing an options object, calling `init()`
+again, or disposing and reusing an instance does not rebuild its middleware
+pipeline.
+
+When an enabled Store is constructed, the logger prints the one-time
+`🔧 Redux Logger Active` legend. Each subsequent dispatch after initialization is
+represented by one `console.groupCollapsed` group:
+
+1. The group title is the action type, with a primitive `payload` (or a one-element
+   primitive payload array) appended inline. Complex payloads are intentionally not
+   copied into the title.
+2. Expand the blue `action` record to inspect the dispatched action. CSS style
+   arguments are presentation only, not additional action fields.
+3. For a changed state, expand the green `state` record and its lazy `changes`
+   property. `changes` is keyed by state path, and each entry contains `prev` and
+   `next`; the diff is computed when the console property is inspected.
+4. For an unchanged state, the gray `state (no changes)` record contains
+   `{ state: nextState }`. This means the reducer returned the same state
+   reference; it is not a logger failure or a rejected action.
+
+The logger's diff can contain application state values. Redact secrets, tokens,
+personal data, and other sensitive values before copying a group into an issue or
+diagnostic report. Do not use Redux action groups to infer selector performance:
+selector tracing emits one privacy-safe `[themis] selector trace summary` aggregate
+per non-empty interval, while Redux logging emits one grouped record per dispatch.
+
+For a dispatch investigation, enable the logger on a focused Store instance,
+initialize it, reproduce the real action, expand only the relevant lazy diff paths,
+redact any captured values, and dispose the Store afterward. For selector
+investigations, use the [Selector Tracing Diagnostics](#selector-tracing-diagnostics)
+workflow and disable tracing on the next Store construction.
 
 ---
 

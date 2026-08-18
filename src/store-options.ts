@@ -17,6 +17,8 @@ export {
 } from './utils/selector-core/throttled-selector-options';
 
 export const DEFAULT_SELECTOR_TRACE_MIN_DURATION_MS = 0;
+export const DEFAULT_SELECTOR_TRACE_MIN_RECOMPUTATION_COUNT = 0;
+export const DEFAULT_SELECTOR_TRACE_MIN_CACHE_MISS_COUNT = 0;
 export const DEFAULT_SELECTOR_TRACE_SUMMARY_INTERVAL_MS = 1000;
 
 const TRACE_OPTION_KEYS = new Set<keyof SelectorTracingOptions>([
@@ -27,6 +29,8 @@ const TRACE_OPTION_KEYS = new Set<keyof SelectorTracingOptions>([
   'traceResults',
   'traceCadence',
   'minDurationMs',
+  'minRecomputationCount',
+  'minCacheMissCount',
   'summaryEnabled',
   'summaryIntervalMs',
 ]);
@@ -39,6 +43,8 @@ const disabledSelectorTracingOptions = (): NormalizedSelectorTracingOptions => (
   traceResults: false,
   traceCadence: false,
   minDurationMs: DEFAULT_SELECTOR_TRACE_MIN_DURATION_MS,
+  minRecomputationCount: DEFAULT_SELECTOR_TRACE_MIN_RECOMPUTATION_COUNT,
+  minCacheMissCount: DEFAULT_SELECTOR_TRACE_MIN_CACHE_MISS_COUNT,
   summaryEnabled: false,
   summaryIntervalMs: DEFAULT_SELECTOR_TRACE_SUMMARY_INTERVAL_MS,
 });
@@ -68,6 +74,8 @@ export const normalizeSelectorTracingOptions = (
       traceResults: true,
       traceCadence: true,
       minDurationMs: DEFAULT_SELECTOR_TRACE_MIN_DURATION_MS,
+      minRecomputationCount: DEFAULT_SELECTOR_TRACE_MIN_RECOMPUTATION_COUNT,
+      minCacheMissCount: DEFAULT_SELECTOR_TRACE_MIN_CACHE_MISS_COUNT,
       summaryEnabled: false,
       summaryIntervalMs: DEFAULT_SELECTOR_TRACE_SUMMARY_INTERVAL_MS,
     };
@@ -110,6 +118,16 @@ export const normalizeSelectorTracingOptions = (
       tracing.minDurationMs ?? DEFAULT_SELECTOR_TRACE_MIN_DURATION_MS,
       0
     ),
+    minRecomputationCount: validateSelectorTracingNumber(
+      'traceSelectors.minRecomputationCount',
+      tracing.minRecomputationCount ?? DEFAULT_SELECTOR_TRACE_MIN_RECOMPUTATION_COUNT,
+      0
+    ),
+    minCacheMissCount: validateSelectorTracingNumber(
+      'traceSelectors.minCacheMissCount',
+      tracing.minCacheMissCount ?? DEFAULT_SELECTOR_TRACE_MIN_CACHE_MISS_COUNT,
+      0
+    ),
     summaryEnabled: tracing.summaryEnabled === true,
     summaryIntervalMs: validateSelectorTracingNumber(
       'traceSelectors.summaryIntervalMs',
@@ -124,5 +142,6 @@ export const normalizeStoreOptions = (options: StoreOptions = {}): NormalizedSto
     options.throttledSelectorFrequency ?? DEFAULT_THROTTLED_SELECTOR_FREQUENCY
   ),
   sagaMonitor: options.sagaMonitor === true,
+  logReduxActions: options.logReduxActions === true,
   traceSelectors: normalizeSelectorTracingOptions(options.traceSelectors),
 });

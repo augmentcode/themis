@@ -215,6 +215,7 @@ export const packageMarkdownFiles = [
   "skills/core/local-storage/SKILL.md",
   "skills/core/reducers/SKILL.md",
   "skills/core/redux-saga/SKILL.md",
+  "skills/core/redux-action-logging/SKILL.md",
   "skills/core/saga-manager/SKILL.md",
   "skills/core/sagas/SKILL.md",
   "skills/core/selector-channels/SKILL.md",
