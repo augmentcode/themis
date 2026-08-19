@@ -144,4 +144,12 @@ export const normalizeStoreOptions = (options: StoreOptions = {}): NormalizedSto
   sagaMonitor: options.sagaMonitor === true,
   logReduxActions: options.logReduxActions === true,
   traceSelectors: normalizeSelectorTracingOptions(options.traceSelectors),
+  loggerFactory:
+    options.loggerFactory === undefined
+      ? undefined
+      : typeof options.loggerFactory === 'function'
+        ? options.loggerFactory
+        : (() => {
+            throw new TypeError('Store option "loggerFactory" must be a function.');
+          })(),
 });

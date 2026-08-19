@@ -13,8 +13,8 @@ sources:
   - "@augmentcode/themis/svelte-store"
   - "@augmentcode/themis/components-svelte/use-init-store"
   - "@augmentcode/themis/components-svelte/use-run-saga"
-  - @augmentcode/themis/docs/ARCHITECTURE.md
-  - @augmentcode/themis/README.md
+  - "@augmentcode/themis/docs/ARCHITECTURE.md"
+  - "@augmentcode/themis/README.md"
 triggers:
   - Store class
   - svelte-store import

@@ -577,6 +577,8 @@ export const packageTypeExportChecks = [
       "StoreSelectorEffect",
       "StoreSelectorReadable",
       "StoreSelectorSelect",
+      "StoreLoggerFactory",
+      "StoreTraceStreams",
     ],
     blocked: [
       "ReduxStoreContext",

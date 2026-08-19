@@ -10,8 +10,8 @@ requires:
   - core/import-boundaries
 sources:
   - "@augmentcode/themis/streaming-store"
-  - @augmentcode/themis/docs/ARCHITECTURE.md
-  - @augmentcode/themis/README.md
+  - "@augmentcode/themis/docs/ARCHITECTURE.md"
+  - "@augmentcode/themis/README.md"
 triggers:
   - StreamingStore
   - streaming-store import
@@ -43,6 +43,23 @@ const dispose = streamStore.init();
 - Streaming selector calls return Kefir `Observable` outputs backed by the Store-owned Kefir state stream after initialization and throw before `init()` or after `dispose()`.
 - `streamStore.dispatch`, `streamStore.state`, `streamStore.runSaga(sagaFn)`, and `streamStore.dispose()` follow the shared Store runtime behavior documented in core Store guidance.
 - Do not manually register package-owned `@internal_` reducers or internal sagas.
+
+## Logging and tracing streams
+
+`StreamingStore.traceStreams` is a frozen, read-only collection of Kefir
+observables shared symmetrically with `Store` and `ReactStore`: `selectorDetail`,
+`selectorSummary`, `selectorCadence`, `sagaMonitor`, and `runtimeError`. Import
+`StoreTraceStreams` and `StoreLoggerFactory` from
+`@augmentcode/themis/types` when annotating a custom logger. The default logger
+subscribes to these streams and writes the established console prefixes; a
+custom `loggerFactory` replaces it and may return a disposer.
+
+Use `summaryEnabled: true` in the flat `traceSelectors` options object to opt
+into selector summary allocation. `summaryIntervalMs` controls publication
+cadence; detailed trace flags do not allocate summaries. Dispose direct Kefir
+subscriptions before `streamStore.dispose()`. Store disposal stops the logger,
+summary interval, selector cadence resources, and other Store-owned tracing
+resources; a later successful `init()` reattaches the configured logger.
 
 ## Streaming family boundary
 

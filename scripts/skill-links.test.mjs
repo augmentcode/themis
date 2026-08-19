@@ -44,6 +44,31 @@ function findSiblingSkillReferences(content) {
   return [...content.matchAll(/(?:\.\.?\/)+[A-Za-z0-9_./*-]+SKILL\.md/g)].map((match) => match[0]);
 }
 
+function findUnquotedPackageSourceReferences(content) {
+  const frontmatter = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1] ?? "";
+  const references = [];
+  let inSources = false;
+
+  for (const line of frontmatter.split(/\r?\n/)) {
+    if (line === "sources:") {
+      inSources = true;
+      continue;
+    }
+    if (inSources && !line.trim().startsWith("-")) {
+      if (line.trim() && !/^\s/.test(line)) break;
+      continue;
+    }
+    if (!inSources) continue;
+
+    const value = line.match(/^\s+-\s+(.+?)\s*$/)?.[1];
+    if (value?.startsWith(packagePrefix) && !/^["']/.test(value)) {
+      references.push(value);
+    }
+  }
+
+  return references;
+}
+
 describe("skill documentation references", () => {
   it("ignores sibling skill links and external documentation URLs", () => {
     expect(
@@ -51,6 +76,29 @@ describe("skill documentation references", () => {
         "`../core/SKILL.md` and https://example.com/docs/README.md stay local/external; use `@augmentcode/themis/docs/TESTING.md`."
       )
     ).toEqual(["@augmentcode/themis/docs/TESTING.md"]);
+  });
+
+  it("requires absolute package sources to be quoted without restricting relative or external sources", async () => {
+    const unquoted = "---\nsources:\n  - @augmentcode/themis/docs/TESTING.md\n---";
+    const quoted = '---\nsources:\n  - "@augmentcode/themis/docs/TESTING.md"\n---';
+    const allowed = "---\nsources:\n  - ../core/SKILL.md\n  - https://example.com/docs/TESTING.md\n---";
+
+    expect(findUnquotedPackageSourceReferences(unquoted)).toEqual([
+      "@augmentcode/themis/docs/TESTING.md",
+    ]);
+    expect(findUnquotedPackageSourceReferences(quoted)).toEqual([]);
+    expect(findUnquotedPackageSourceReferences(allowed)).toEqual([]);
+
+    const skillFiles = await collectSkillFiles(skillsRoot);
+    const invalidReferences = [];
+    for (const file of skillFiles) {
+      const content = await readFile(file, "utf8");
+      for (const reference of findUnquotedPackageSourceReferences(content)) {
+        invalidReferences.push(`${file.pathname}: ${reference}`);
+      }
+    }
+
+    expect(invalidReferences).toEqual([]);
   });
 
   it("uses package-qualified existing package documents while preserving local skill links", async () => {

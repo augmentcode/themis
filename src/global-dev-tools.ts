@@ -1,4 +1,5 @@
 import type { StoreRuntime } from "./store-runtime";
+import type { StoreRuntimeErrorReporter } from "./types";
 
 export type GlobalDevToolsStore = StoreRuntime<any, any>;
 
@@ -49,7 +50,10 @@ export const cleanUpGlobalDevTools = (store: GlobalDevToolsStore): void => {
   We add a list of stores for case when there are multiple stores initialized.
   We don't want to initialize multiple stores, and should see that immediately.
 */
-export const registerGlobalDevTools = (store: GlobalDevToolsStore): (() => void) => {
+export const registerGlobalDevTools = (
+  store: GlobalDevToolsStore,
+  reportRuntimeError?: StoreRuntimeErrorReporter
+): (() => void) => {
   const svelteRedux = getOrCreateSvelteReduxGlobal();
   if (!svelteRedux) {
     return () => {};
@@ -60,7 +64,12 @@ export const registerGlobalDevTools = (store: GlobalDevToolsStore): (() => void)
   } else if (svelteRedux.reduxContext !== store) {
     const list: GlobalDevToolsStore[] = [];
     svelteRedux.reduxContext = list.concat(svelteRedux.reduxContext).concat(store);
-    console.error("Multiple Redux stores initialized:", svelteRedux.reduxContext);
+    reportRuntimeError?.({
+      error: new Error("Multiple Redux stores initialized:"),
+      source: "global-dev-tools",
+      message: "Multiple Redux stores initialized:",
+      payload: svelteRedux.reduxContext,
+    });
   }
 
   return () => cleanUpGlobalDevTools(store);

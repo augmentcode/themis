@@ -25,6 +25,7 @@ const startManager = (updatesLocked = false) => {
   const channel = stdChannel();
   const dispatched: StoreAction<any>[] = [];
   const exposeContext = vi.fn();
+  const reportRuntimeError = vi.fn();
   const task = runSaga(
     {
       channel,
@@ -38,10 +39,11 @@ const startManager = (updatesLocked = false) => {
     },
     sagaManager,
     reduxStore,
-    exposeContext
+    exposeContext,
+    reportRuntimeError
   );
 
-  return { channel, dispatched, exposeContext, task };
+  return { channel, dispatched, exposeContext, reportRuntimeError, task };
 };
 
 afterEach(() => {
@@ -52,13 +54,12 @@ afterEach(() => {
 describe("sagaManager crash persistence", () => {
   it("dispatches serialized crashes, unlocks updates, logs, and restarts after backoff", async () => {
     vi.useFakeTimers();
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     const error = new Error("boom");
     error.name = "SagaCrashError";
     const crashingSaga = vi.fn(function* () {
       throw error;
     });
-    const { channel, dispatched, task } = startManager(true);
+    const { channel, dispatched, reportRuntimeError, task } = startManager(true);
 
     channel.put(startSaga("syncTodos", crashingSaga));
 
@@ -76,7 +77,11 @@ describe("sagaManager crash persistence", () => {
     });
     expect(report.error).not.toBeInstanceOf(Error);
     expect(dispatched.map((action) => action.type)).toContain(unlockUpdates.type);
-    expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('Saga "syncTodos" crashed first time'), error);
+    expect(reportRuntimeError).toHaveBeenCalledWith({
+      error,
+      source: "saga-manager",
+      message: expect.stringContaining('Saga "syncTodos" crashed first time'),
+    });
 
     await vi.advanceTimersByTimeAsync(getBackOffDelay(0));
     await waitFor(() => (crashingSaga.mock.calls.length === 2 ? true : undefined));
@@ -87,7 +92,6 @@ describe("sagaManager crash persistence", () => {
 
   it("stores the started saga function for crash restarts", async () => {
     vi.useFakeTimers();
-    vi.spyOn(console, "error").mockImplementation(() => {});
     const crashingSaga = vi.fn(function* () {
       throw new Error("restart me");
     });

@@ -90,7 +90,7 @@ export type CreateCachedSelectorOptions<STATE, R = unknown, ARGS extends unknown
   traceResults?: boolean;
 };
 
-export type SelectorCadenceTickListener = (timestamp: number) => void;
+export type SelectorCadenceTickListener = (timestamp: number, listenerCount?: number) => void;
 
 export type SelectorCadenceSource = {
   readonly frequency: number;
@@ -103,6 +103,8 @@ export type SelectorCadenceSource = {
 
 export type SelectorCadenceSourceOptions = {
   traceSelectors?: boolean;
+  onTick?: SelectorCadenceTickListener;
+  onSubscribe?: (listenerCount: number) => void;
 };
 
 export type SelectorCadenceSourceProvider = () => SelectorCadenceSource;

@@ -8,6 +8,7 @@ import {
 } from "../saga-manager-slice";
 import { type Task } from "redux-saga";
 import type { ReduxStore, SagaCrashRecord, SagaStatusRecord } from "../../../internal-types";
+import type { StoreRuntimeErrorReporter } from "../../../types";
 import { type Saga } from "redux-saga";
 import { type SagaReturnType } from "redux-saga/effects";
 import { selectUpdatesLocked } from "../../store-utility/store-utility-selectors";
@@ -73,7 +74,8 @@ const autoRestart = (
   sagaName: string,
   sagaFn: Saga,
   onCrash?: (crashes: SagaCrashRecord[]) => void,
-  initialCrashes: SagaCrashRecord[] = []
+  initialCrashes: SagaCrashRecord[] = [],
+  reportRuntimeError?: StoreRuntimeErrorReporter
 ) => {
   return function* autoRestarting(...args: Parameters<typeof sagaFn>) {
     let restarts = 0;
@@ -116,7 +118,11 @@ const autoRestart = (
         lastTimeStarted = +new Date();
 
         const errorMessage = `Saga "${sagaName}" crashed ${restartsCount === 1 ? "first time" : restartsCount + " times"}. Restarting... (restart in ${backoffDelay / 1000}s)\n`;
-        console.error(errorMessage, e);
+        reportRuntimeError?.({
+          error: e,
+          source: "saga-manager",
+          message: errorMessage,
+        });
 
         yield* delay(backoffDelay);
       }
@@ -147,10 +153,12 @@ export type SagaManagerContext = {
  */
 export function* sagaManager(
   reduxStore: ReduxStore,
-  exposeContext: (tasks: SagaManagerContext["tasks"]) => void
+  exposeContext: (tasks: SagaManagerContext["tasks"]) => void,
+  reportRuntimeError?: StoreRuntimeErrorReporter
 ) {
   yield* setContext({
     reduxStore,
+    reportRuntimeError,
   });
 
   const startedSagas = new Map<string, Saga>();
@@ -217,7 +225,12 @@ export function* sagaManager(
     startedSagas.set(sagaName, saga);
     const startedSaga = startedSagas.get(sagaName);
     if (!startedSaga) {
-      console.error(`Saga "${sagaName}" not found in registry`);
+      const message = `Saga "${sagaName}" not found in registry`;
+      reportRuntimeError?.({
+        error: new Error(message),
+        source: "saga-manager",
+        message,
+      });
       return;
     }
     const autorestartingSaga = autoRestart(
@@ -230,7 +243,8 @@ export function* sagaManager(
         }));
         updateContext();
       },
-      getSagaStatus(sagaName).crashes
+      getSagaStatus(sagaName).crashes,
+      reportRuntimeError
     );
     const task = yield* fork(autorestartingSaga);
     const isRunning = task.isRunning();

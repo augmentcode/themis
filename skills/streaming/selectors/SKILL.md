@@ -12,7 +12,7 @@ requires:
 sources:
   - "@augmentcode/themis/streaming-store"
   - package-internal streaming selector implementation
-  - @augmentcode/themis/docs/SELECTORS.md
+  - "@augmentcode/themis/docs/SELECTORS.md"
 triggers:
   - streaming selector
   - Kefir selector

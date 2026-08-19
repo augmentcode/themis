@@ -11,8 +11,8 @@ type: core
 requires:
   - core
 sources:
-  - @augmentcode/themis/README.md
-  - @augmentcode/themis/docs/SELECTORS.md
+  - "@augmentcode/themis/README.md"
+  - "@augmentcode/themis/docs/SELECTORS.md"
   - "@augmentcode/themis/streaming-store"
   - package-internal streaming selector implementation
 triggers:
@@ -68,6 +68,9 @@ First-time app setup starts at the canonical root setup skill: `../setup/SKILL.m
 - Direct Kefir `Observable` outputs are cached for the same StreamingStore instance + selector + args; prefer the same selector + args over manual stream passing where valid.
 - Streaming selector emissions use the configured Store `throttledSelectorFrequency` policy, defaulting to 64 FPS; rapid Store or observable argument bursts coalesce to the latest pending selector value.
 - Selector trace output is disabled by default; pass `{ traceSelectors: true }` in the final StreamingStore options object only for temporary diagnostics.
+- `StreamingStore.traceStreams` is the same frozen, read-only Kefir stream collection exposed by every Store family: `selectorDetail`, `selectorSummary`, `selectorCadence`, `sagaMonitor`, and `runtimeError`. Observe these public streams; never import or publish through internal emitters.
+- The built-in console logger is attached by default. Pass a typed `loggerFactory` in the final options object to receive the stream collection and optionally return a disposer; custom factories replace, rather than augment, default console logging.
+- Set `traceSelectors: { summaryEnabled: true, summaryIntervalMs: ... }` to allocate and publish selector summaries. `summaryEnabled` is the sole summary switch; detailed selector flags remain independent.
 - `.select(state, ...args)` stays the pure selector path for tests/composition.
 - `.effect(...args)` stays the typed-redux-saga path for saga reads.
 - Core saga guidance, selector-channel helpers, `waitFor`, reducers, actions, and state policy remain in `../core/`.

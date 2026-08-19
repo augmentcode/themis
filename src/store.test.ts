@@ -967,7 +967,7 @@ describe('Store', () => {
       const returned = store.initDevTool();
 
       expect(mockedRegisterGlobalDevTools).toHaveBeenCalledTimes(1);
-      expect(mockedRegisterGlobalDevTools).toHaveBeenCalledWith(store);
+      expect(mockedRegisterGlobalDevTools).toHaveBeenCalledWith(store, expect.any(Function));
       expect(returned).toBe(cleanUpDevTools);
     });
 
