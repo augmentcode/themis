@@ -12,7 +12,13 @@ import {
 import { createSelector as createReactSelector } from './utils/react-selectors/create-selector';
 import type { StoreReactSelector } from './utils/react-selectors/types';
 
-export type { SelectorTraceSummary, StoreOptions } from './types';
+export type {
+  ReduxActionTraceEvent,
+  SelectorTraceSummary,
+  StoreLoggerFactory,
+  StoreOptions,
+  StoreTraceStreams,
+} from './types';
 
 /**
  * React signal Store variant. Its selectors return Preact React signals when

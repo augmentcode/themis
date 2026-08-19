@@ -181,7 +181,45 @@ Use the public subpackage entrypoints in application code. There is no package r
 - `throttledSelectorFrequency` — Store-scoped selector cadence cap for all three variants; defaults to `64` FPS, accepts any finite value in the inclusive `1..256` range, and coalesces rapid updates to the latest pending selector result.
 - `sagaMonitor: true` — enables Store-owned redux-saga monitoring; disabled by default, diagnostics only.
 - `logReduxActions: true` — enables grouped Redux action/state logging; disabled by default and configured only when constructing the Store.
-- `traceSelectors: true` — enables selector trace aggregates; disabled by default, diagnostics only. Use the flat object form for category selection, thresholds, interval, and lifetime summaries.
+- `traceSelectors: true` — enables selector trace output; disabled by default, diagnostics only.
+- `traceSelectors: { summaryEnabled: true, summaryIntervalMs: 1000 }` — opts into privacy-safe selector summary collection and controls its periodic publication cadence. `summaryEnabled` is the only switch that allocates the summary collector; detailed selector categories remain independently configurable.
+- `loggerFactory` — replaces the built-in console logger for one Store instance. The factory receives the read-only `StoreTraceStreams` collection and may return a disposer.
+
+### Logging and tracing streams
+
+Every `Store`, `ReactStore`, and `StreamingStore` exposes the same frozen,
+read-only `traceStreams` collection. Import `StoreTraceStreams` and
+`StoreLoggerFactory` from `@augmentcode/themis/types` (the Store-family
+entrypoints re-export these types as well). The collection contains Kefir
+observables for `selectorDetail`, `selectorSummary`, `selectorCadence`,
+`sagaMonitor`, `runtimeError`, and `reduxAction`; consumers can observe them but
+cannot publish events or access the internal emitters. Redux middleware is a pure
+event producer: it calls `next(action)` first, then publishes one immutable action
+event containing the action and previous/next state references.
+
+Without `loggerFactory`, StoreRuntime subscribes its default console logger and
+keeps the existing severity and `[themis]` prefixes, including Redux action groups.
+Supplying a factory attaches only that logger, so default console output is not
+duplicated; the six streams remain available to the custom factory:
+
+```ts
+import { StreamingStore } from '@augmentcode/themis/streaming-store';
+import type { StoreLoggerFactory } from '@augmentcode/themis/types';
+
+const loggerFactory: StoreLoggerFactory = (streams) => {
+  const subscription = streams.runtimeError.observe((event) => report(event));
+  return () => subscription.unsubscribe();
+};
+
+const store = new StreamingStore(undefined, undefined, { loggerFactory });
+const dispose = store.init();
+```
+
+The logger disposer is called by `store.dispose()` and before a later
+re-initialization attaches the logger again. Dispose direct selector
+subscriptions before disposing their Store; retain the initializer disposer
+until the Store is no longer used. Summary intervals and other tracing
+resources follow the same deterministic init/dispose lifecycle.
 
 Names prefixed `@internal_` (such as the `@internal_storeUtility` reducer) and the internal saga manager are package-owned; do not register `@internal_` reducers, start internal sagas, or read those state domains from app code.
 
@@ -206,13 +244,13 @@ const store = new Store(reducers, undefined, diagnosticOptions);
 // const store = new StreamingStore(reducers, undefined, diagnosticOptions);
 ```
 
-Use one concrete Store family per app. Both options default to `false`; omit them in normal builds and enable them only for a focused reproduction. Selector tracing is available in development and production when explicitly enabled. After `store.init()`, each non-empty selector interval emits one `[themis] selector trace summary` aggregate with `{ intervalMs, selectors }`; rows contain interval counts, duration aggregates, invalidation/result/argument counts, and cache hit/miss metrics. `summaryEnabled: true` additionally retains a deep-frozen lifetime snapshot from `store.getSelectorTraceSummary()`. Period rows reset after emission while lifetime summaries continue accumulating, and idle periods are silent. Thresholds are inclusive and category-specific (`minDurationMs` and `minRecomputationCount` gate execution evidence; `minCacheMissCount` gates cache evidence). Selector records never contain state, selector arguments, selector results, or internal paths.
+Use one concrete Store family per app. Both options default to `false`; omit them in normal builds and enable them only for a focused reproduction. Selector tracing is available in development and production when explicitly enabled. With `summaryEnabled: true`, after `store.init()` each non-empty selector interval emits one concise default-console title such as `[themis] selectors fired: 4, recalculated: 4` with a `{ intervalMs, selectors }` payload containing detailed frozen per-selector rows; the public `selectorSummary` stream retains detailed per-selector rows with interval counts, duration aggregates, invalidation/result/argument counts, and cache hit/miss metrics. The same option retains a deep-frozen lifetime snapshot from `store.getSelectorTraceSummary()`. Without `summaryEnabled`, no selector summary collector or periodic summary publication is allocated; detailed selector categories remain independently configurable. Period rows reset after emission while lifetime summaries continue accumulating, and idle periods are silent. Thresholds are inclusive and category-specific (`minDurationMs` and `minRecomputationCount` gate execution evidence; `minCacheMissCount` gates cache evidence). Selector records never contain state, selector arguments, selector results, or internal paths.
 
-Redux action logging is a different stream. When `logReduxActions: true`, the logger prints a one-time `🔧 Redux Logger Active` legend and one collapsed console group per dispatch. Expand the group to read the action title and the styled `action` record, then the styled `state` record. Primitive payloads (or a one-element primitive array) may appear in the action title; complex payloads do not. Changed state uses a lazy, path-keyed `changes` payload containing `prev`/`next` entries. Unchanged state uses the gray `state (no changes)` record with `{ state: nextState }`; it means the reducer returned the same state reference, not that logging failed. Redux diffs can contain application values, so redact secrets and personal data before sharing them. Selector aggregates and Redux action groups should not be interpreted as interchangeable evidence.
+Redux action logging is a different stream. When `logReduxActions: true`, the pure logger middleware publishes one event after each successful `next(action)`; StoreRuntime's default logger renders a one-time `🔧 Redux Logger Active` legend and one collapsed console group per dispatch. Expand the group to read the action title and the styled `action` record, then the styled `state` record. Primitive payloads (or a one-element primitive array) may appear in the action title; complex payloads do not. Changed state uses a lazy, path-keyed `changes` payload containing `prev`/`next` entries. Unchanged state uses the gray `state (no changes)` record with `{ state: nextState }`; it means the reducer returned the same state reference, not that logging failed. Redux action events retain action/state references for custom loggers, so redact secrets and personal data before sharing them. Selector aggregates and Redux action groups should not be interpreted as interchangeable evidence.
 
 Both diagnostics follow Store lifecycle boundaries: initialize before dispatching or using direct reactive selectors, retain the disposer returned by `store.init()`, and call it (or `store.dispose()`) when the Store is no longer used. Disposal stops selector aggregate intervals and clears pending period data. Diagnostic options are construction-time configuration: to disable selector tracing, omit `traceSelectors` or set it to `false` on a newly constructed Store; to disable Redux action logging, omit `logReduxActions` or set it to `false` and construct a new Store. There is no Redux logger dev-mode, localStorage, global debug-console, or runtime toggle. The legacy `store.traceSelectors()` method can activate the compatibility tracing preset only for a Store constructed with omitted/`false` tracing options; a configured tracing object remains authoritative.
 
-For a slow selector, start with the smallest useful tracing categories, initialize the Store, reproduce the real interaction, and filter for `[themis] selector trace summary`. For a dispatch issue, enable `logReduxActions`, expand the relevant action group, inspect only the needed lazy diff paths, redact captured values, then dispose the diagnostic Store and remove the temporary options.
+For a slow selector, start with the smallest useful tracing categories, initialize the Store, reproduce the real interaction, and filter for `[themis] selectors fired:`. For a dispatch issue, enable `logReduxActions`, expand the relevant action group, inspect only the needed lazy diff paths, redact captured values, then dispose the diagnostic Store and remove the temporary options.
 
 ## Lifecycle
 

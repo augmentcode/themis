@@ -132,6 +132,33 @@ describe("createChannelFromSelector", () => {
     expect(reduxStore.listenerCount()).toBe(0);
   });
 
+  it("reports selector evaluation errors through saga context", async () => {
+    const error = new Error("selector boom");
+    const reportRuntimeError = vi.fn();
+    const reduxStore = createMockReduxStore(withUtility(1));
+    const selector = {
+      select: vi.fn(() => {
+        throw error;
+      }),
+    } as unknown as SelectorChannelSelector<number, [], CounterState>;
+
+    function* createChannel() {
+      return yield* createChannelFromSelector(selector);
+    }
+
+    const channel = await runSaga(
+      { context: { reduxStore, reportRuntimeError } },
+      createChannel
+    ).toPromise() as EventChannel<SelectorChannelPayload<number>>;
+
+    channel.close();
+    expect(reportRuntimeError).toHaveBeenCalledWith({
+      error,
+      source: "selector-channel",
+      message: "Selector channel error",
+    });
+  });
+
   it("requires a Redux store in saga context", async () => {
     function* watcher() {
       yield* createChannelFromSelector(createCountSelector(), 2);

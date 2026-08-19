@@ -1219,6 +1219,27 @@ describe("package metadata", () => {
 
 
 describe("validate-release helpers", () => {
+  it("keeps the six-stream logging contract in public declarations and docs", async () => {
+    const requiredStreamTypes = ["ReduxActionTraceEvent", "StoreTraceStreams", "StoreLoggerFactory"];
+    for (const declarationFile of ["dist/svelte-store.d.ts", "dist/react-store.d.ts", "dist/streaming-store.d.ts"]) {
+      const check = packageTypeExportChecks.find((entry) => entry.declarationFile === declarationFile);
+      expect(check?.required).toEqual(expect.arrayContaining(requiredStreamTypes));
+    }
+
+    const [readme, selectorSkill, reduxSkill] = await Promise.all([
+      readFile(new URL("../README.md", import.meta.url), "utf8"),
+      readFile(new URL("../skills/core/selector-tracing/SKILL.md", import.meta.url), "utf8"),
+      readFile(new URL("../skills/core/redux-action-logging/SKILL.md", import.meta.url), "utf8"),
+    ]);
+    for (const document of [readme, selectorSkill, reduxSkill]) {
+      expect(document).toContain("reduxAction");
+      expect(document).toContain("summaryEnabled");
+      expect(document).toContain("loggerFactory");
+    }
+    expect(reduxSkill).toContain("pure middleware");
+    expect(reduxSkill).not.toContain("do not add logger middleware or logger dispatch work");
+  });
+
   it("normalizes npm pack paths across platforms", () => {
     expect(normalizePath("package\\dist\\index.js")).toBe("dist/index.js");
     expect(normalizePath("package/docs/TESTING.md")).toBe("docs/TESTING.md");

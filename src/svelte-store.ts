@@ -14,7 +14,13 @@ import type { ReduxStoreContext } from './internal-types';
 import { getStoreContext } from './utils/runtime-svelte/utils';
 import { createSelector as createSvelteSelector } from './utils/svelte-selectors/create-selector';
 
-export type { SelectorTraceSummary, StoreOptions } from './types';
+export type {
+  ReduxActionTraceEvent,
+  SelectorTraceSummary,
+  StoreLoggerFactory,
+  StoreOptions,
+  StoreTraceStreams,
+} from './types';
 export { getDispatch } from './utils/runtime-svelte/utils';
 
 /**

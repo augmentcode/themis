@@ -27,7 +27,7 @@
 import { take, cancel, fork, getContext as getSagaContext } from "typed-redux-saga";
 import { eventChannel, type EventChannel, type Task } from "redux-saga";
 import type { ReduxStore } from "../../internal-types";
-import type { StoreState } from "../../types";
+import type { StoreRuntimeErrorReporter, StoreState } from "../../types";
 import { shallowEqual } from "fast-equals";
 import { createCachedSelector } from "../selector-core/create-cached-selector";
 import { INTERNAL_STORE_UTILITY_DOMAIN } from "../store/store-runtime-constants";
@@ -69,6 +69,9 @@ export function* createChannelFromSelector<R, ARGS extends any[]>(
   ...args: ARGS
 ): Generator<any, EventChannel<SelectorChannelPayload<R>>, any> {
   const reduxStore = (yield* getSagaContext("reduxStore")) as ReduxStore | undefined;
+  const reportRuntimeError = (yield* getSagaContext("reportRuntimeError")) as
+    | StoreRuntimeErrorReporter
+    | undefined;
   if (!reduxStore) {
     throw new Error("No Redux Store available in saga");
   }
@@ -89,7 +92,11 @@ export function* createChannelFromSelector<R, ARGS extends any[]>(
         emitter({ payload, prevPayload: prevValue });
         prevValue = payload;
       } catch (e) {
-        console.error("Selector channel error", e);
+        reportRuntimeError?.({
+          error: e,
+          source: "selector-channel",
+          message: "Selector channel error",
+        });
       }
     };
     const unsubscribe = reduxStore.subscribe(emitCurrentValue);

@@ -34,16 +34,21 @@ describe("global devtools registration", () => {
   });
 
   it("ignores duplicate registration and reports multiple stores", () => {
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const reportRuntimeError = vi.fn();
     const firstStore = new Store();
     const secondStore = new Store();
 
     registerGlobalDevTools(firstStore);
     registerGlobalDevTools(firstStore);
-    registerGlobalDevTools(secondStore);
+    registerGlobalDevTools(secondStore, reportRuntimeError);
 
     expect(getSvelteRedux().reduxContext).toEqual([firstStore, secondStore]);
-    expect(consoleError).toHaveBeenCalledWith("Multiple Redux stores initialized:", [firstStore, secondStore]);
+    expect(reportRuntimeError).toHaveBeenCalledWith({
+      error: expect.any(Error),
+      source: "global-dev-tools",
+      message: "Multiple Redux stores initialized:",
+      payload: [firstStore, secondStore],
+    });
   });
 
   it("cleans up the matching global Store registration", () => {

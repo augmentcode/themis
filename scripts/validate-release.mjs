@@ -498,7 +498,7 @@ export const packageImportChecks = [
 export const packageTypeExportChecks = [
   {
     declarationFile: "dist/svelte-store.d.ts",
-    required: ["Store", "getDispatch"],
+    required: ["Store", "getDispatch", "ReduxActionTraceEvent", "StoreTraceStreams", "StoreLoggerFactory"],
     blocked: [
       "SvelteStore",
       "StreamingStore",
@@ -532,12 +532,12 @@ export const packageTypeExportChecks = [
   },
   {
     declarationFile: "dist/streaming-store.d.ts",
-    required: ["StreamingStore"],
+    required: ["StreamingStore", "ReduxActionTraceEvent", "StoreTraceStreams", "StoreLoggerFactory"],
     blocked: ["Store", "SvelteStore", "StoreReducer", "CreateSelector", "StoreSelector"],
   },
   {
     declarationFile: "dist/react-store.d.ts",
-    required: ["ReactStore"],
+    required: ["ReactStore", "ReduxActionTraceEvent", "StoreTraceStreams", "StoreLoggerFactory"],
     blocked: ["Store", "SvelteStore", "StreamingStore", "StoreReducer", "CreateSelector", "StoreSelector"],
   },
   {
@@ -577,6 +577,9 @@ export const packageTypeExportChecks = [
       "StoreSelectorEffect",
       "StoreSelectorReadable",
       "StoreSelectorSelect",
+      "StoreLoggerFactory",
+      "StoreTraceStreams",
+      "ReduxActionTraceEvent",
     ],
     blocked: [
       "ReduxStoreContext",

@@ -51,6 +51,8 @@ export const createSelectorCadenceSource = (
   const frequency = validateThrottledSelectorFrequency(throttledSelectorFrequency);
   const frameIntervalMs = 1000 / frequency;
   const traceSelectors = options.traceSelectors === true;
+  const onTick = options.onTick;
+  const onSubscribe = options.onSubscribe;
   const listeners = new Set<SelectorCadenceTickListener>();
   let frameId: number | null = null;
   let timerId: ReturnType<typeof setTimeout> | null = null;
@@ -163,12 +165,10 @@ export const createSelectorCadenceSource = (
     const listenersToNotify = Array.from(listeners);
     latestTimestamp = Math.max(Date.now(), timestamp);
     lastTickWallTimeAt = Date.now();
-    if (traceSelectors) {
-      console.info('SELECTOR CADENCE TICK', latestTimestamp, listenersToNotify.length);
-    }
+    onTick?.(latestTimestamp, listenersToNotify.length);
     for (const listener of listenersToNotify) {
       if (listeners.has(listener)) {
-        listener(timestamp);
+        listener(timestamp, listenersToNotify.length);
       }
     }
   };
@@ -194,9 +194,7 @@ export const createSelectorCadenceSource = (
         return () => undefined;
       }
       listeners.add(listener);
-      if (traceSelectors) {
-        console.info('SUBSCRIBE SELECTOR CADENCE', listeners.size);
-      }
+      onSubscribe?.(listeners.size);
       return () => unsubscribe(listener);
     },
     dispose() {

@@ -1,5 +1,6 @@
 import type { Middleware, Store as ReduxStoreBase, UnknownAction } from 'redux';
 import type { SagaGenerator } from 'typed-redux-saga';
+import type { Observable } from 'kefir';
 import type { StoreRuntime } from './store-runtime';
 
 // ============================================================================
@@ -167,6 +168,56 @@ export type SelectorTraceAggregate = Readonly<{
   selectors: ReadonlyArray<SelectorTracePeriodSummary>;
 }>;
 
+export type SelectorDetailTraceEvent = Readonly<{
+  kind: 'selector' | 'cache';
+  selectorSource: string;
+  [field: string]: unknown;
+}>;
+
+export type SelectorCadenceTraceEvent = Readonly<{
+  type: 'tick' | 'subscribe';
+  timestamp?: number;
+  listenerCount: number;
+}>;
+
+export type SagaMonitorTraceEvent = Readonly<
+  | { type: 'effectTriggered'; event: unknown }
+  | { type: 'effectResolved'; effectId: number; result: unknown }
+  | { type: 'effectRejected'; effectId: number; error: unknown }
+  | { type: 'effectCancelled'; effectId: number }
+  | { type: 'actionDispatched'; action: unknown }
+>;
+
+export type RuntimeErrorTraceEvent = Readonly<{
+  error: unknown;
+  source?: string;
+  message?: string;
+  payload?: unknown;
+}>;
+
+export type ReduxActionTraceEvent = Readonly<{
+  /** The dispatched action payload. Redact sensitive values before sharing. */
+  action: unknown;
+  /** State reference before the reducer chain ran. */
+  prevState: unknown;
+  /** State reference returned by the reducer chain. */
+  nextState: unknown;
+  /** Whether the reducer chain returned a different state reference. */
+  stateChanged: boolean;
+}>;
+
+export type StoreRuntimeErrorReporter = (event: RuntimeErrorTraceEvent) => void;
+
+export type StoreTraceStreams = Readonly<{
+  selectorDetail: Observable<SelectorDetailTraceEvent, never>;
+  selectorSummary: Observable<SelectorTraceSummary, never>;
+  selectorCadence: Observable<SelectorCadenceTraceEvent, never>;
+  sagaMonitor: Observable<SagaMonitorTraceEvent, never>;
+  runtimeError: Observable<RuntimeErrorTraceEvent, never>;
+  reduxAction: Observable<ReduxActionTraceEvent, never>;
+}>;
+
+export type StoreLoggerFactory = (streams: StoreTraceStreams) => void | (() => void);
 export type StoreOptions = {
   /**
    * Reactive selector emission frequency in frames per second.
@@ -187,12 +238,18 @@ export type StoreOptions = {
    * Defaults to false, leaving selector tracing silent.
    */
   traceSelectors?: boolean | SelectorTracingOptions;
+  /**
+   * Creates a Store-owned logger subscription for this instance's trace streams.
+   * The returned disposer is called when the Store is disposed.
+   */
+  loggerFactory?: StoreLoggerFactory;
 };
 export type NormalizedStoreOptions = {
   throttledSelectorFrequency: number;
   sagaMonitor: boolean;
   logReduxActions: boolean;
   traceSelectors: NormalizedSelectorTracingOptions;
+  loggerFactory?: StoreLoggerFactory;
 };
 export type StoreReducerState<Reducer> = Reducer extends StoreReducerFunction<infer State> ? State : never;
 export type StoreStateFromStateMap<TStateMap extends StoreStateMap> = {

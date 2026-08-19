@@ -22,6 +22,14 @@ import {
   type StoreStateFromStateMap,
   type StoreStateMap,
   type SelectorTraceSummary,
+  type SelectorCadenceTraceEvent,
+  type SelectorDetailTraceEvent,
+  type SagaMonitorTraceEvent,
+  type RuntimeErrorTraceEvent,
+  type ReduxActionTraceEvent,
+  type StoreTraceStreams,
+  type SelectorTraceAggregate,
+  type SelectorTracePeriodSummary,
 } from './types';
 import { createLoggerMiddleware } from './redux-logger';
 import type { ReduxStoreContext } from './internal-types';
@@ -42,13 +50,13 @@ import { registerGlobalDevTools } from './global-dev-tools';
 import { deriveSagaName } from './utils/sagas/derive-saga-name';
 import { normalizeSelectorTracingOptions, normalizeStoreOptions } from './store-options';
 import { createSelectorCadenceSource } from './utils/selector-core/throttled-selector-options';
+import { renderAccessedPaths } from './utils/selector-core/create-cached-selector';
 import { evictSelectorOutputsForStateSource } from './utils/selector-core/selector-output-cache';
 import { registerSelectorTracingBridge } from './utils/selector-core/selector-tracing-bridge';
 import {
   getEmptySelectorTraceSummary,
   SelectorTraceSummaryCollector,
 } from './selector-trace-summary';
-import type { SelectorTraceAggregate, SelectorTracePeriodSummary } from './types';
 import type {
   CachedSelector,
   SelectorCadenceSource,
@@ -59,6 +67,104 @@ import type {
 
 const MAX_SELECTOR_SOURCE_SNIPPET_LINES = 5;
 const MAX_SELECTOR_SOURCE_SNIPPET_LENGTH = 500;
+
+type StateDiff = Record<string, { prev: unknown; next: unknown }>;
+
+class ChangesPayload {
+  readonly #prevState: unknown;
+  readonly #nextState: unknown;
+
+  constructor(prevState: unknown, nextState: unknown) {
+    this.#prevState = prevState;
+    this.#nextState = nextState;
+  }
+
+  get changes(): StateDiff {
+    return createStateDiff(this.#prevState, this.#nextState);
+  }
+}
+
+const isPrimitive = (
+  value: unknown
+): value is string | number | bigint | boolean | symbol | null | undefined => {
+  return value === null || (typeof value !== 'object' && typeof value !== 'function');
+};
+
+const getReduxActionTitle = (action: unknown): string => {
+  const actionType =
+    typeof action === 'object' && action !== null && 'type' in action
+      ? (action as { type: unknown }).type
+      : action;
+  const hasPayload = typeof action === 'object' && action !== null && 'payload' in action;
+  if (!hasPayload) return String(actionType);
+  const payload = (action as { payload: unknown }).payload;
+  if (Array.isArray(payload) && payload.length === 1 && isPrimitive(payload[0])) {
+    return `${String(actionType)} ${String(payload[0])}`;
+  }
+  return isPrimitive(payload) ? `${String(actionType)} ${String(payload)}` : String(actionType);
+};
+
+const isPlainRecord = (value: unknown): value is Record<string, unknown> => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+};
+
+const addStateDiff = (
+  changes: StateDiff,
+  prevValue: unknown,
+  nextValue: unknown,
+  path: string
+): void => {
+  if (Object.is(prevValue, nextValue)) return;
+  if (prevValue === undefined) {
+    changes[path || '<root>'] = { prev: undefined, next: nextValue };
+    return;
+  }
+  if ((Array.isArray(prevValue) || prevValue === undefined) &&
+      (Array.isArray(nextValue) || nextValue === undefined)) {
+    const prevArray = Array.isArray(prevValue) ? prevValue : [];
+    const nextArray = Array.isArray(nextValue) ? nextValue : [];
+    const length = Math.max(prevArray.length, nextArray.length);
+    if (length > 0) {
+      for (let index = 0; index < length; index += 1) {
+        addStateDiff(
+          changes,
+          prevArray[index],
+          nextArray[index],
+          path ? `${path}[${index}]` : `[${index}]`
+        );
+      }
+      return;
+    }
+  }
+  if ((isPlainRecord(prevValue) || prevValue === undefined) &&
+      (isPlainRecord(nextValue) || nextValue === undefined)) {
+    const prevRecord = isPlainRecord(prevValue) ? prevValue : {};
+    const nextRecord = isPlainRecord(nextValue) ? nextValue : {};
+    const keys = new Set([...Object.keys(prevRecord), ...Object.keys(nextRecord)]);
+    if (keys.size > 0) {
+      for (const key of keys) {
+        addStateDiff(
+          changes,
+          prevRecord[key],
+          nextRecord[key],
+          path ? `${path}.${key}` : key
+        );
+      }
+      return;
+    }
+  }
+  changes[path || '<root>'] = { prev: prevValue, next: nextValue };
+};
+
+const createStateDiff = (prevState: unknown, nextState: unknown): StateDiff => {
+  const changes: StateDiff = {};
+  addStateDiff(changes, prevState, nextState, '');
+  return changes;
+};
+
+let hasLoggedReduxWelcomeMessage = false;
 
 const getSelectorSourceSnippet = (selectorFunc: CachedSelector<any, any, any[]>): string => {
   return selectorFunc
@@ -167,21 +273,23 @@ export type StoreBoundState<TStateMap extends StoreStateMap> = StoreStateFromSta
 >;
 export type StoreMiddlewareInput = StoreMiddleware | StoreMiddleware[];
 
-const createStoreSagaMonitor = (): SagaMonitor => ({
+const createStoreSagaMonitor = (
+  publish: (event: SagaMonitorTraceEvent) => void
+): SagaMonitor => ({
   effectTriggered(event) {
-    console.info('[themis:saga] effectTriggered', event);
+    publish({ type: 'effectTriggered', event });
   },
   effectResolved(effectId, result) {
-    console.info('[themis:saga] effectResolved', effectId, result);
+    publish({ type: 'effectResolved', effectId, result });
   },
   effectRejected(effectId, error) {
-    console.info('[themis:saga] effectRejected', effectId, error);
+    publish({ type: 'effectRejected', effectId, error });
   },
   effectCancelled(effectId) {
-    console.info('[themis:saga] effectCancelled', effectId);
+    publish({ type: 'effectCancelled', effectId });
   },
   actionDispatched(action) {
-    console.info('[themis:saga] actionDispatched', action);
+    publish({ type: 'actionDispatched', action });
   },
 });
 
@@ -210,6 +318,24 @@ export abstract class StoreRuntime<
   private selectorTracingOptions: NormalizedSelectorTracingOptions;
   private readonly legacySelectorTracingActivationAllowed: boolean;
   protected readonly storeOptions: NormalizedStoreOptions;
+  private readonly traceEmitters = {
+    selectorDetail: Kefir.pool<SelectorDetailTraceEvent, never>(),
+    selectorSummary: Kefir.pool<SelectorTraceSummary, never>(),
+    selectorCadence: Kefir.pool<SelectorCadenceTraceEvent, never>(),
+    sagaMonitor: Kefir.pool<SagaMonitorTraceEvent, never>(),
+    runtimeError: Kefir.pool<RuntimeErrorTraceEvent, never>(),
+    reduxAction: Kefir.pool<ReduxActionTraceEvent, never>(),
+  };
+  readonly traceStreams: StoreTraceStreams = Object.freeze({
+    selectorDetail: this.traceEmitters.selectorDetail.map((event) => event),
+    selectorSummary: this.traceEmitters.selectorSummary.map((event) => event),
+    selectorCadence: this.traceEmitters.selectorCadence.map((event) => event),
+    sagaMonitor: this.traceEmitters.sagaMonitor.map((event) => event),
+    runtimeError: this.traceEmitters.runtimeError.map((event) => event),
+    reduxAction: this.traceEmitters.reduxAction.map((event) => event),
+  });
+  private loggerDisposer: (() => void) | undefined;
+  private loggerSubscriptions: Array<{ unsubscribe(): void }> = [];
 
   constructor(
     reducersMap?: TReducers & StoreReducersInput<TStateMap>,
@@ -220,18 +346,9 @@ export abstract class StoreRuntime<
     this.selectorTracingOptions = this.storeOptions.traceSelectors;
     this.legacySelectorTracingActivationAllowed =
       options?.traceSelectors === undefined || options.traceSelectors === false;
-    this.selectorTraceSummaryCollector =
-      this.selectorTracingOptions.summaryEnabled ||
-      this.selectorTracingOptions.traceExecution ||
-      this.selectorTracingOptions.traceCache ||
-      this.selectorTracingOptions.traceInvalidation ||
-      this.selectorTracingOptions.traceArguments ||
-      this.selectorTracingOptions.traceResults
-        ? new SelectorTraceSummaryCollector(
-            getSelectorSourceSnippet,
-            this.selectorTracingOptions.summaryEnabled
-          )
-        : undefined;
+    this.selectorTraceSummaryCollector = this.selectorTracingOptions.summaryEnabled
+      ? new SelectorTraceSummaryCollector(getSelectorSourceSnippet)
+      : undefined;
     this.selectorTracingEnabled =
       (
         this.selectorTracingOptions.traceExecution ||
@@ -246,10 +363,10 @@ export abstract class StoreRuntime<
       this.registerSelectorTracingBridge();
     }
     this.sagaMiddleware = this.storeOptions.sagaMonitor
-      ? createSagaMiddleware({ sagaMonitor: createStoreSagaMonitor() })
+      ? createSagaMiddleware({ sagaMonitor: createStoreSagaMonitor((event) => this.publishTrace('sagaMonitor', event)) })
       : createSagaMiddleware();
     this.reduxLoggerMiddleware = this.storeOptions.logReduxActions
-      ? createLoggerMiddleware()
+      ? createLoggerMiddleware((event) => this.publishTrace('reduxAction', event))
       : undefined;
     for (const [name, reducer] of Object.entries(reducersMap ?? {})) {
       this.registerReducer(name, reducer);
@@ -314,12 +431,23 @@ export abstract class StoreRuntime<
 
   private getOrCreateSelectorCadenceSource(): SelectorCadenceSource {
     if (!this.selectorCadenceSource) {
-      this.selectorCadenceSource = createSelectorCadenceSource(
+      const cadenceSource = createSelectorCadenceSource(
         this.storeOptions.throttledSelectorFrequency,
         {
           traceSelectors: this.selectorTracingOptions.traceCadence,
+          onTick: this.selectorTracingOptions.traceCadence
+            ? (timestamp, listenerCount) => {
+                this.publishTrace('selectorCadence', { type: 'tick', timestamp, listenerCount });
+              }
+            : undefined,
+          onSubscribe: this.selectorTracingOptions.traceCadence
+            ? (listenerCount) => {
+                this.publishTrace('selectorCadence', { type: 'subscribe', listenerCount });
+              }
+            : undefined,
         }
       );
+      this.selectorCadenceSource = cadenceSource;
     }
 
     return this.selectorCadenceSource;
@@ -333,6 +461,116 @@ export abstract class StoreRuntime<
   private disposeCadencedStoreStateStream(): void {
     this.cadencedStoreStateStream?.dispose();
     this.cadencedStoreStateStream = undefined;
+  }
+
+  private publishTrace(stream: keyof StoreTraceStreams, event: unknown): void {
+    const immutableEvent =
+      event !== null && typeof event === 'object' ? Object.freeze(event) : event;
+    (this.traceEmitters[stream] as any).plug(Kefir.constant(immutableEvent));
+  }
+
+  reportRuntimeError(
+    error: unknown,
+    source?: string,
+    message?: string,
+    payload?: unknown
+  ): void {
+    this.publishTrace('runtimeError', {
+      error,
+      source,
+      message,
+      ...(payload === undefined ? {} : { payload }),
+    });
+  }
+
+  private attachLogger(): void {
+    this.disposeLogger();
+    const loggerFactory = this.storeOptions.loggerFactory;
+    if (loggerFactory) {
+      this.loggerDisposer = loggerFactory(this.traceStreams) || undefined;
+      return;
+    }
+
+    if (this.storeOptions.logReduxActions && !hasLoggedReduxWelcomeMessage) {
+      hasLoggedReduxWelcomeMessage = true;
+      console.log(
+        `%c🔧 Redux Logger Active%c\n\n%cLegend:%c\n  %c■%c State changed (bold title)\n  %c■%c No state change (gray title)\n\n%cLog labels:%c\n  %cprev state%c  — state before action\n  %caction%c      — dispatched action\n  %cnext state%c  — state after action\n  %cstate%c       — lazy state/diff payload (expanded by default)\n  %cstate (no changes)%c — state unchanged`,
+        'color: #03A9F4; font-weight: bold; font-size: 14px', '',
+        'color: #888; font-weight: bold', '', 'color: inherit; font-weight: 600', '',
+        'color: #9E9E9E; font-weight: 300', '', 'color: #888; font-weight: bold', '',
+        'color: #9E9E9E; font-weight: bold', '', 'color: #03A9F4; font-weight: bold', '',
+        'color: #4CAF50; font-weight: bold', '', 'color: #4CAF50; font-weight: bold', '',
+        'color: #9E9E9E; font-weight: lighter', ''
+      );
+    }
+
+    this.loggerSubscriptions = [
+      this.traceStreams.selectorDetail.observe((event) => {
+        const { kind: _kind, ...payload } = event;
+        console.info('[themis] selector trace', payload);
+      }),
+      this.traceStreams.selectorCadence.observe((event) => {
+        if (event.type === 'subscribe') {
+          console.info('SUBSCRIBE SELECTOR CADENCE', event.listenerCount);
+        } else {
+          console.info('SELECTOR CADENCE TICK', event.timestamp, event.listenerCount);
+        }
+      }),
+      this.traceStreams.sagaMonitor.observe((event) => {
+        switch (event.type) {
+          case 'effectTriggered':
+            console.info('[themis:saga] effectTriggered', event.event);
+            break;
+          case 'effectResolved':
+            console.info('[themis:saga] effectResolved', event.effectId, event.result);
+            break;
+          case 'effectRejected':
+            console.info('[themis:saga] effectRejected', event.effectId, event.error);
+            break;
+          case 'effectCancelled':
+            console.info('[themis:saga] effectCancelled', event.effectId);
+            break;
+          case 'actionDispatched':
+            console.info('[themis:saga] actionDispatched', event.action);
+            break;
+        }
+      }),
+      this.traceStreams.runtimeError.observe((event) => {
+        console.error('[themis] runtime error', event.error, event);
+      }),
+      this.traceStreams.reduxAction.observe((event) => {
+        console.groupCollapsed(
+          `%c${getReduxActionTitle(event.action)}`,
+          event.stateChanged
+            ? 'color: inherit; font-weight: 600'
+            : 'color: #9E9E9E; font-weight: 300'
+        );
+        console.log('%c action    ', 'color: #03A9F4; font-weight: bold', event.action);
+        if (event.stateChanged) {
+          console.log(
+            '%c state    ',
+            'color: #4CAF50; font-weight: bold',
+            new ChangesPayload(event.prevState, event.nextState)
+          );
+        } else {
+          console.log(
+            '%c state (no changes)',
+            'color: #9E9E9E; font-weight: lighter',
+            { state: event.nextState }
+          );
+        }
+        console.groupEnd();
+      }),
+    ];
+  }
+
+  private disposeLogger(): void {
+    for (const subscription of this.loggerSubscriptions) {
+      subscription.unsubscribe();
+    }
+    this.loggerSubscriptions = [];
+    this.loggerDisposer?.();
+    this.loggerDisposer = undefined;
   }
 
   getStoreStateStream(): Observable<StoreBoundState<TStateMap>, any> {
@@ -418,6 +656,7 @@ export abstract class StoreRuntime<
       return () => {};
     }
 
+    this.attachLogger();
     this.startSagaManager(storeContext);
     this.startSelectorTraceSummaryInterval();
 
@@ -497,6 +736,68 @@ export abstract class StoreRuntime<
 
     this.selectorTraceSummaryCollector?.record(trace);
 
+    if ('observableCacheRequestCount' in trace) {
+      if (!this.selectorTracingOptions.traceCache) {
+        return;
+      }
+      this.publishTrace('selectorDetail', {
+        kind: 'cache',
+        observableCacheRequestCount: trace.observableCacheRequestCount,
+        observableCacheCachedCount: trace.observableCacheCachedCount,
+        outputCacheStatus: trace.outputCacheStatus,
+        outputCacheRequestCount: trace.outputCacheRequestCount,
+        outputCacheHitCount: trace.outputCacheHitCount,
+        outputCacheMissCount: trace.outputCacheMissCount,
+        selectorSource: getSelectorSourceSnippet(trace.selectorFunc),
+      });
+      return;
+    }
+
+    const reportExecution =
+      this.selectorTracingOptions.traceExecution &&
+      trace.executionDurationMs !== undefined &&
+      trace.executionDurationMs >= this.selectorTracingOptions.minDurationMs &&
+      trace.accessedPaths !== undefined &&
+      trace.parsedPaths !== undefined;
+    const reportInvalidation =
+      this.selectorTracingOptions.traceInvalidation && trace.invalidationReason !== undefined;
+    const reportArguments =
+      this.selectorTracingOptions.traceArguments && trace.argumentsChanged !== undefined;
+    const reportResults =
+      this.selectorTracingOptions.traceResults && trace.resultOutcome !== undefined;
+
+    if (!reportExecution && !reportInvalidation && !reportArguments && !reportResults) {
+      return;
+    }
+
+    const payload: Record<string, unknown> = {
+      recomputationCount: trace.recomputationCount,
+      selectorSource: getSelectorSourceSnippet(trace.selectorFunc),
+    };
+    if (reportExecution && trace.accessedPaths && trace.parsedPaths) {
+      payload.accessedPathCount = trace.accessedPathCount;
+      payload.accessedPaths = renderAccessedPaths(trace.accessedPaths, trace.parsedPaths);
+      payload.executionDurationMs = trace.executionDurationMs;
+    }
+    if (reportInvalidation) {
+      payload.invalidationReason = trace.invalidationReason;
+      payload.changedAccessedPaths =
+        trace.changedAccessedPaths && trace.parsedPaths
+          ? renderAccessedPaths(trace.changedAccessedPaths, trace.parsedPaths)
+          : [];
+    }
+    if (reportArguments) {
+      payload.argumentsChanged = trace.argumentsChanged;
+      payload.changedArguments = trace.changedArguments ?? [];
+    }
+    if (reportResults) {
+      payload.resultOutcome = trace.resultOutcome;
+    }
+    this.publishTrace('selectorDetail', {
+      kind: 'selector',
+      selectorSource: payload.selectorSource as string,
+      ...payload,
+    });
   }
 
   traceSelectors(): void {
@@ -507,34 +808,40 @@ export abstract class StoreRuntime<
       return;
     }
     this.selectorTracingOptions = normalizeSelectorTracingOptions(true);
-    this.selectorTraceSummaryCollector ??= new SelectorTraceSummaryCollector(
-      getSelectorSourceSnippet,
-      false
-    );
     this.selectorTracingEnabled = true;
     this.registerSelectorTracingBridge();
-    if (this.storeContext) this.startSelectorTraceSummaryInterval();
   }
 
   private startSelectorTraceSummaryInterval(): void {
-    if (!this.selectorTracingEnabled || this.selectorTraceSummaryInterval !== undefined) {
+    if (
+      !this.selectorTracingOptions.summaryEnabled ||
+      !this.selectorTraceSummaryCollector ||
+      this.selectorTraceSummaryInterval !== undefined
+    ) {
       return;
     }
+    const collector = this.selectorTraceSummaryCollector;
     this.selectorTraceSummaryInterval = setInterval(() => {
-      const period = this.selectorTraceSummaryCollector?.consumePeriod() ?? [];
+      this.publishTrace('selectorSummary', this.getSelectorTraceSummary());
+      const period = collector.consumePeriod();
       const selectors = period.filter((summary) => this.isPeriodSummaryEligible(summary));
       if (selectors.length === 0) return;
+      const totalExecutionCount = selectors.reduce(
+        (total, summary) => total + summary.executionCount,
+        0
+      );
+      const totalRecomputationCount = selectors.reduce(
+        (total, summary) => total + summary.recomputationCount,
+        0
+      );
       const aggregate: SelectorTraceAggregate = Object.freeze({
         intervalMs: this.selectorTracingOptions.summaryIntervalMs,
         selectors: Object.freeze(selectors),
       });
-      const formatParts = ['[themis] selector trace summary'];
-      const styles: string[] = [];
-      for (const selector of selectors) {
-        formatParts.push(`\n%c${selector.selectorSource.replaceAll('%', '%%')}%c`);
-        styles.push(selector.cache.missCount > 0 ? 'font-weight: bold' : '', '');
-      }
-      console.info(formatParts.join(''), ...styles, aggregate);
+      console.info(
+        `[themis] selectors fired: ${totalExecutionCount}, recalculated: ${totalRecomputationCount}`,
+        aggregate
+      );
     }, this.selectorTracingOptions.summaryIntervalMs);
   }
 
@@ -578,6 +885,9 @@ export abstract class StoreRuntime<
       storeContext.store,
       (runningTasksContext: ReduxStoreContext['tasks']) => {
         storeContext.tasks = runningTasksContext;
+      },
+      (event) => {
+        this.reportRuntimeError(event.error, event.source, event.message, event.payload);
       }
     );
   }
@@ -589,11 +899,14 @@ export abstract class StoreRuntime<
       );
     }
 
-    this.disposeDevTools = registerGlobalDevTools(this);
+    this.disposeDevTools = registerGlobalDevTools(this, (event) => {
+      this.reportRuntimeError(event.error, event.source, event.message, event.payload);
+    });
     return this.disposeDevTools;
   }
 
   dispose(): void {
+    this.disposeLogger();
     evictSelectorOutputsForStateSource(this);
     this.disposeSelectorTraceSummaryInterval();
 

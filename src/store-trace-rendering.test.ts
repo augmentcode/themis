@@ -59,7 +59,7 @@ describe('Store selector trace rendering', () => {
     expect(Array.from(trace.accessedPaths)).toEqual(['["trace"]', '["trace","count"]']);
   });
 
-  it('activates legacy tracing and emits one aggregate after the interval', () => {
+  it('keeps legacy tracing detail output separate from summary aggregation', () => {
     vi.useFakeTimers();
     const store = new Store({ trace: reducer });
     const explicitlyDisabledStore = new Store(
@@ -79,18 +79,13 @@ describe('Store selector trace rendering', () => {
 
     expect(store.getSelectorTraceReporter()).toEqual(expect.any(Function));
     expect(explicitlyDisabledStore.getSelectorTraceReporter()).toEqual(expect.any(Function));
-    expect(renderAccessedPathsSpy).not.toHaveBeenCalled();
+    expect(renderAccessedPathsSpy).toHaveBeenCalled();
     const aggregateCalls = () => vi.mocked(console.info).mock.calls.filter(([prefix]) =>
-      typeof prefix === 'string' && prefix.includes('[themis] selector trace summary')
+      typeof prefix === 'string' && prefix.includes('[themis] selectors fired:')
     );
     expect(aggregateCalls()).toHaveLength(0);
     vi.advanceTimersByTime(1000);
-    expect(aggregateCalls()).toHaveLength(2);
-    expect(aggregateCalls()[0].at(-1)).toEqual(expect.objectContaining({
-      selectors: [expect.objectContaining({
-        selectorSource: expect.stringContaining('state.trace.count'),
-      })],
-    }));
+    expect(aggregateCalls()).toHaveLength(0);
   });
 
   it('aggregates every enabled selector execution without rendering paths or values', () => {
@@ -98,7 +93,7 @@ describe('Store selector trace rendering', () => {
     const store = new Store(
       { trace: reducer },
       undefined,
-      { traceSelectors: true }
+      { traceSelectors: { summaryEnabled: true } }
     );
     const selectCount = store.createSelector((state) => state.trace.count);
     const selectLabel = store.createSelector((state) => state.trace.label);
@@ -126,15 +121,21 @@ describe('Store selector trace rendering', () => {
     expect(accessedPathTraces()).toHaveLength(0);
     vi.advanceTimersByTime(1000);
     const aggregateCalls = () => vi.mocked(console.info).mock.calls.filter(([prefix]) =>
-      typeof prefix === 'string' && prefix.includes('[themis] selector trace summary')
+      typeof prefix === 'string' && prefix.includes('[themis] selectors fired:')
     );
     expect(aggregateCalls()).toHaveLength(1);
-    expect(aggregateCalls()[0].at(-1)).toEqual(expect.objectContaining({
+    const [title, aggregate] = aggregateCalls()[0];
+    expect(title).toBe('[themis] selectors fired: 4, recalculated: 4');
+    expect(aggregate).toEqual(expect.objectContaining({
+      intervalMs: 1000,
       selectors: expect.arrayContaining([
         expect.objectContaining({ selectorSource: expect.stringContaining('state.trace.count') }),
         expect.objectContaining({ selectorSource: expect.stringContaining('state.trace.label') }),
       ]),
     }));
+    expect(aggregate.selectors).toHaveLength(4);
+    expect(aggregate.selectors.reduce((total, selector) => total + selector.executionCount, 0)).toBe(4);
+    expect(aggregate.selectors.reduce((total, selector) => total + selector.recomputationCount, 0)).toBe(4);
   });
 
   it('filters aggregate execution rows by inclusive period duration and recomputation thresholds', () => {
@@ -144,7 +145,9 @@ describe('Store selector trace rendering', () => {
         traceExecution: true,
         minDurationMs: 2,
         minRecomputationCount: 2,
+        summaryEnabled: true,
       },
+      loggerFactory: () => undefined,
     });
     const reporter = store.getSelectorTraceReporter()!;
     const selectorFunc = (state: { count: number }) => state.count;
@@ -164,8 +167,11 @@ describe('Store selector trace rendering', () => {
     reporter({ ...traceMetadata, executionDurationMs: 2, recomputationCount: 2 });
     vi.advanceTimersByTime(1000);
     expect(console.info).toHaveBeenCalledTimes(1);
+    expect(console.info.mock.calls[0][0]).toBe('[themis] selectors fired: 2, recalculated: 2');
     expect(console.info.mock.calls[0].at(-1)).toEqual(expect.objectContaining({
+      intervalMs: 1000,
       selectors: [expect.objectContaining({
+        executionCount: 2,
         recomputationCount: 2,
         duration: expect.objectContaining({ maximumMs: 2 }),
       })],
@@ -175,7 +181,12 @@ describe('Store selector trace rendering', () => {
   it('filters aggregate cache rows by inclusive miss threshold and bolds only miss labels', () => {
     vi.useFakeTimers();
     const store = new Store(undefined, undefined, {
-      traceSelectors: { traceCache: true, minCacheMissCount: 2 },
+      traceSelectors: {
+        traceCache: true,
+        minCacheMissCount: 2,
+        summaryEnabled: true,
+      },
+      loggerFactory: () => undefined,
     });
     const reporter = store.getSelectorTraceReporter()!;
     const selectorFunc = (state: { count: number }) => state.count;
@@ -193,7 +204,7 @@ describe('Store selector trace rendering', () => {
     store.init();
     vi.advanceTimersByTime(1000);
     const aggregateCalls = () => vi.mocked(console.info).mock.calls.filter(([prefix]) =>
-      typeof prefix === 'string' && prefix.includes('[themis] selector trace summary')
+      typeof prefix === 'string' && prefix.includes('[themis] selectors fired:')
     );
     expect(aggregateCalls()).toHaveLength(0);
 
@@ -201,18 +212,27 @@ describe('Store selector trace rendering', () => {
     reporter(cacheTrace('miss', 2));
     vi.advanceTimersByTime(1000);
     expect(aggregateCalls()).toHaveLength(1);
-    expect(aggregateCalls()[0][0]).toContain('%c');
-    expect(aggregateCalls()[0][1]).toBe('font-weight: bold');
+    expect(aggregateCalls()[0]).toHaveLength(2);
+    expect(aggregateCalls()[0][0]).toBe('[themis] selectors fired: 0, recalculated: 0');
+    expect(aggregateCalls()[0].at(-1)).toEqual(expect.objectContaining({
+      intervalMs: 1000,
+      selectors: [expect.objectContaining({
+        executionCount: 0,
+        recomputationCount: 0,
+        cache: expect.objectContaining({ requestCount: 2, missCount: 2 }),
+      })],
+    }));
 
     reporter(cacheTrace('hit', 2));
     vi.advanceTimersByTime(1000);
     expect(aggregateCalls()).toHaveLength(1);
   });
 
-  it('bolds only selector labels with period cache misses', () => {
+  it('renders cache summaries without selector labels or styles', () => {
     vi.useFakeTimers();
     const store = new Store(undefined, undefined, {
-      traceSelectors: { traceCache: true },
+      traceSelectors: { traceCache: true, summaryEnabled: true },
+      loggerFactory: () => undefined,
     });
     const reporter = store.getSelectorTraceReporter()!;
     const missSelector = (state: { count: number }) => state.count;
@@ -236,16 +256,14 @@ describe('Store selector trace rendering', () => {
     vi.advanceTimersByTime(1000);
 
     const call = vi.mocked(console.info).mock.calls[0];
-    expect(call[0]).toContain('%c');
-    expect(call[1]).toBe('font-weight: bold');
-    expect(call[2]).toBe('');
-    expect(call[3]).toBe('');
-    expect(call[4]).toBe('');
-    expect(call.at(-1)).toEqual(expect.objectContaining({
-      selectors: [
+    expect(call).toHaveLength(2);
+    expect(call[0]).toBe('[themis] selectors fired: 0, recalculated: 0');
+    expect(call[1]).toEqual(expect.objectContaining({
+      intervalMs: 1000,
+      selectors: expect.arrayContaining([
         expect.objectContaining({ selectorSource: expect.stringContaining('state.count') }),
         expect.objectContaining({ selectorSource: expect.stringContaining('state.count + 1') }),
-      ],
+      ]),
     }));
   });
 
@@ -266,9 +284,8 @@ describe('Store selector trace rendering', () => {
     const payloads = vi.mocked(console.info).mock.calls.map((call) => call.at(-1));
     expect(payloads).toEqual([
       expect.objectContaining({
-        selectors: [expect.objectContaining({
-          invalidationReasons: expect.objectContaining({ 'first-execution': 1 }),
-        })],
+        invalidationReason: 'first-execution',
+        recomputationCount: 1,
       }),
     ]);
     expect(renderAccessedPathsSpy).not.toHaveBeenCalled();

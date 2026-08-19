@@ -1,4 +1,5 @@
-import { call, put, type SagaGenerator } from "typed-redux-saga";
+import { call, getContext, put, type SagaGenerator } from "typed-redux-saga";
+import type { StoreRuntimeErrorReporter } from "../../../types";
 import { lockUpdates, unlockUpdates } from "../store-utility-slice";
 import { selectUpdatesLocked } from "../store-utility-selectors";
 
@@ -17,7 +18,10 @@ export function* lockReactiveSelectors(handler: () => SagaGenerator<any, any>) {
     yield* put(lockUpdates());
     yield* call(handler);
   } catch (e) {
-    console.error(e);
+    const reportRuntimeError = (yield* getContext("reportRuntimeError")) as
+      | StoreRuntimeErrorReporter
+      | undefined;
+    reportRuntimeError?.({ error: e, source: "lock-reactive-selectors" });
     throw e;
   } finally {
     yield* put(unlockUpdates());
