@@ -3,18 +3,30 @@ import { ReactStore } from '@augmentcode/themis/react-store';
 import { Store } from '@augmentcode/themis/svelte-store';
 import { StreamingStore } from '@augmentcode/themis/streaming-store';
 import type {
+  ReduxActionTraceEvent as ReactReduxActionTraceEvent,
   StoreLoggerFactory as ReactStoreLoggerFactory,
   StoreTraceStreams as ReactStoreTraceStreams,
 } from '@augmentcode/themis/react-store';
 import type {
+  ReduxActionTraceEvent as SvelteReduxActionTraceEvent,
   StoreLoggerFactory as SvelteStoreLoggerFactory,
   StoreTraceStreams as SvelteStoreTraceStreams,
 } from '@augmentcode/themis/svelte-store';
 import type {
+  ReduxActionTraceEvent as StreamingReduxActionTraceEvent,
   StoreLoggerFactory as StreamingStoreLoggerFactory,
   StoreTraceStreams as StreamingStoreTraceStreams,
 } from '@augmentcode/themis/streaming-store';
-import type { StoreLoggerFactory, StoreTraceStreams } from '@augmentcode/themis/types';
+import type {
+  ReduxActionTraceEvent,
+  StoreLoggerFactory,
+  StoreTraceStreams,
+} from '@augmentcode/themis/types';
+
+vi.mock('./utils/runtime-svelte/utils', () => ({
+  getStoreContext: vi.fn(() => undefined),
+  getDispatch: vi.fn(),
+}));
 
 const counterReducer = Object.assign(
   (state = { count: 0 }) => state,
@@ -30,6 +42,12 @@ describe('Store tracing stream contract', () => {
   it('exports logging types from every Store-family entrypoint', () => {
     const streams: StoreTraceStreams = {} as StoreTraceStreams;
     const loggerFactory: StoreLoggerFactory = () => undefined;
+    const reduxEvent: ReduxActionTraceEvent = {
+      action: { type: 'test' },
+      prevState: {},
+      nextState: {},
+      stateChanged: true,
+    };
     const familyStreams: [
       SvelteStoreTraceStreams,
       ReactStoreTraceStreams,
@@ -40,9 +58,15 @@ describe('Store tracing stream contract', () => {
       ReactStoreLoggerFactory,
       StreamingStoreLoggerFactory,
     ] = [loggerFactory, loggerFactory, loggerFactory];
+    const familyEvents: [
+      SvelteReduxActionTraceEvent,
+      ReactReduxActionTraceEvent,
+      StreamingReduxActionTraceEvent,
+    ] = [reduxEvent, reduxEvent, reduxEvent];
 
     expect(familyStreams).toHaveLength(3);
     expect(familyFactories).toHaveLength(3);
+    expect(familyEvents).toHaveLength(3);
   });
 
   it('exposes equivalent read-only streams on every Store family', () => {
@@ -58,10 +82,43 @@ describe('Store tracing stream contract', () => {
         'selectorCadence',
         'sagaMonitor',
         'runtimeError',
+        'reduxAction',
       ]);
       expect(Object.isFrozen(store.traceStreams)).toBe(true);
       expect((store.traceStreams.selectorDetail as any).plug).toBeUndefined();
+      expect((store.traceStreams.reduxAction as any).plug).toBeUndefined();
       expect(publicStreams).toBe(store.traceStreams);
+    }
+  });
+
+  it('publishes Redux action events through every Store family', () => {
+    const familyEvents: unknown[][] = [[], [], []];
+    const stores = [Store, ReactStore, StreamingStore].map((StoreFamily, index) =>
+      new StoreFamily(
+        { counter: counterReducer },
+        undefined,
+        {
+          logReduxActions: true,
+          loggerFactory: (streams) => {
+            const subscription = streams.reduxAction.observe((event) => {
+              familyEvents[index].push(event);
+            });
+            return () => subscription.unsubscribe();
+          },
+        }
+      )
+    );
+
+    for (const [index, store] of stores.entries()) {
+      store.init();
+      familyEvents[index] = [];
+      store.dispatch({ type: `family/${index}` });
+      expect(familyEvents[index]).toHaveLength(1);
+      expect(familyEvents[index][0]).toEqual(
+        expect.objectContaining({ action: { type: `family/${index}` } })
+      );
+      expect(Object.isFrozen(familyEvents[index][0])).toBe(true);
+      store.dispose();
     }
   });
 

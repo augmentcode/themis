@@ -68,7 +68,7 @@ describe('StreamingStore', () => {
       const store = new StreamingStore(
         { counter: counterReducer },
         undefined,
-        { traceSelectors: true }
+        { traceSelectors: { summaryEnabled: true } }
       );
 
       store.init();
@@ -77,13 +77,16 @@ describe('StreamingStore', () => {
       subscription.unsubscribe();
       vi.advanceTimersByTime(1000);
       const aggregate = consoleInfoSpy.mock.calls
-        .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selector trace summary'))
+        .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selectors fired:'))
         .at(-1)?.at(-1) as any;
-      expect(aggregate.selectors[0]).toEqual(expect.objectContaining({
-        recomputationCount: 1,
-        duration: expect.objectContaining({ count: 1 }),
-        cache: expect.objectContaining({ requestCount: 1, missCount: 1 }),
-        selectorSource: expect.stringContaining('state.counter.count'),
+      expect(consoleInfoSpy.mock.calls.at(-1)?.[0]).toBe('[themis] selectors fired: 1, recalculated: 1');
+      expect(aggregate).toEqual(expect.objectContaining({
+        intervalMs: 1000,
+        selectors: [expect.objectContaining({
+          executionCount: 1,
+          recomputationCount: 1,
+          selectorSource: expect.stringContaining('state.counter.count'),
+        })],
       }));
     } finally {
       consoleInfoSpy.mockRestore();
@@ -97,7 +100,7 @@ describe('StreamingStore', () => {
       const store = new StreamingStore(
         { counter: counterReducer },
         undefined,
-        { traceSelectors: true }
+        { traceSelectors: { summaryEnabled: true } }
       );
 
       store.init();
@@ -111,14 +114,17 @@ describe('StreamingStore', () => {
       vi.advanceTimersByTime(1000);
 
       const cacheTraces = consoleInfoSpy.mock.calls
-        .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selector trace summary'))
+        .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selectors fired:'))
         .at(-1)?.at(-1) as any;
-      expect(cacheTraces.selectors[0].cache).toEqual({
-        requestCount: 3,
-        hitCount: 2,
-        missCount: 1,
-        hitRatio: 2 / 3,
-      });
+      expect(consoleInfoSpy.mock.calls.at(-1)?.[0]).toBe('[themis] selectors fired: 0, recalculated: 0');
+      expect(cacheTraces).toEqual(expect.objectContaining({
+        intervalMs: 1000,
+        selectors: [expect.objectContaining({
+          executionCount: 0,
+          recomputationCount: 0,
+          cache: expect.objectContaining({ requestCount: 3, hitCount: 2, missCount: 1 }),
+        })],
+      }));
     } finally {
       consoleInfoSpy.mockRestore();
     }
@@ -129,12 +135,12 @@ describe('StreamingStore', () => {
     const storeA = new StreamingStore(
       { counter: counterReducer },
       undefined,
-      { traceSelectors: true }
+      { traceSelectors: { summaryEnabled: true } }
     );
     const storeB = new StreamingStore(
       { counter: counterReducer },
       undefined,
-      { traceSelectors: true }
+      { traceSelectors: { summaryEnabled: true } }
     );
     const selectCount = storeA.createSelector((state) => state.counter.count);
 
@@ -145,7 +151,7 @@ describe('StreamingStore', () => {
     vi.advanceTimersByTime(1000);
 
     const cacheTraces = consoleInfoSpy.mock.calls
-      .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selector trace summary'))
+      .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selectors fired:'))
       .map((call) => call.at(-1) as any);
     expect(cacheTraces).toHaveLength(2);
     expect(cacheTraces.map((aggregate) => aggregate.selectors[0].cache)).toEqual([

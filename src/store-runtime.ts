@@ -26,6 +26,7 @@ import {
   type SelectorDetailTraceEvent,
   type SagaMonitorTraceEvent,
   type RuntimeErrorTraceEvent,
+  type ReduxActionTraceEvent,
   type StoreTraceStreams,
   type SelectorTraceAggregate,
   type SelectorTracePeriodSummary,
@@ -66,6 +67,104 @@ import type {
 
 const MAX_SELECTOR_SOURCE_SNIPPET_LINES = 5;
 const MAX_SELECTOR_SOURCE_SNIPPET_LENGTH = 500;
+
+type StateDiff = Record<string, { prev: unknown; next: unknown }>;
+
+class ChangesPayload {
+  readonly #prevState: unknown;
+  readonly #nextState: unknown;
+
+  constructor(prevState: unknown, nextState: unknown) {
+    this.#prevState = prevState;
+    this.#nextState = nextState;
+  }
+
+  get changes(): StateDiff {
+    return createStateDiff(this.#prevState, this.#nextState);
+  }
+}
+
+const isPrimitive = (
+  value: unknown
+): value is string | number | bigint | boolean | symbol | null | undefined => {
+  return value === null || (typeof value !== 'object' && typeof value !== 'function');
+};
+
+const getReduxActionTitle = (action: unknown): string => {
+  const actionType =
+    typeof action === 'object' && action !== null && 'type' in action
+      ? (action as { type: unknown }).type
+      : action;
+  const hasPayload = typeof action === 'object' && action !== null && 'payload' in action;
+  if (!hasPayload) return String(actionType);
+  const payload = (action as { payload: unknown }).payload;
+  if (Array.isArray(payload) && payload.length === 1 && isPrimitive(payload[0])) {
+    return `${String(actionType)} ${String(payload[0])}`;
+  }
+  return isPrimitive(payload) ? `${String(actionType)} ${String(payload)}` : String(actionType);
+};
+
+const isPlainRecord = (value: unknown): value is Record<string, unknown> => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+};
+
+const addStateDiff = (
+  changes: StateDiff,
+  prevValue: unknown,
+  nextValue: unknown,
+  path: string
+): void => {
+  if (Object.is(prevValue, nextValue)) return;
+  if (prevValue === undefined) {
+    changes[path || '<root>'] = { prev: undefined, next: nextValue };
+    return;
+  }
+  if ((Array.isArray(prevValue) || prevValue === undefined) &&
+      (Array.isArray(nextValue) || nextValue === undefined)) {
+    const prevArray = Array.isArray(prevValue) ? prevValue : [];
+    const nextArray = Array.isArray(nextValue) ? nextValue : [];
+    const length = Math.max(prevArray.length, nextArray.length);
+    if (length > 0) {
+      for (let index = 0; index < length; index += 1) {
+        addStateDiff(
+          changes,
+          prevArray[index],
+          nextArray[index],
+          path ? `${path}[${index}]` : `[${index}]`
+        );
+      }
+      return;
+    }
+  }
+  if ((isPlainRecord(prevValue) || prevValue === undefined) &&
+      (isPlainRecord(nextValue) || nextValue === undefined)) {
+    const prevRecord = isPlainRecord(prevValue) ? prevValue : {};
+    const nextRecord = isPlainRecord(nextValue) ? nextValue : {};
+    const keys = new Set([...Object.keys(prevRecord), ...Object.keys(nextRecord)]);
+    if (keys.size > 0) {
+      for (const key of keys) {
+        addStateDiff(
+          changes,
+          prevRecord[key],
+          nextRecord[key],
+          path ? `${path}.${key}` : key
+        );
+      }
+      return;
+    }
+  }
+  changes[path || '<root>'] = { prev: prevValue, next: nextValue };
+};
+
+const createStateDiff = (prevState: unknown, nextState: unknown): StateDiff => {
+  const changes: StateDiff = {};
+  addStateDiff(changes, prevState, nextState, '');
+  return changes;
+};
+
+let hasLoggedReduxWelcomeMessage = false;
 
 const getSelectorSourceSnippet = (selectorFunc: CachedSelector<any, any, any[]>): string => {
   return selectorFunc
@@ -225,6 +324,7 @@ export abstract class StoreRuntime<
     selectorCadence: Kefir.pool<SelectorCadenceTraceEvent, never>(),
     sagaMonitor: Kefir.pool<SagaMonitorTraceEvent, never>(),
     runtimeError: Kefir.pool<RuntimeErrorTraceEvent, never>(),
+    reduxAction: Kefir.pool<ReduxActionTraceEvent, never>(),
   };
   readonly traceStreams: StoreTraceStreams = Object.freeze({
     selectorDetail: this.traceEmitters.selectorDetail.map((event) => event),
@@ -232,6 +332,7 @@ export abstract class StoreRuntime<
     selectorCadence: this.traceEmitters.selectorCadence.map((event) => event),
     sagaMonitor: this.traceEmitters.sagaMonitor.map((event) => event),
     runtimeError: this.traceEmitters.runtimeError.map((event) => event),
+    reduxAction: this.traceEmitters.reduxAction.map((event) => event),
   });
   private loggerDisposer: (() => void) | undefined;
   private loggerSubscriptions: Array<{ unsubscribe(): void }> = [];
@@ -265,7 +366,7 @@ export abstract class StoreRuntime<
       ? createSagaMiddleware({ sagaMonitor: createStoreSagaMonitor((event) => this.publishTrace('sagaMonitor', event)) })
       : createSagaMiddleware();
     this.reduxLoggerMiddleware = this.storeOptions.logReduxActions
-      ? createLoggerMiddleware()
+      ? createLoggerMiddleware((event) => this.publishTrace('reduxAction', event))
       : undefined;
     for (const [name, reducer] of Object.entries(reducersMap ?? {})) {
       this.registerReducer(name, reducer);
@@ -390,6 +491,19 @@ export abstract class StoreRuntime<
       return;
     }
 
+    if (this.storeOptions.logReduxActions && !hasLoggedReduxWelcomeMessage) {
+      hasLoggedReduxWelcomeMessage = true;
+      console.log(
+        `%c🔧 Redux Logger Active%c\n\n%cLegend:%c\n  %c■%c State changed (bold title)\n  %c■%c No state change (gray title)\n\n%cLog labels:%c\n  %cprev state%c  — state before action\n  %caction%c      — dispatched action\n  %cnext state%c  — state after action\n  %cstate%c       — lazy state/diff payload (expanded by default)\n  %cstate (no changes)%c — state unchanged`,
+        'color: #03A9F4; font-weight: bold; font-size: 14px', '',
+        'color: #888; font-weight: bold', '', 'color: inherit; font-weight: 600', '',
+        'color: #9E9E9E; font-weight: 300', '', 'color: #888; font-weight: bold', '',
+        'color: #9E9E9E; font-weight: bold', '', 'color: #03A9F4; font-weight: bold', '',
+        'color: #4CAF50; font-weight: bold', '', 'color: #4CAF50; font-weight: bold', '',
+        'color: #9E9E9E; font-weight: lighter', ''
+      );
+    }
+
     this.loggerSubscriptions = [
       this.traceStreams.selectorDetail.observe((event) => {
         const { kind: _kind, ...payload } = event;
@@ -423,6 +537,29 @@ export abstract class StoreRuntime<
       }),
       this.traceStreams.runtimeError.observe((event) => {
         console.error('[themis] runtime error', event.error, event);
+      }),
+      this.traceStreams.reduxAction.observe((event) => {
+        console.groupCollapsed(
+          `%c${getReduxActionTitle(event.action)}`,
+          event.stateChanged
+            ? 'color: inherit; font-weight: 600'
+            : 'color: #9E9E9E; font-weight: 300'
+        );
+        console.log('%c action    ', 'color: #03A9F4; font-weight: bold', event.action);
+        if (event.stateChanged) {
+          console.log(
+            '%c state    ',
+            'color: #4CAF50; font-weight: bold',
+            new ChangesPayload(event.prevState, event.nextState)
+          );
+        } else {
+          console.log(
+            '%c state (no changes)',
+            'color: #9E9E9E; font-weight: lighter',
+            { state: event.nextState }
+          );
+        }
+        console.groupEnd();
       }),
     ];
   }
@@ -689,17 +826,22 @@ export abstract class StoreRuntime<
       const period = collector.consumePeriod();
       const selectors = period.filter((summary) => this.isPeriodSummaryEligible(summary));
       if (selectors.length === 0) return;
+      const totalExecutionCount = selectors.reduce(
+        (total, summary) => total + summary.executionCount,
+        0
+      );
+      const totalRecomputationCount = selectors.reduce(
+        (total, summary) => total + summary.recomputationCount,
+        0
+      );
       const aggregate: SelectorTraceAggregate = Object.freeze({
         intervalMs: this.selectorTracingOptions.summaryIntervalMs,
         selectors: Object.freeze(selectors),
       });
-      const formatParts = ['[themis] selector trace summary'];
-      const styles: string[] = [];
-      for (const selector of selectors) {
-        formatParts.push(`\n%c${selector.selectorSource.replaceAll('%', '%%')}%c`);
-        styles.push(selector.cache.missCount > 0 ? 'font-weight: bold' : '', '');
-      }
-      console.info(formatParts.join(''), ...styles, aggregate);
+      console.info(
+        `[themis] selectors fired: ${totalExecutionCount}, recalculated: ${totalRecomputationCount}`,
+        aggregate
+      );
     }, this.selectorTracingOptions.summaryIntervalMs);
   }
 

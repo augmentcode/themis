@@ -15,6 +15,7 @@ import { getStoreContext } from './utils/runtime-svelte/utils';
 import { createSelector as createSvelteSelector } from './utils/svelte-selectors/create-selector';
 
 export type {
+  ReduxActionTraceEvent,
   SelectorTraceSummary,
   StoreLoggerFactory,
   StoreOptions,

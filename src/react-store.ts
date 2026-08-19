@@ -13,6 +13,7 @@ import { createSelector as createReactSelector } from './utils/react-selectors/c
 import type { StoreReactSelector } from './utils/react-selectors/types';
 
 export type {
+  ReduxActionTraceEvent,
   SelectorTraceSummary,
   StoreLoggerFactory,
   StoreOptions,

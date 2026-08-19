@@ -344,7 +344,7 @@ describe('Store', () => {
       const selectorStore = new Store(
         { counter: reducer },
         undefined,
-        { traceSelectors: true }
+        { traceSelectors: { traceCadence: true, summaryEnabled: true } }
       );
       const selectCounter = selectorStore.createSelector((state) => state.counter.value);
 
@@ -360,7 +360,7 @@ describe('Store', () => {
       expect(consoleInfo).toHaveBeenCalledWith('SUBSCRIBE SELECTOR CADENCE', 1);
       expect(consoleInfo).toHaveBeenCalledWith('SELECTOR CADENCE TICK', 0, 1);
       expect(consoleInfo.mock.calls.filter(([prefix]) =>
-        typeof prefix === 'string' && prefix.includes('[themis] selector trace summary')
+        typeof prefix === 'string' && prefix.includes('[themis] selectors fired:')
       )).toHaveLength(1);
       consoleInfo.mockRestore();
     });
@@ -383,7 +383,7 @@ describe('Store', () => {
       const selectorStore = new Store(
         { counter: counterReducer, other: otherReducer },
         undefined,
-        { traceSelectors: { traceInvalidation: true } }
+        { traceSelectors: { traceInvalidation: true, summaryEnabled: true } }
       );
       const selectCounter = selectorStore.createSelector((state) => state.counter.value);
 
@@ -397,7 +397,7 @@ describe('Store', () => {
       vi.advanceTimersByTime(1000);
 
       const traces = consoleInfo.mock.calls
-        .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selector trace summary'))
+        .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selectors fired:'))
         .map((call) => (call.at(-1) as any).selectors[0]);
       expect(traces).toEqual([expect.objectContaining({
         invalidationReasons: expect.objectContaining({
@@ -407,7 +407,7 @@ describe('Store', () => {
       })]);
       expect(traces[0]).not.toHaveProperty('accessedPaths');
       expect(consoleInfo.mock.calls.filter(([prefix]) =>
-        typeof prefix === 'string' && prefix.includes('[themis] selector trace summary')
+        typeof prefix === 'string' && prefix.includes('[themis] selectors fired:')
       )).toHaveLength(1);
       consoleInfo.mockRestore();
     });
@@ -424,7 +424,7 @@ describe('Store', () => {
       const selectorStore = new Store(
         { counter: counterReducer },
         undefined,
-        { traceSelectors: { traceArguments: true, traceResults: true } }
+        { traceSelectors: { traceArguments: true, traceResults: true, summaryEnabled: true } }
       );
       const multiplier = writable(1);
       const selectScaled = selectorStore.createSelector(
@@ -439,7 +439,7 @@ describe('Store', () => {
       vi.advanceTimersByTime(1000);
 
       const traces = consoleInfo.mock.calls
-        .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selector trace summary'))
+        .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selectors fired:'))
         .map((call) => (call.at(-1) as any).selectors[0]);
       expect(traces[0]).toEqual(expect.objectContaining({
         arguments: { count: 2, changedCount: 1 },
@@ -470,7 +470,7 @@ describe('Store', () => {
         const selectorStore = new Store(
           { trace: reducer },
           undefined,
-          { traceSelectors: true }
+          { traceSelectors: { summaryEnabled: true } }
         );
         const selectCount = selectorStore.createSelector((state) => state.trace.count);
         const selectEqualPathCount = selectorStore.createSelector((state) => state.trace.label);
@@ -484,7 +484,7 @@ describe('Store', () => {
         vi.advanceTimersByTime(1000);
 
         const aggregateCalls = () => consoleInfoSpy.mock.calls.filter(([prefix]) =>
-          typeof prefix === 'string' && prefix.includes('[themis] selector trace summary')
+          typeof prefix === 'string' && prefix.includes('[themis] selectors fired:')
         );
         const accessTraces = () =>
           aggregateCalls()
@@ -520,7 +520,7 @@ describe('Store', () => {
         const selectorStore = new Store(
           { trace: reducer },
           undefined,
-          { traceSelectors: true }
+          { traceSelectors: { summaryEnabled: true } }
         );
         const selectCount = selectorStore.createSelector((state) => state.trace.count);
 
@@ -534,7 +534,7 @@ describe('Store', () => {
         vi.advanceTimersByTime(1000);
 
         const cacheTraces = consoleInfoSpy.mock.calls
-          .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selector trace summary'))
+          .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selectors fired:'))
           .at(-1)?.at(-1) as any;
         expect(cacheTraces.selectors[0].cache).toEqual({
           requestCount: 3,
@@ -552,8 +552,8 @@ describe('Store', () => {
       const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
       const initialState = { count: 0 };
       const reducer = Object.assign((state = initialState) => state, { initialState });
-      const storeA = new Store({ trace: reducer }, undefined, { traceSelectors: true });
-      const storeB = new Store({ trace: reducer }, undefined, { traceSelectors: true });
+      const storeA = new Store({ trace: reducer }, undefined, { traceSelectors: { summaryEnabled: true } });
+      const storeB = new Store({ trace: reducer }, undefined, { traceSelectors: { summaryEnabled: true } });
       const selectCount = storeA.createSelector((state) => state.trace.count);
 
       storeA.init();
@@ -563,7 +563,7 @@ describe('Store', () => {
       vi.advanceTimersByTime(1000);
 
       const cacheTraces = consoleInfoSpy.mock.calls
-        .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selector trace summary'))
+        .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selectors fired:'))
         .map((call) => call.at(-1) as any);
       expect(cacheTraces).toHaveLength(2);
       expect(cacheTraces.map((aggregate) => aggregate.selectors[0].cache)).toEqual([

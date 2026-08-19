@@ -53,6 +53,31 @@ describe("createSelectorCadenceSource", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it("publishes the normalized wall-clock timestamp for RAF trace ticks", () => {
+    let rafCallback: FrameRequestCallback | undefined;
+    const onTick = vi.fn();
+    const listener = vi.fn();
+    vi.setSystemTime(100);
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn((callback: FrameRequestCallback) => {
+        rafCallback = callback;
+        return 1;
+      })
+    );
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+
+    const cadenceSource = createSelectorCadenceSource(64, { onTick });
+    cadenceSource.subscribe(listener);
+    cadenceSource.requestTick();
+    rafCallback?.(7);
+
+    expect(onTick).toHaveBeenCalledWith(100, 1);
+    expect(listener).toHaveBeenCalledWith(7, 1);
+    expect(cadenceSource.getSnapshot()).toBe(100);
+    cadenceSource.dispose();
+  });
+
   it("stays idle after subscription, coalesces requests, and clears work after last unsubscribe", () => {
     const cadenceSource = createSelectorCadenceSource(64);
     const setTimeoutMock = vi.spyOn(globalThis, "setTimeout");

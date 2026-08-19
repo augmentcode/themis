@@ -116,14 +116,16 @@ describe('selector trace summaries', () => {
     expect(consoleInfo).toHaveBeenCalledTimes(1);
     const [format] = consoleInfo.mock.calls[0];
     const aggregate = consoleInfo.mock.calls[0].at(-1);
-    expect(format).toContain('[themis] selector trace summary');
+    expect(format).toBe('[themis] selectors fired: 1, recalculated: 1');
     expect(aggregate).toEqual(expect.objectContaining({
       intervalMs: 25,
       selectors: [expect.objectContaining({
         selectorSource: expect.stringContaining('state.counter.count'),
+        executionCount: 1,
         recomputationCount: 1,
       })],
     }));
+    expect(Object.isFrozen(aggregate.selectors)).toBe(true);
     expect(store.getSelectorTraceSummary()[0]).toEqual(expect.objectContaining({
       executionCount: 1,
       duration: expect.objectContaining({ totalMs: 2 }),
@@ -139,7 +141,9 @@ describe('selector trace summaries', () => {
     });
     vi.advanceTimersByTime(25);
     expect(consoleInfo.mock.calls).toHaveLength(callsAfterFirstInterval + 1);
+    expect(consoleInfo.mock.calls.at(-1)?.[0]).toBe('[themis] selectors fired: 1, recalculated: 1');
     expect(consoleInfo.mock.calls.at(-1)?.at(-1)).toEqual(expect.objectContaining({
+      intervalMs: 25,
       selectors: [expect.objectContaining({
         executionCount: 1,
         recomputationCount: 1,
@@ -215,7 +219,7 @@ describe('selector trace summaries', () => {
     );
   });
 
-  it('starts interval aggregation when summaries are disabled but tracing is enabled', () => {
+  it('does not allocate summary aggregation when summaries are disabled', () => {
     vi.useFakeTimers();
     const store = new Store(
       { counter: counterReducer },
@@ -226,8 +230,8 @@ describe('selector trace summaries', () => {
 
     expect(store.getSelectorTraceSummary()).toEqual([]);
     expect(Object.isFrozen(store.getSelectorTraceSummary())).toBe(true);
-    expect((store as any).selectorTraceSummaryCollector).toBeDefined();
-    expect((store as any).selectorTraceSummaryInterval).toBeDefined();
+    expect((store as any).selectorTraceSummaryCollector).toBeUndefined();
+    expect((store as any).selectorTraceSummaryInterval).toBeUndefined();
     dispose();
   });
 
@@ -241,8 +245,10 @@ describe('selector trace summaries', () => {
         traceInvalidation: true,
         traceArguments: true,
         traceResults: true,
+        summaryEnabled: true,
         summaryIntervalMs: 25,
       },
+      loggerFactory: () => undefined,
     });
     const selectorFunc = (state: { count: number }, _factor: number) => state.count;
     const reporter = store.getSelectorTraceReporter()!;
@@ -269,10 +275,12 @@ describe('selector trace summaries', () => {
     expect(consoleInfo).not.toHaveBeenCalled();
     vi.advanceTimersByTime(25);
     expect(consoleInfo).toHaveBeenCalledTimes(1);
-    expect(consoleInfo.mock.calls[0][0]).toContain('[themis] selector trace summary');
+    expect(consoleInfo.mock.calls[0][0]).toBe('[themis] selectors fired: 1, recalculated: 1');
     expect(consoleInfo.mock.calls[0].at(-1)).toEqual(expect.objectContaining({
+      intervalMs: 25,
       selectors: [expect.objectContaining({
         executionCount: 1,
+        recomputationCount: 1,
         cache: expect.objectContaining({ requestCount: 1, missCount: 1 }),
       })],
     }));

@@ -165,7 +165,7 @@ export const createSelectorCadenceSource = (
     const listenersToNotify = Array.from(listeners);
     latestTimestamp = Math.max(Date.now(), timestamp);
     lastTickWallTimeAt = Date.now();
-    onTick?.(timestamp, listenersToNotify.length);
+    onTick?.(latestTimestamp, listenersToNotify.length);
     for (const listener of listenersToNotify) {
       if (listeners.has(listener)) {
         listener(timestamp, listenersToNotify.length);

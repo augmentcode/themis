@@ -259,6 +259,16 @@ values, so redact secrets and personal data before sharing logs; selector traces
 are intentionally value-free but their `selectorSource` still identifies callback
 code.
 
+All Store families expose the same frozen, read-only `traceStreams` collection:
+`selectorDetail`, `selectorSummary`, `selectorCadence`, `sagaMonitor`,
+`runtimeError`, and `reduxAction`. The Redux logger middleware only calls
+`next(action)` and publishes an immutable action event after success; StoreRuntime
+owns default console rendering. A typed `loggerFactory` receives these six
+streams and replaces the default logger, including its legend and grouped Redux
+output. Factory disposal, selector summary allocation/publication, and stream
+resources follow the Store `init()`/`dispose()`/re-init lifecycle. `summaryEnabled`
+is the sole switch that allocates selector summary aggregation.
+
 ## Saga Lifecycle
 
 Sagas are managed by the **saga manager** (`src/slices/saga-manager/`):

@@ -195,6 +195,17 @@ export type RuntimeErrorTraceEvent = Readonly<{
   payload?: unknown;
 }>;
 
+export type ReduxActionTraceEvent = Readonly<{
+  /** The dispatched action payload. Redact sensitive values before sharing. */
+  action: unknown;
+  /** State reference before the reducer chain ran. */
+  prevState: unknown;
+  /** State reference returned by the reducer chain. */
+  nextState: unknown;
+  /** Whether the reducer chain returned a different state reference. */
+  stateChanged: boolean;
+}>;
+
 export type StoreRuntimeErrorReporter = (event: RuntimeErrorTraceEvent) => void;
 
 export type StoreTraceStreams = Readonly<{
@@ -203,6 +214,7 @@ export type StoreTraceStreams = Readonly<{
   selectorCadence: Observable<SelectorCadenceTraceEvent, never>;
   sagaMonitor: Observable<SagaMonitorTraceEvent, never>;
   runtimeError: Observable<RuntimeErrorTraceEvent, never>;
+  reduxAction: Observable<ReduxActionTraceEvent, never>;
 }>;
 
 export type StoreLoggerFactory = (streams: StoreTraceStreams) => void | (() => void);

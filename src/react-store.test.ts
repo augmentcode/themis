@@ -70,7 +70,7 @@ describe('ReactStore', () => {
       const store = new ReactStore(
         { counter: counterReducer },
         undefined,
-        { traceSelectors: true }
+        { traceSelectors: { summaryEnabled: true } }
       );
       const selectCount = store.createSelector((state) => state.counter.count);
 
@@ -80,7 +80,7 @@ describe('ReactStore', () => {
       expect(selected.value).toBe(0);
       vi.advanceTimersByTime(1000);
       const aggregate = consoleInfoSpy.mock.calls
-        .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selector trace summary'))
+        .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selectors fired:'))
         .at(-1)?.at(-1) as any;
       expect(aggregate.selectors).toEqual([
         expect.objectContaining({
@@ -102,7 +102,7 @@ describe('ReactStore', () => {
       const store = new ReactStore(
         { counter: counterReducer },
         undefined,
-        { traceSelectors: true }
+        { traceSelectors: { summaryEnabled: true } }
       );
       const selectCount = store.createSelector((state) => state.counter.count);
 
@@ -116,7 +116,7 @@ describe('ReactStore', () => {
       vi.advanceTimersByTime(1000);
 
       const cacheTraces = consoleInfoSpy.mock.calls
-        .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selector trace summary'))
+        .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selectors fired:'))
         .at(-1)?.at(-1) as any;
       expect(cacheTraces.selectors[0]).toEqual(expect.objectContaining({
         cache: { requestCount: 3, hitCount: 2, missCount: 1, hitRatio: 2 / 3 },
@@ -128,8 +128,8 @@ describe('ReactStore', () => {
 
   it('isolates signal selector cache trace counts between ReactStore instances', () => {
     const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-    const storeA = new ReactStore({ counter: counterReducer }, undefined, { traceSelectors: true });
-    const storeB = new ReactStore({ counter: counterReducer }, undefined, { traceSelectors: true });
+    const storeA = new ReactStore({ counter: counterReducer }, undefined, { traceSelectors: { summaryEnabled: true } });
+    const storeB = new ReactStore({ counter: counterReducer }, undefined, { traceSelectors: { summaryEnabled: true } });
     const selectCount = storeA.createSelector((state) => state.counter.count);
 
     storeA.init();
@@ -139,7 +139,7 @@ describe('ReactStore', () => {
     vi.advanceTimersByTime(1000);
 
     const cacheTraces = consoleInfoSpy.mock.calls
-      .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selector trace summary'))
+      .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selectors fired:'))
       .map((call) => call.at(-1) as any);
     expect(cacheTraces).toHaveLength(2);
     expect(cacheTraces.map((aggregate) => aggregate.selectors[0].cache)).toEqual([

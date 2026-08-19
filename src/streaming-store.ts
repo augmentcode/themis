@@ -13,6 +13,7 @@ import { createSelector as createStreamingSelector } from './utils/streaming-sel
 import type { StoreStreamingSelector } from './utils/streaming-selectors/types';
 
 export type {
+  ReduxActionTraceEvent,
   SelectorTraceSummary,
   StoreLoggerFactory,
   StoreOptions,

@@ -3,7 +3,7 @@ name: core/selector-tracing
 description: >-
   Diagnose Store-created selector performance from opt-in interval aggregates
   and privacy-safe lifetime summaries. Covers the flat traceSelectors contract,
-  execution, cache, invalidation, argument, result, and cadence records,
+  execution, cache, invalidation, argument, result, cadence, and Redux action records,
   bounded p95 interpretation, lifecycle, and production safety across all Store
   families.
 type: sub-skill
@@ -89,9 +89,18 @@ finite and non-negative; category and `summaryEnabled` fields must be boolean.
 Every Store family exposes the same read-only `traceStreams` collection. The
 public `StoreTraceStreams` and `StoreLoggerFactory` types are available from
 `@augmentcode/themis/types` and re-exported by each Store-family entrypoint.
-The collection contains Kefir observables for `selectorDetail`,
-`selectorSummary`, `selectorCadence`, `sagaMonitor`, and `runtimeError`; it does
-not expose emitters or permit consumers to publish events.
+The collection contains six Kefir observables: `selectorDetail`,
+`selectorSummary`, `selectorCadence`, `sagaMonitor`, `runtimeError`, and
+`reduxAction`. It does not expose emitters or permit consumers to publish events.
+
+When `logReduxActions: true`, Store-owned Redux middleware produces one
+`reduxAction` event only after `next(action)` succeeds. The event contains the
+action plus previous/next state references and a `stateChanged` flag; it does not
+eagerly compute a diff. StoreRuntime's default logger renders that stream with
+the existing legend, grouped titles, action record, and lazy path-keyed state
+diff. A `loggerFactory` replaces the default logger while still receiving all
+six streams. Action and state payloads may contain application data; redact
+secrets before sharing them.
 
 With no `loggerFactory`, StoreRuntime attaches the default console logger and
 preserves the existing severity and `[themis]` prefixes. A custom factory
@@ -286,7 +295,8 @@ characters and is not a state snapshot.
    verify Store/source boundaries before comparing intervals.
 6. Enable cadence only when scheduling is suspected. Compare immediate
    subscription and tick messages with aggregate selector records; cadence
-   messages contain no selector payload.
+   messages contain no selector payload. RAF tick timestamps use the normalized
+   wall-clock timestamp used by the legacy console payload.
 7. For a repeatable comparison, enable summaries, capture frozen snapshots
    before and after the change, compare counts, invalidation labels, cache
    ratios, and bounded p95, then dispose and turn tracing off.

@@ -106,7 +106,11 @@ describe('selector trace streams', () => {
 
       expect(summaries).toHaveLength(1);
       expect(summaries[0]).toEqual([
-        expect.objectContaining({ executionCount: 1 }),
+        expect.objectContaining({
+          selectorSource: expect.any(String),
+          executionCount: 1,
+          recomputationCount: 1,
+        }),
       ]);
 
       dispose();

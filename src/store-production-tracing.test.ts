@@ -42,7 +42,7 @@ describe.runIf(isProductionBuild)('production selector tracing', () => {
     expect(consoleInfo).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1000);
     expect(consoleInfo).toHaveBeenCalledTimes(1);
-    expect(consoleInfo.mock.calls[0][0]).toContain('[themis] selector trace summary');
+    expect(consoleInfo.mock.calls[0][0]).toContain('[themis] selectors fired:');
     expect(consoleInfo.mock.calls[0].at(-1)).toEqual(expect.objectContaining({
       selectors: [expect.objectContaining({ selectorSource: expect.any(String) })],
     }));

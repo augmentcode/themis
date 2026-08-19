@@ -48,11 +48,14 @@ const dispose = streamStore.init();
 
 `StreamingStore.traceStreams` is a frozen, read-only collection of Kefir
 observables shared symmetrically with `Store` and `ReactStore`: `selectorDetail`,
-`selectorSummary`, `selectorCadence`, `sagaMonitor`, and `runtimeError`. Import
+`selectorSummary`, `selectorCadence`, `sagaMonitor`, `runtimeError`, and
+`reduxAction`. Import
 `StoreTraceStreams` and `StoreLoggerFactory` from
 `@augmentcode/themis/types` when annotating a custom logger. The default logger
-subscribes to these streams and writes the established console prefixes; a
-custom `loggerFactory` replaces it and may return a disposer.
+subscribes to these streams and writes the established console prefixes. Redux
+action middleware is a pure event producer; StoreRuntime owns the default
+legend/group rendering. A custom `loggerFactory` replaces it and may return a
+disposer.
 
 Use `summaryEnabled: true` in the flat `traceSelectors` options object to opt
 into selector summary allocation. `summaryIntervalMs` controls publication
