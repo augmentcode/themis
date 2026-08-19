@@ -121,6 +121,7 @@ describe('Store', () => {
       expect((mappedStore as any).storeOptions).toEqual({
         throttledSelectorFrequency: 12.5,
         sagaMonitor: false,
+        logReduxActions: false,
         traceSelectors: expect.objectContaining({
           traceExecution: false,
           traceCache: false,
@@ -139,6 +140,7 @@ describe('Store', () => {
       expect((mappedStore as any).storeOptions).toEqual({
         throttledSelectorFrequency: DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
         sagaMonitor: true,
+        logReduxActions: false,
         traceSelectors: expect.objectContaining({
           traceExecution: true,
           traceCache: true,
@@ -151,6 +153,7 @@ describe('Store', () => {
       expect((store as any).storeOptions).toEqual({
         throttledSelectorFrequency: DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
         sagaMonitor: false,
+        logReduxActions: false,
         traceSelectors: expect.objectContaining({
           traceExecution: false,
           traceCache: false,
@@ -174,6 +177,16 @@ describe('Store', () => {
       );
     });
 
+    it('installs the Redux logger only when explicitly enabled', () => {
+      expect((store as any).getMiddlewarePipeline()).toHaveLength(1);
+      const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      const loggedStore = new Store(undefined, undefined, { logReduxActions: true });
+
+      expect((loggedStore as any).storeOptions.logReduxActions).toBe(true);
+      expect((loggedStore as any).getMiddlewarePipeline()).toHaveLength(2);
+      consoleLog.mockRestore();
+    });
+
     it('normalizes false tracing options as disabled', () => {
       const mappedStore = new Store(undefined, undefined, {
         sagaMonitor: false,
@@ -183,6 +196,7 @@ describe('Store', () => {
       expect((mappedStore as any).storeOptions).toEqual({
         throttledSelectorFrequency: DEFAULT_THROTTLED_SELECTOR_FREQUENCY,
         sagaMonitor: false,
+        logReduxActions: false,
         traceSelectors: expect.objectContaining({
           traceExecution: false,
           traceCache: false,
@@ -211,6 +225,8 @@ describe('Store', () => {
         traceResults: false,
         traceCadence: true,
         minDurationMs: 2.5,
+          minRecomputationCount: 0,
+          minCacheMissCount: 0,
         summaryEnabled: true,
         summaryIntervalMs: 250,
       });
@@ -229,6 +245,18 @@ describe('Store', () => {
             traceSelectors: { minDurationMs: -1 },
           })
       ).toThrow('Store option "traceSelectors.minDurationMs"');
+      expect(
+        () =>
+          new Store(undefined, undefined, {
+            traceSelectors: { minRecomputationCount: -1 },
+          })
+      ).toThrow('Store option "traceSelectors.minRecomputationCount"');
+      expect(
+        () =>
+          new Store(undefined, undefined, {
+            traceSelectors: { minCacheMissCount: Number.POSITIVE_INFINITY },
+          })
+      ).toThrow('Store option "traceSelectors.minCacheMissCount"');
       expect(
         () =>
           new Store(undefined, undefined, {
@@ -322,20 +350,18 @@ describe('Store', () => {
 
       selectorStore.init();
       const unsubscribe = selectCounter().subscribe(() => undefined);
+      expect(consoleInfo).toHaveBeenCalledWith('SUBSCRIBE SELECTOR CADENCE', 1);
       selectorStore.dispatch({ type: 'counter/set', payload: 1 });
       vi.advanceTimersByTime(0);
+      expect(consoleInfo).toHaveBeenCalledWith('SELECTOR CADENCE TICK', 0, 1);
       unsubscribe();
+      vi.advanceTimersByTime(1000);
 
       expect(consoleInfo).toHaveBeenCalledWith('SUBSCRIBE SELECTOR CADENCE', 1);
       expect(consoleInfo).toHaveBeenCalledWith('SELECTOR CADENCE TICK', 0, 1);
-      expect(consoleInfo).toHaveBeenCalledWith(
-        '[themis] selector trace',
-        expect.objectContaining({
-          accessedPaths: ['counter', 'counter.value'],
-          executionDurationMs: expect.any(Number),
-          recomputationCount: expect.any(Number),
-        })
-      );
+      expect(consoleInfo.mock.calls.filter(([prefix]) =>
+        typeof prefix === 'string' && prefix.includes('[themis] selector trace summary')
+      )).toHaveLength(1);
       consoleInfo.mockRestore();
     });
 
@@ -368,24 +394,21 @@ describe('Store', () => {
       selectorStore.dispatch({ type: 'counter/set', payload: 1 });
       vi.advanceTimersByTime(16);
       unsubscribe();
+      vi.advanceTimersByTime(1000);
 
       const traces = consoleInfo.mock.calls
-        .map((call) => call[1] as Record<string, unknown>)
-        .filter((payload) => payload && 'invalidationReason' in payload);
-      expect(traces).toEqual([
-        expect.objectContaining({
-          invalidationReason: 'first-execution',
-          changedAccessedPaths: [],
+        .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selector trace summary'))
+        .map((call) => (call.at(-1) as any).selectors[0]);
+      expect(traces).toEqual([expect.objectContaining({
+        invalidationReasons: expect.objectContaining({
+          'first-execution': 1,
+          'accessed-state-paths-changed': 1,
         }),
-        expect.objectContaining({
-          invalidationReason: 'accessed-state-paths-changed',
-          changedAccessedPaths: ['counter', 'counter.value'],
-        }),
-      ]);
-      expect(traces[0]).not.toHaveProperty('executionDurationMs');
-      expect(traces[0]).not.toHaveProperty('argumentsChanged');
-      expect(traces[0]).not.toHaveProperty('resultOutcome');
-      expect(consoleInfo).toHaveBeenCalledTimes(2);
+      })]);
+      expect(traces[0]).not.toHaveProperty('accessedPaths');
+      expect(consoleInfo.mock.calls.filter(([prefix]) =>
+        typeof prefix === 'string' && prefix.includes('[themis] selector trace summary')
+      )).toHaveLength(1);
       consoleInfo.mockRestore();
     });
 
@@ -413,30 +436,21 @@ describe('Store', () => {
       multiplier.set(2);
       vi.advanceTimersByTime(16);
       unsubscribe();
+      vi.advanceTimersByTime(1000);
 
-      const traces = consoleInfo.mock.calls.map((call) => call[1] as Record<string, unknown>);
-      expect(traces).toEqual([
-        expect.objectContaining({
-          argumentsChanged: false,
-          changedArguments: [],
-          resultOutcome: 'initial',
-        }),
-        expect.objectContaining({
-          argumentsChanged: true,
-          changedArguments: [
-            { position: 0, previousType: 'number', currentType: 'number' },
-          ],
-          resultOutcome: 'changed',
-        }),
-      ]);
-      expect(traces[1]).not.toHaveProperty('invalidationReason');
-      expect(traces[1]).not.toHaveProperty('executionDurationMs');
-      expect(traces[1]).not.toHaveProperty('arguments');
-      expect(traces[1]).not.toHaveProperty('result');
+      const traces = consoleInfo.mock.calls
+        .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selector trace summary'))
+        .map((call) => (call.at(-1) as any).selectors[0]);
+      expect(traces[0]).toEqual(expect.objectContaining({
+        arguments: { count: 2, changedCount: 1 },
+        resultOutcomes: expect.objectContaining({ initial: 1, changed: 1 }),
+      }));
+      expect(traces[0]).not.toHaveProperty('changedArguments');
       consoleInfo.mockRestore();
     });
 
     it('traces every Store-created selector execution only when enabled', () => {
+      vi.useFakeTimers();
       const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
       const initialState = {
         count: 0,
@@ -467,33 +481,30 @@ describe('Store', () => {
 
         selectorStore.init();
         selectCount().subscribe(() => {})();
+        vi.advanceTimersByTime(1000);
 
+        const aggregateCalls = () => consoleInfoSpy.mock.calls.filter(([prefix]) =>
+          typeof prefix === 'string' && prefix.includes('[themis] selector trace summary')
+        );
         const accessTraces = () =>
-          consoleInfoSpy.mock.calls
-            .map((call) => call[1] as any)
-            .filter((payload) => payload && typeof payload === 'object' && 'accessedPathCount' in payload);
-
-        expect(accessTraces()).toEqual([
-          expect.objectContaining({
-            accessedPathCount: 2,
-            accessedPaths: ['trace', 'trace.count'],
-            selectorSource: expect.stringContaining('state.trace.count'),
-          }),
-        ]);
+          aggregateCalls()
+            .flatMap((call) => ((call.at(-1) as any).selectors ?? []))
+            .filter((payload: any) => payload && 'duration' in payload);
+        expect(accessTraces()).toHaveLength(1);
+        expect(accessTraces()[0]).toEqual(expect.objectContaining({
+          executionCount: 1,
+          selectorSource: expect.stringContaining('state.trace.count'),
+        }));
 
         selectEqualPathCount().subscribe(() => {})();
         selectFewerPaths().subscribe(() => {})();
-        expect(accessTraces()).toHaveLength(3);
-
         selectMorePaths().subscribe(() => {})();
+        vi.advanceTimersByTime(1000);
         expect(accessTraces()).toHaveLength(4);
-        expect(accessTraces()[3]).toEqual(
-          expect.objectContaining({
-            accessedPathCount: 4,
-            accessedPaths: ['trace', 'trace.count', 'trace.user', 'trace.user.name'],
-            selectorSource: expect.stringContaining('state.trace.user.name'),
-          })
-        );
+        expect(accessTraces()[3]).toEqual(expect.objectContaining({
+          executionCount: 1,
+          selectorSource: expect.stringContaining('state.trace.user.name'),
+        }));
       } finally {
         consoleInfoSpy.mockRestore();
       }
@@ -505,6 +516,7 @@ describe('Store', () => {
       const reducer = Object.assign((state = initialState) => state, { initialState });
 
       try {
+        vi.useFakeTimers();
         const selectorStore = new Store(
           { trace: reducer },
           undefined,
@@ -519,31 +531,24 @@ describe('Store', () => {
 
         expect(second).toBe(first);
         expect(third).toBe(first);
+        vi.advanceTimersByTime(1000);
 
         const cacheTraces = consoleInfoSpy.mock.calls
-          .map((call) => call[1] as any)
-          .filter((payload) => payload && 'observableCacheRequestCount' in payload);
-        expect(cacheTraces).toHaveLength(3);
-        expect(cacheTraces.map((trace) => trace.outputCacheStatus)).toEqual(['miss', 'hit', 'hit']);
-        expect(cacheTraces[2]).toEqual(expect.objectContaining({
-          outputCacheRequestCount: 3,
-          outputCacheHitCount: 2,
-          outputCacheMissCount: 1,
-        }));
-        expect(cacheTraces[1].observableCacheRequestCount).toBe(
-          cacheTraces[0].observableCacheRequestCount + 1
-        );
-        expect(cacheTraces[2].observableCacheRequestCount).toBe(
-          cacheTraces[0].observableCacheRequestCount + 2
-        );
-        expect(cacheTraces[1].observableCacheCachedCount).toBe(cacheTraces[0].observableCacheCachedCount);
-        expect(cacheTraces[2].observableCacheCachedCount).toBe(cacheTraces[0].observableCacheCachedCount);
+          .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selector trace summary'))
+          .at(-1)?.at(-1) as any;
+        expect(cacheTraces.selectors[0].cache).toEqual({
+          requestCount: 3,
+          hitCount: 2,
+          missCount: 1,
+          hitRatio: 2 / 3,
+        });
       } finally {
         consoleInfoSpy.mockRestore();
       }
     });
 
     it('isolates readable selector cache trace counts between Store instances', () => {
+      vi.useFakeTimers();
       const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
       const initialState = { count: 0 };
       const reducer = Object.assign((state = initialState) => state, { initialState });
@@ -555,17 +560,15 @@ describe('Store', () => {
       storeB.init();
       selectCount();
       selectCount.withStore(storeB)();
+      vi.advanceTimersByTime(1000);
 
       const cacheTraces = consoleInfoSpy.mock.calls
-        .map((call) => call[1] as any)
-        .filter((payload) => payload && 'observableCacheRequestCount' in payload);
-      expect(cacheTraces.map((trace) => ({
-        requests: trace.outputCacheRequestCount,
-        hits: trace.outputCacheHitCount,
-        misses: trace.outputCacheMissCount,
-      }))).toEqual([
-        { requests: 1, hits: 0, misses: 1 },
-        { requests: 1, hits: 0, misses: 1 },
+        .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selector trace summary'))
+        .map((call) => call.at(-1) as any);
+      expect(cacheTraces).toHaveLength(2);
+      expect(cacheTraces.map((aggregate) => aggregate.selectors[0].cache)).toEqual([
+        { requestCount: 1, hitCount: 0, missCount: 1, hitRatio: 0 },
+        { requestCount: 1, hitCount: 0, missCount: 1, hitRatio: 0 },
       ]);
       consoleInfoSpy.mockRestore();
     });

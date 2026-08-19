@@ -1,8 +1,8 @@
 ---
 name: core/selector-tracing
 description: >-
-  Diagnose Store-created selector performance from opt-in trace events and
-  privacy-safe aggregate summaries. Covers the flat traceSelectors contract,
+  Diagnose Store-created selector performance from opt-in interval aggregates
+  and privacy-safe lifetime summaries. Covers the flat traceSelectors contract,
   execution, cache, invalidation, argument, result, and cadence records,
   bounded p95 interpretation, lifecycle, and production safety across all Store
   families.
@@ -52,6 +52,8 @@ const store = new Store(reducers, undefined, {
     traceInvalidation: true,
     traceResults: true,
     minDurationMs: 2,
+    minRecomputationCount: 3,
+    minCacheMissCount: 1,
     summaryEnabled: true,
   },
 });
@@ -59,24 +61,26 @@ const store = new Store(reducers, undefined, {
 
 The public contract is flat and accepts only `undefined`, `false`, `true`, or a
 single object. The object is not nested; arrays and unknown properties are
-rejected. Its nine fields are:
+rejected. Its eleven fields are:
 
 | Field | Default | Meaning |
 | --- | ---: | --- |
-| `traceExecution` | `false` | Execution duration, accessed paths, path count, and recomputation count. |
-| `traceCache` | `false` | Direct readable/signal/observable output-cache records. |
-| `traceInvalidation` | `false` | Recompute reason and changed accessed paths. |
-| `traceArguments` | `false` | Argument identity-change indicator and type-only change metadata. |
-| `traceResults` | `false` | Result identity outcome labels for recomputations. |
+| `traceExecution` | `false` | Execution counts, recomputation counts, and duration aggregates in period rows. |
+| `traceCache` | `false` | Direct output-cache request, hit, miss, and ratio metrics in period rows. |
+| `traceInvalidation` | `false` | Counts for each selector invalidation reason in period rows. |
+| `traceArguments` | `false` | Argument-computation and changed-argument counts in period rows. |
+| `traceResults` | `false` | Counts for initial, changed, and retained-reference outcomes in period rows. |
 | `traceCadence` | `false` | Store selector-cadence subscription and tick messages. |
-| `minDurationMs` | `0` | Inclusive threshold for execution console records only. |
-| `summaryEnabled` | `false` | In-memory aggregate collection and periodic summaries. |
-| `summaryIntervalMs` | `1000` | Periodic-summary interval in milliseconds. |
+| `minDurationMs` | `0` | Inclusive threshold for period maximum duration on execution rows. |
+| `minRecomputationCount` | `0` | Inclusive threshold for period recomputation count on execution rows. |
+| `minCacheMissCount` | `0` | Inclusive threshold for period cache-miss count on cache rows. |
+| `summaryEnabled` | `false` | Retains a lifetime, non-resetting `getSelectorTraceSummary()` snapshot. |
+| `summaryIntervalMs` | `1000` | Automatic period-aggregate interval in milliseconds. |
 
-`traceSelectors: true` enables all six event categories with a zero duration
-threshold but does not enable summaries. `undefined` and `false` disable every
-category. Object fields are independent: enabling invalidation does not enable
-execution, arguments, results, cache, or cadence. Both numeric fields must be
+`traceSelectors: true` enables all six event categories with zero thresholds and
+automatic period aggregates, but does not retain lifetime snapshots. `undefined`
+and `false` disable every category and aggregate timer. Object fields are independent: enabling invalidation does not enable
+execution, arguments, results, cache, or cadence. All threshold fields must be
 finite and non-negative; category and `summaryEnabled` fields must be boolean.
 
 The legacy `store.traceSelectors()` compatibility method can activate the same
@@ -84,76 +88,40 @@ event preset in any build when construction used omitted or `false` tracing
 options. A configured object remains authoritative; do not use the method to
 override it.
 
-## 3. Read console records as evidence
+## 3. Read console aggregates as evidence
 
-Enabled records use `console.info` and the `[themis] selector trace` prefix.
-Fields are emitted only when their category is enabled, except that a summary
-collector can observe metadata without printing every corresponding category.
+Selector metadata is collected without per-call console output. Each non-empty
+interval emits one `console.info` call with the `[themis] selector trace summary`
+prefix and the exact aggregate shape `{ intervalMs, selectors }`. Each selector
+row follows `SelectorTracePeriodSummary` exactly:
 
-### Execution records
+| Field | Meaning |
+| --- | --- |
+| `selectorSource` | Safe callback source snippet used as selector identity. |
+| `executionCount` | Execution samples collected during this interval. |
+| `recomputationCount` | Recomputation count during this interval; an interval delta, not a lifetime total. |
+| `invalidationReasons` | Counts for all four invalidation reason labels. |
+| `resultOutcomes` | Counts for `initial`, `changed`, and `retained-reference`. |
+| `arguments` | `{ count, changedCount }` for argument-related computations. |
+| `duration` | `{ count, totalMs, averageMs, maximumMs }` for this interval. |
+| `cache` | `{ requestCount, hitCount, missCount, hitRatio }` for this interval; ratio is `null` with no requests. |
 
-Execution records identify the callback with `selectorSource` and report:
+Rows are emitted when at least one enabled category qualifies. `minDurationMs`
+and `minRecomputationCount` use inclusive comparisons against the interval's
+maximum duration and recomputation count for execution eligibility.
+`minCacheMissCount` uses an inclusive comparison against the interval miss count
+for cache eligibility. Thresholds filter emitted rows, never collected samples
+or lifetime snapshots. Invalidation, argument, and result categories are
+represented by counts, not individual metadata records. The aggregate does not
+contain accessed paths, changed-path metadata, argument types, output-cache
+status, or cumulative cache counters.
 
-- `recomputationCount`: cumulative recomputation number; memoized reads do not
-  increment it.
-- `accessedPathCount`: number of observed state paths.
-- `accessedPaths`: sorted rendered paths; dynamic argument-derived keys use the
-  stable `<selector-argument>` marker.
-- `executionDurationMs`: callback duration in milliseconds, emitted when it is
-  at least `minDurationMs`.
-
-Use duration and recomputation count together. A slow callback with few
-recomputations suggests expensive selector work; a fast callback with an
-unexpectedly high count suggests broad reads, unstable arguments, or an overly
-active update path. A duration threshold filters only console execution
-records; it does not suppress invalidation, argument, or result records, and it
-does not remove valid durations from summaries.
-
-### Invalidation records
-
-`invalidationReason` is one of:
-
-- `first-execution` — no prior computation exists.
-- `selector-arguments-changed` — shallow argument identity changed.
-- `accessed-state-paths-changed` — a previously accessed path changed.
-- `previous-result-unavailable` — recomputation was needed without a usable
-  previous result.
-
-`changedAccessedPaths` is the sorted set of changed accessed paths. The first
-execution has an empty list. Interpret this as dependency evidence, not as a
-state diff: values are intentionally absent.
-
-### Argument records
-
-`argumentsChanged` reports whether argument identity changed for the
-computation. `changedArguments` contains only `position`, `previousType`, and
-`currentType`; it never contains argument values. Repeated fresh object, array,
-or function arguments therefore show identity churn without exposing their
-contents. Prefer stable scalar arguments where possible; stable intentional
-references remain valid.
-
-### Result records
-
-`resultOutcome` is one of `initial`, `changed`, or `retained-reference`. These
-labels describe reference/change behavior only. They do not log or imply the
-result value. A `retained-reference` recomputation means work occurred while
-the selector returned the previous reference; investigate why it recomputed
-before adding memoization or schedulers.
-
-### Output-cache records
-
-Cache records describe direct Svelte readable, React signal, or StreamingStore
-Kefir observable output reuse and contain:
-
-- `selectorSource`;
-- `observableCacheRequestCount` and `observableCacheCachedCount`;
-- `outputCacheStatus`: `hit` or `miss`;
-- cumulative `outputCacheRequestCount`, `outputCacheHitCount`, and
-  `outputCacheMissCount`.
-
-`hit` means an existing direct output was reused; `miss` means a new output was
-created. These are output-cache requests, not selector callback recomputations.
-Cache counters are scoped by Store state source plus selector identity.
+Use duration and recomputation counts together. A slow callback with few
+recomputations suggests expensive selector work; a high period count suggests
+an active update path or unstable selector inputs. Cache request, hit, and miss
+metrics are interval deltas and describe direct output reuse, not callback
+recomputation. A selector label is bold only when its interval `cache.missCount`
+is greater than zero; hit-only labels retain ordinary styling.
 
 ### Cadence records
 
@@ -167,15 +135,16 @@ They do not expose state or selector values.
 
 ## 4. Aggregate summaries
 
-Set `summaryEnabled: true` for privacy-preserving per-selector aggregation, then
-read a non-resetting snapshot with:
+Period aggregation is automatic whenever selector tracing is enabled. Set
+`summaryEnabled: true` when a privacy-preserving, non-resetting lifetime snapshot
+is also required, then read it with:
 
 ```ts
 const summaries = store.getSelectorTraceSummary();
 ```
 
-The snapshot is deep-frozen. With tracing disabled or before any summary data
-exists, it is an empty array. Each selector entry contains:
+The lifetime snapshot is deep-frozen. With `summaryEnabled: false` or before any
+lifetime data exists, it is an empty array. Each selector entry contains:
 
 | Group | Fields and interpretation |
 | --- | --- |
@@ -186,17 +155,19 @@ exists, it is an empty array. Each selector entry contains:
 | Duration | `count`, `totalMs`, `averageMs`, `maximumMs`, `p95Ms`. |
 | Cache | `requestCount`, `hitCount`, `missCount`, `hitRatio`; ratio is `null` with no requests. |
 
-Duration totals, averages, maxima, and counts are lifetime aggregates. `p95Ms`
+Duration totals, averages, maxima, and counts are lifetime aggregates. Period
+rows reset after each emission and expose interval deltas for the same work and
+cache metrics. `p95Ms`
 is calculated from a bounded ring buffer retaining at most 64 duration samples;
 it is a bounded-window percentile, not a percentile over every lifetime event.
 Do not treat it as an exact long-term tail latency. Cache, invalidation, and
 result summaries retain metadata only, never argument, result, or state values.
 
-After `init()`, summary collection starts one interval using
-`summaryIntervalMs`. Repeated `init()` calls do not create duplicate intervals.
-Periodic records use the `[themis] selector trace summary` prefix and the same
-snapshot shape. The initializer disposer and `store.dispose()` stop the
-interval and normal selector cadence resources.
+After `init()`, enabled tracing starts one interval using `summaryIntervalMs`.
+Each non-empty period emits exactly one aggregate; idle periods are silent.
+Repeated `init()` calls do not create duplicate intervals. The initializer
+disposer and `store.dispose()` stop the interval and clear pending period data.
+Cadence subscribe and tick diagnostics remain immediate rather than aggregated.
 
 ## 5. Store-family symmetry and lifecycle
 
@@ -237,19 +208,24 @@ are silent and should not allocate diagnostic work. Keep tracing omitted or
 `false` in normal builds and remove temporary diagnostic configuration after the
 investigation.
 
-Path metadata is redacted before it is reported. Dynamic property keys derived
-from selector arguments—including identifier-like keys—are rendered as
-`<selector-argument>` in accessed and changed paths. Never attempt to reverse
-that marker by correlating it with application data.
+The aggregate payload never reports selector argument values, selector results,
+state values, or internal path metadata. It reports only callback source
+identity, interval counts, duration aggregates, cache counters and ratios, and
+fixed invalidation, argument, and result labels. Treat `selectorSource` as
+callback identity only; it is limited to the first five source lines and 500
+characters and is not a state snapshot.
 
 ## 7. Common mistakes
 
-- **Expecting `true` to enable summaries:** `true` enables six event categories;
-  explicitly set `summaryEnabled: true` for collection.
+- **Expecting `true` to retain lifetime summaries:** `true` enables six event
+  categories and automatic period aggregates; explicitly set `summaryEnabled:
+  true` for lifetime collection.
 - **Using nested or array configuration:** the contract is one flat object;
   unknown properties, arrays, and invalid numeric values are rejected.
-- **Reading `minDurationMs` as a global filter:** it filters execution console
-  records only; summaries and other categories follow their own rules.
+- **Reading trace thresholds as global filters:** `minDurationMs` and
+  `minRecomputationCount` filter execution rows in the period aggregate, while
+  `minCacheMissCount` filters cache rows; lifetime snapshots retain collected
+  samples and other enabled categories remain independently observable.
 - **Treating a cache hit as a callback hit:** output-cache hits concern direct
   adapter reuse, while recomputation counts concern selector callback work.
 - **Treating p95 as exact lifetime latency:** only the latest bounded sample
@@ -260,26 +236,27 @@ that marker by correlating it with application data.
 - **Adding manual memoization, debounce, or throttle layers:** Store-owned
   selector caching and cadence already exist; diagnose first with traces.
 - **Logging values to enrich a trace:** this violates the privacy contract. Use
-  source identity, paths, types, counts, durations, and labels only.
+  source identity, counts, durations, cache metrics, and fixed labels only.
 
 ## 8. Concise troubleshooting workflow
 
 1. Confirm the Store family and the exact Store instance. Add the smallest flat
    object configuration needed, call `init()`, and reproduce through the real
    selector path.
-2. Filter for `[themis] selector trace`. Start with execution duration,
-   `recomputationCount`, and `accessedPaths`; check whether the dependency set
-   is broader than intended.
-3. If recomputations are unexpected, enable invalidation and arguments. Separate
-   changed accessed paths from `selector-arguments-changed`; use only the
-   type/position metadata to identify unstable argument identity.
-4. Enable results to distinguish changed output references from
-   `retained-reference`. Do not inspect or request the underlying result.
-5. Enable cache and compare output-cache status and counters. A miss may be
-   expected for a new Store/source or unstable direct-call identity; verify
-   Store/source boundaries before comparing counts.
-6. Enable cadence only when scheduling is suspected. Compare subscription and
-   tick messages with selector records; cadence messages contain no payload.
+2. Filter for `[themis] selector trace summary`. Start with period duration,
+   `recomputationCount`, and the category counts; do not look for path fields,
+   which are not present in the aggregate payload.
+3. If recomputations are unexpected, compare invalidation and argument counts.
+   The fixed invalidation labels identify recomputation reasons without exposing
+   state paths or argument types/values.
+4. Enable results to compare `initial`, `changed`, and `retained-reference`
+   counts. Do not inspect or request the underlying result.
+5. Enable cache and compare interval request, hit, miss, and ratio metrics. A
+   miss may be expected for a new Store/source or unstable direct-call identity;
+   verify Store/source boundaries before comparing intervals.
+6. Enable cadence only when scheduling is suspected. Compare immediate
+   subscription and tick messages with aggregate selector records; cadence
+   messages contain no selector payload.
 7. For a repeatable comparison, enable summaries, capture frozen snapshots
    before and after the change, compare counts, invalidation labels, cache
    ratios, and bounded p95, then dispose and turn tracing off.

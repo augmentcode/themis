@@ -91,23 +91,73 @@ describe('selector trace summaries', () => {
     expect(store.getSelectorTraceSummary()).toEqual(first);
   });
 
-  it('reports periodically after init and stops the interval on disposal', () => {
+  it('reports period deltas, stays silent when idle, and stops on disposal', () => {
     vi.useFakeTimers();
     const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined);
     const store = createSummaryStore();
     expect(vi.getTimerCount()).toBe(0);
+    const reporter = store.getSelectorTraceReporter<CounterState, number>()!;
     const dispose = store.init();
     expect(vi.getTimerCount()).toBe(1);
     store.init();
     expect(vi.getTimerCount()).toBe(1);
 
     vi.advanceTimersByTime(25);
-    expect(consoleInfo).toHaveBeenCalledWith('[themis] selector trace summary', []);
+    expect(consoleInfo).not.toHaveBeenCalled();
+
+    store.getSelectorTraceReporter<CounterState, number>()!({
+      selectorFunc,
+      recomputationCount: 1,
+      executionDurationMs: 2,
+      invalidationReason: 'first-execution',
+      resultOutcome: 'initial',
+    });
+    vi.advanceTimersByTime(25);
+    expect(consoleInfo).toHaveBeenCalledTimes(1);
+    const [format] = consoleInfo.mock.calls[0];
+    const aggregate = consoleInfo.mock.calls[0].at(-1);
+    expect(format).toContain('[themis] selector trace summary');
+    expect(aggregate).toEqual(expect.objectContaining({
+      intervalMs: 25,
+      selectors: [expect.objectContaining({
+        selectorSource: expect.stringContaining('state.counter.count'),
+        recomputationCount: 1,
+      })],
+    }));
+    expect(store.getSelectorTraceSummary()[0]).toEqual(expect.objectContaining({
+      executionCount: 1,
+      duration: expect.objectContaining({ totalMs: 2 }),
+    }));
     const callsAfterFirstInterval = consoleInfo.mock.calls.length;
+
+    reporter({
+      selectorFunc,
+      recomputationCount: 2,
+      executionDurationMs: 3,
+      invalidationReason: 'accessed-state-paths-changed',
+      resultOutcome: 'changed',
+    });
+    vi.advanceTimersByTime(25);
+    expect(consoleInfo.mock.calls).toHaveLength(callsAfterFirstInterval + 1);
+    expect(consoleInfo.mock.calls.at(-1)?.at(-1)).toEqual(expect.objectContaining({
+      selectors: [expect.objectContaining({
+        executionCount: 1,
+        recomputationCount: 1,
+        duration: expect.objectContaining({ totalMs: 3 }),
+      })],
+    }));
+    expect(store.getSelectorTraceSummary()[0]).toEqual(expect.objectContaining({
+      executionCount: 2,
+      duration: expect.objectContaining({ totalMs: 5 }),
+    }));
+
+    const callsAfterSecondInterval = consoleInfo.mock.calls.length;
+    vi.advanceTimersByTime(25);
+    expect(consoleInfo.mock.calls).toHaveLength(callsAfterSecondInterval);
 
     dispose();
     vi.advanceTimersByTime(100);
-    expect(consoleInfo).toHaveBeenCalledTimes(callsAfterFirstInterval);
+    expect(consoleInfo).toHaveBeenCalledTimes(callsAfterSecondInterval);
   });
 
   it('collects summary-only events without emitting category trace logs', () => {
@@ -125,7 +175,47 @@ describe('selector trace summaries', () => {
     expect(consoleInfo).not.toHaveBeenCalled();
   });
 
-  it('allocates neither a collector nor a timer when summaries are disabled', () => {
+  it('collects execution and cache summaries when threshold filters suppress console records', () => {
+    const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const store = new Store(undefined, undefined, {
+      traceSelectors: {
+        traceExecution: true,
+        traceCache: true,
+        minDurationMs: 10,
+        minRecomputationCount: 10,
+        minCacheMissCount: 10,
+        summaryEnabled: true,
+      },
+    });
+    const selectorFunc = (state: { count: number }) => state.count;
+    store.getSelectorTraceReporter()!({
+      selectorFunc,
+      recomputationCount: 1,
+      executionDurationMs: 1,
+      accessedPaths: new Set(['["count"]']),
+      parsedPaths: new Map([['["count"]', ['count']]]),
+    });
+    store.getSelectorTraceReporter()!({
+      selectorFunc,
+      observableCacheRequestCount: 1,
+      observableCacheCachedCount: 1,
+      outputCacheStatus: 'miss',
+      outputCacheRequestCount: 1,
+      outputCacheHitCount: 0,
+      outputCacheMissCount: 1,
+    });
+
+    expect(consoleInfo).not.toHaveBeenCalled();
+    expect(store.getSelectorTraceSummary()[0]).toEqual(
+      expect.objectContaining({
+        executionCount: 1,
+        recomputationCount: 1,
+        cache: { requestCount: 1, hitCount: 0, missCount: 1, hitRatio: 0 },
+      })
+    );
+  });
+
+  it('starts interval aggregation when summaries are disabled but tracing is enabled', () => {
     vi.useFakeTimers();
     const store = new Store(
       { counter: counterReducer },
@@ -136,9 +226,57 @@ describe('selector trace summaries', () => {
 
     expect(store.getSelectorTraceSummary()).toEqual([]);
     expect(Object.isFrozen(store.getSelectorTraceSummary())).toBe(true);
-    expect((store as any).selectorTraceSummaryCollector).toBeUndefined();
-    expect((store as any).selectorTraceSummaryInterval).toBeUndefined();
+    expect((store as any).selectorTraceSummaryCollector).toBeDefined();
+    expect((store as any).selectorTraceSummaryInterval).toBeDefined();
     dispose();
+  });
+
+  it('defers all selector categories into one non-empty period aggregate', () => {
+    vi.useFakeTimers();
+    const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const store = new Store(undefined, undefined, {
+      traceSelectors: {
+        traceExecution: true,
+        traceCache: true,
+        traceInvalidation: true,
+        traceArguments: true,
+        traceResults: true,
+        summaryIntervalMs: 25,
+      },
+    });
+    const selectorFunc = (state: { count: number }, _factor: number) => state.count;
+    const reporter = store.getSelectorTraceReporter()!;
+
+    store.init();
+    reporter({
+      selectorFunc,
+      executionDurationMs: 2,
+      recomputationCount: 1,
+      invalidationReason: 'first-execution',
+      argumentsChanged: false,
+      resultOutcome: 'initial',
+    });
+    reporter({
+      selectorFunc,
+      observableCacheRequestCount: 1,
+      observableCacheCachedCount: 1,
+      outputCacheStatus: 'miss',
+      outputCacheRequestCount: 1,
+      outputCacheHitCount: 0,
+      outputCacheMissCount: 1,
+    });
+
+    expect(consoleInfo).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(25);
+    expect(consoleInfo).toHaveBeenCalledTimes(1);
+    expect(consoleInfo.mock.calls[0][0]).toContain('[themis] selector trace summary');
+    expect(consoleInfo.mock.calls[0].at(-1)).toEqual(expect.objectContaining({
+      selectors: [expect.objectContaining({
+        executionCount: 1,
+        cache: expect.objectContaining({ requestCount: 1, missCount: 1 }),
+      })],
+    }));
+    store.dispose();
   });
 
   it('exposes equivalent summary behavior on Svelte, React, and Streaming stores', () => {

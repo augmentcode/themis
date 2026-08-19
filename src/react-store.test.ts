@@ -78,29 +78,15 @@ describe('ReactStore', () => {
       const selected = selectCount();
 
       expect(selected.value).toBe(0);
-      const cacheTraces = consoleInfoSpy.mock.calls
-        .map((call) => call[1] as any)
-        .filter((payload) => payload && 'observableCacheRequestCount' in payload);
-      expect(cacheTraces).toEqual([
+      vi.advanceTimersByTime(1000);
+      const aggregate = consoleInfoSpy.mock.calls
+        .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selector trace summary'))
+        .at(-1)?.at(-1) as any;
+      expect(aggregate.selectors).toEqual([
         expect.objectContaining({
-          observableCacheRequestCount: expect.any(Number),
-          observableCacheCachedCount: expect.any(Number),
-          selectorSource: expect.stringContaining('state.counter.count'),
-        }),
-      ]);
-      const accessTraces = consoleInfoSpy.mock.calls
-        .map((call) => call[1] as any)
-        .filter((payload) => payload && 'accessedPathCount' in payload);
-      expect(accessTraces).toEqual([
-        expect.objectContaining({
-          accessedPathCount: 2,
-          accessedPaths: ['counter', 'counter.count'],
-          executionDurationMs: expect.any(Number),
-          invalidationReason: 'first-execution',
-          argumentsChanged: false,
-          changedArguments: [],
-          resultOutcome: 'initial',
           recomputationCount: 1,
+          duration: expect.objectContaining({ count: 1 }),
+          cache: expect.objectContaining({ requestCount: 1, missCount: 1 }),
           selectorSource: expect.stringContaining('state.counter.count'),
         }),
       ]);
@@ -127,25 +113,14 @@ describe('ReactStore', () => {
 
       expect(second).toBe(first);
       expect(third).toBe(first);
+      vi.advanceTimersByTime(1000);
 
       const cacheTraces = consoleInfoSpy.mock.calls
-        .map((call) => call[1] as any)
-        .filter((payload) => payload && 'observableCacheRequestCount' in payload);
-      expect(cacheTraces).toHaveLength(3);
-      expect(cacheTraces.map((trace) => trace.outputCacheStatus)).toEqual(['miss', 'hit', 'hit']);
-      expect(cacheTraces[2]).toEqual(expect.objectContaining({
-        outputCacheRequestCount: 3,
-        outputCacheHitCount: 2,
-        outputCacheMissCount: 1,
+        .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selector trace summary'))
+        .at(-1)?.at(-1) as any;
+      expect(cacheTraces.selectors[0]).toEqual(expect.objectContaining({
+        cache: { requestCount: 3, hitCount: 2, missCount: 1, hitRatio: 2 / 3 },
       }));
-      expect(cacheTraces[1].observableCacheRequestCount).toBe(
-        cacheTraces[0].observableCacheRequestCount + 1
-      );
-      expect(cacheTraces[2].observableCacheRequestCount).toBe(
-        cacheTraces[0].observableCacheRequestCount + 2
-      );
-      expect(cacheTraces[1].observableCacheCachedCount).toBe(cacheTraces[0].observableCacheCachedCount);
-      expect(cacheTraces[2].observableCacheCachedCount).toBe(cacheTraces[0].observableCacheCachedCount);
     } finally {
       consoleInfoSpy.mockRestore();
     }
@@ -161,17 +136,15 @@ describe('ReactStore', () => {
     storeB.init();
     selectCount();
     selectCount.withStore(storeB)();
+    vi.advanceTimersByTime(1000);
 
     const cacheTraces = consoleInfoSpy.mock.calls
-      .map((call) => call[1] as any)
-      .filter((payload) => payload && 'observableCacheRequestCount' in payload);
-    expect(cacheTraces.map((trace) => ({
-      requests: trace.outputCacheRequestCount,
-      hits: trace.outputCacheHitCount,
-      misses: trace.outputCacheMissCount,
-    }))).toEqual([
-      { requests: 1, hits: 0, misses: 1 },
-      { requests: 1, hits: 0, misses: 1 },
+      .filter(([prefix]) => typeof prefix === 'string' && prefix.includes('[themis] selector trace summary'))
+      .map((call) => call.at(-1) as any);
+    expect(cacheTraces).toHaveLength(2);
+    expect(cacheTraces.map((aggregate) => aggregate.selectors[0].cache)).toEqual([
+      { requestCount: 1, hitCount: 0, missCount: 1, hitRatio: 0 },
+      { requestCount: 1, hitCount: 0, missCount: 1, hitRatio: 0 },
     ]);
     consoleInfoSpy.mockRestore();
   });

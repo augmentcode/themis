@@ -63,8 +63,9 @@ The disable should name a specific `themis/<rule-id>` rather than broadly disabl
 3. [Data Flow](#data-flow)
 4. [Store Shape](#store-shape)
 5. [Middleware Pipeline](#middleware-pipeline)
-6. [Saga Lifecycle](#saga-lifecycle)
-7. [Key Concepts](#key-concepts)
+6. [Diagnostics and observability](#diagnostics-and-observability)
+7. [Saga Lifecycle](#saga-lifecycle)
+8. [Key Concepts](#key-concepts)
 
 ## Core Principles
 
@@ -168,6 +169,7 @@ Actions flow through middleware before reaching reducers:
 ```
 dispatch(action)
   → Custom middleware registered on the Store (optional)
+  → Store-owned Redux action logger (optional, when logReduxActions: true)
   → Redux-saga middleware (forwards actions to sagas)
   → Reducers
 ```
@@ -177,6 +179,8 @@ Key middleware:
 | Middleware | Purpose |
 | --- | --- |
 | Store constructor middleware / Store.addMiddleware(...) | Registers app-specific Redux middleware before initialization |
+| Store-owned Redux action logger | Optional grouped action/state diagnostics; installed only when `logReduxActions: true` |
+| Redux-saga middleware | Runs the package saga manager and forwards actions to app sagas |
 
 ## Store Initialization
 
@@ -203,6 +207,57 @@ Pass only application-owned reducers to the concrete Store constructor map, then
 Call `store.init(initialState?)` during root component initialization and register its returned disposer with `onDestroy`. That disposer delegates to `store.dispose()`, so `onDestroy(dispose)` remains the normal Svelte root-layout pattern while direct `store.dispose()` is available for tests or other code that owns the Store lifetime. Pass preloaded state directly to `store.init(initialState)` when needed. Call `store.initDevTool()` explicitly after `store.init()` only when the runtime should be exposed to devtools; it returns its own cleanup and is also cleaned up by `store.dispose()`.
 
 Under the hood, `store.init()` combines the registered reducers, creates the Redux store with middleware, lets the concrete Store variant create its selector state source, and starts the package's saga manager. It does **not** start any app sagas — each app saga must be started explicitly via `store.runSaga(sagaFn)`. In Svelte layouts/components, call `store.runSaga(sagaFn)` from `onMount` and return the cancel function as the mount cleanup. In React apps, initialize `ReactStore` once at the app/root owner and clean up the disposer when that owner unmounts or the app/test runtime is torn down.
+
+## Diagnostics and observability
+
+The shared third constructor argument configures two independent, default-off
+diagnostics. All Store variants have the same constructor shape; pass `undefined`
+for the middleware argument when no middleware is configured:
+
+```typescript
+const options = {
+  traceSelectors: { traceExecution: true, traceCache: true },
+  logReduxActions: true,
+};
+
+const store = new Store(reducers, undefined, options);
+// The same options apply to the app's ReactStore or StreamingStore instead.
+```
+
+`traceSelectors` collects selector computation and direct output-cache evidence.
+After initialization, enabled tracing emits one `[themis] selector trace summary`
+aggregate for each non-empty interval with `{ intervalMs, selectors }`; period
+rows contain counts and duration/cache aggregates, not state, selector arguments,
+selector results, or internal paths. `summaryEnabled: true` additionally retains
+the deep-frozen, non-resetting lifetime snapshot returned by
+`getSelectorTraceSummary()`. The period bucket resets after emission, lifetime
+data does not, and idle periods are silent. `traceCadence` messages remain
+immediate scheduling diagnostics rather than aggregate rows. See
+[SELECTORS.md](./SELECTORS.md#selector-tracing-diagnostics) for the complete
+configuration and threshold contract.
+
+`logReduxActions` installs the Store-owned logger only when its constructor value
+is `true`, after caller middleware and before saga middleware. It prints a one-time
+`🔧 Redux Logger Active` legend and one collapsed group per dispatch. A group has
+the action title, a styled `action` record, and either a changed-state `state`
+record with a lazy path-keyed `changes` (`prev`/`next`) payload or the gray
+`state (no changes)` record containing `{ state: nextState }`. Primitive payloads
+may be included in action titles; complex payloads are omitted. The selector
+aggregate and Redux action group are different diagnostic record types and should
+be read independently.
+
+Both diagnostics are construction-time options. Omitted/`false` values allocate
+no corresponding diagnostic middleware or selector interval. To turn either one
+off, omit it or set it to `false` and construct a new Store; changing an options
+object, re-running `init()`, or disposing an existing instance does not reconfigure
+its middleware. Selector tracing starts its interval after `init()` and disposal
+stops it and clears pending period data. Redux action groups are available for
+dispatches while the Store is initialized; normal `store.init()`/`store.dispose()`
+lifecycle boundaries still apply. The Redux logger has no dev-mode, localStorage,
+global debug-console, or runtime toggle. Action diffs may contain application
+values, so redact secrets and personal data before sharing logs; selector traces
+are intentionally value-free but their `selectorSource` still identifies callback
+code.
 
 ## Saga Lifecycle
 
