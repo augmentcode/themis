@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.4 - 2026-08-19
+
+- Refactored logging and selector-tracing streams, including custom logger lifecycle handling and expanded tracing contracts and tests.
+- Normalized skill and documentation links and strengthened release validation coverage.
+
+## 0.2.2 - 2026-08-19
+
+- Added Redux action and state logging with shared diagnostic streams and public logging types.
+- Expanded tracing documentation, packaged skills, and release validation coverage.
+
+## 0.2.1 - 2026-08-17
+
+- Enabled explicitly configured selector tracing in production builds.
+
+## 0.2.0 - 2026-08-17
+
+- Added selector-tracing diagnostics with configurable trace categories, cache and invalidation metrics, result metrics, and privacy-safe summaries.
+- Added supporting tracing tests and documentation.
+
 ## 0.1.4
 
 - Normalize documentation links and validate package metadata for the release.
