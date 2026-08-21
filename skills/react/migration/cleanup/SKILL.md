@@ -14,20 +14,20 @@ triggers:
 ---
 # React migration cleanup and rollback
 
-Run cleanup once each migrated React state owner/slice passes tests and affectedUI flows have been verified. Remove old providers, custom hooks, context modules,external-store adapters, and pass-through wrappers unless they are explicitlydocumented compatibility shims.
+Run cleanup once each migrated React state owner/slice passes tests and affected UI flows have been verified. Remove old providers, custom hooks, context modules, external-store adapters, and pass-through wrappers unless they are explicitly documented compatibility shims.
 
 React cleanup targets React state owner modules such as providers, hooks, context
 files, and old external store adapters.
 
 ## Remove old owners and imports
 
-Verify zero references with targeted searches for the old owner path, provider,hook names, and context names. Examples:
+Verify zero references with targeted searches for the old owner path, provider, hook names, and context names. Examples:
 
 - `grep -rn "CartProvider" src/ --include="*.ts" --include="*.tsx"`
 - `grep -rn "useCartContext" src/ --include="*.ts" --include="*.tsx"`
 - `grep -rn "from .*cart-context" src/ --include="*.ts" --include="*.tsx"`
 
-Do not leave a one-line re-export or delegate-only wrapper that keeps the oldmodule path alive. Remove it, inline it, or document it as a temporary shim with asunset condition.
+Do not leave a one-line re-export or delegate-only wrapper that keeps the old module path alive. Remove it, inline it, or document it as a temporary shim with a sunset condition.
 
 ## Cleanup evidence
 
@@ -61,7 +61,7 @@ export const cartCleanupEvidence: ReactCleanupEvidence = {
 export { selectCartTotal } from "../store/cart/cart-selectors";
 ```
 
-Every shim must state the compatibility consumer, the removal condition, and thenew import path. Verifier output should say either “no pass-through wrappers” orlist each documented shim.
+Every shim must state the compatibility consumer, the removal condition, and the new import path. Verifier output should say either “no pass-through wrappers” or list each documented shim.
 
 ## Rollback recipe
 
@@ -80,7 +80,7 @@ If the migrated slice regresses:
 - [ ] Components/custom hooks use direct selector signals first; any
   `.useValue(...args)` reads are documented as necessary plain-value fallbacks.
 - [ ] Handlers/tests use `.select(reactStore.state, ...args)`.
-- [ ] Old providers/hooks/context/external-store adapters removed or documented ascompatibility shims.
+- [ ] Old providers/hooks/context/external-store adapters removed or documented as compatibility shims.
 - [ ] Targeted searches confirm zero stale imports.
 - [ ] Tests and affected UI checks pass.
 

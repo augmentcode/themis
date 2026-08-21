@@ -14,7 +14,7 @@ triggers:
 ---
 # React side-effect migration
 
-Shared, persistent, or async React side effects move to sagas. DOM-only effectsthat exist solely to manage one component's mounted DOM can remain local.
+Shared, persistent, or async React side effects move to sagas. DOM-only effects that exist solely to manage one component's mounted DOM can remain local.
 
 React sources include `useEffect` fetches, subscriptions, timers, debounces,
 storage sync, IPC/websocket listeners, and custom hooks that hide async work.
@@ -94,7 +94,7 @@ export function disposeRuntime() {
 - Keep reducers pure; never move React effects into reducers.
 - Use `takeLatest` for stale-response-prone fetch/search flows.
 - Use `takeEvery` when every action must be processed.
-- Use selector `.effect(...args)` in sagas when the saga needs current derivedstate.
+- Use selector `.effect(...args)` in sagas when the saga needs current derived state.
 - Do not keep both a migrated `useEffect` and a saga for the same trigger.
 - Do not use selector `.useValue(...args)` or direct React signals from saga code.
 
