@@ -54,7 +54,7 @@ Key rules:
 
 - Use `ReactStore` only from `@augmentcode/themis/react-store` for this React app
   path.
-- Use `reactStore.createSelector(...)` for app-local selectors so state inferencefollows the configured store.
+- Use `reactStore.createSelector(...)` for app-local selectors so state inference follows the configured store.
 - Do not add package-owned `@internal_` reducers or internal sagas.
 - Do not create a new `ReactStore` per component, route, hook call, or render.
 
@@ -95,7 +95,7 @@ active Store-owned state stream and throw before `init()` and after `dispose()`.
 
 ## 3. Dispose at the same owner boundary
 
-The owner that calls `reactStore.init()` owns teardown. In browser apps this isusually the bootstrap file or test harness; in embedded/micro-frontend apps it maybe the host's mount/unmount adapter.
+The owner that calls `reactStore.init()` owns teardown. In browser apps this is usually the bootstrap file or test harness; in embedded/micro-frontend apps it may be the host's mount/unmount adapter.
 
 ```tsx
 export function mountReactApp(container: HTMLElement) {
@@ -135,7 +135,7 @@ export function disposeAppRuntime() {
 }
 ```
 
-`reactStore.runSaga(sagaFn)` throws if `init()` has not been called or the saganame is reserved for package internals. Do not start `@internal_sagaManager`directly.
+`reactStore.runSaga(sagaFn)` throws if `init()` has not been called or the saga name is reserved for package internals. Do not start `@internal_sagaManager` directly.
 
 ## 5. Read state in components with direct selector signals
 

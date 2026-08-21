@@ -16,7 +16,7 @@ triggers:
 ---
 # React mutable state migration
 
-Shared mutable React state maps to serializable slice state, action creators, andpure reducers. Keep component-local ephemeral UI state in React.
+Shared mutable React state maps to serializable slice state, action creators, and pure reducers. Keep component-local ephemeral UI state in React.
 
 React source patterns include `useState`, `useReducer`, context provider state,
 custom hook state, and external mutable stores.
@@ -59,10 +59,10 @@ export const counterReducer = createReducer<CounterState>(initialState)
 ## Rules
 
 - Move shared, persisted, async-driven, or business state into slice state.
-- Keep reducers pure: no `fetch`, `localStorage`, timers, clocks, random IDs, ormutation.
-- Keep state serializable: no `Date`, `Map`, `Set`, class instances, functions,promises, or DOM objects.
+- Keep reducers pure: no `fetch`, `localStorage`, timers, clocks, random IDs, or mutation.
+- Keep state serializable: no `Date`, `Map`, `Set`, class instances, functions, promises, or DOM objects.
 - Compute new state in reducers; React components dispatch action creators.
-- Preserve reference equality on no-op updates when practical to avoid needlessselector invalidation.
+- Preserve reference equality on no-op updates when practical to avoid needless selector invalidation.
 
 ## Component-local state remains local
 

@@ -16,7 +16,7 @@ triggers:
 ---
 # React migration setup
 
-Complete this once before migrating individual React state owners. Start at thecanonical root setup skill (`../../../setup/SKILL.md`), choose the React Storefamily, and keep the app on `ReactStore` for this code path.
+Complete this once before migrating individual React state owners. Start at the canonical root setup skill (`../../../setup/SKILL.md`), choose the React Store family, and keep the app on `ReactStore` for this code path.
 
 ## 1. Import the public ReactStore runtime
 
@@ -29,7 +29,7 @@ import type { StoreState } from "@augmentcode/themis/types";
 
 ## 2. Create an app-owned ReactStore module
 
-Start with the migrated reducer map you already have, or an empty app-owned mapwhen preparing the runtime before the first slice.
+Start with the migrated reducer map you already have, or an empty app-owned map when preparing the runtime before the first slice.
 
 ```ts
 // src/store/react-store.ts
@@ -40,7 +40,7 @@ export const reactStore = new ReactStore({});
 export type AppState = StoreState<typeof reactStore>;
 ```
 
-As slices migrate, add app-owned reducers to the constructor map. Do not manuallyregister package-owned `@internal_` reducers or internal sagas.
+As slices migrate, add app-owned reducers to the constructor map. Do not manually register package-owned `@internal_` reducers or internal sagas.
 
 ## 3. Initialize before rendering selector users
 
@@ -76,7 +76,7 @@ first render and can be too late for direct selector signal calls or
 
 ## 4. Start app sagas explicitly after init
 
-`reactStore.init()` starts package-owned runtime work, not app sagas. Start eachmigrated app saga with `reactStore.runSaga(sagaFn)` after initialization.
+`reactStore.init()` starts package-owned runtime work, not app sagas. Start each migrated app saga with `reactStore.runSaga(sagaFn)` after initialization.
 
 ```ts
 import { reactStore } from "./store/react-store";
@@ -99,7 +99,7 @@ Per migrated slice, create app files such as:
 - `src/store/{slice}/{slice}-selectors.ts` for `reactStore.createSelector(...)`.
 - `src/store/{slice}/sagas/{slice}-saga.ts` for async/shared side effects.
 
-Then add the reducer to the `ReactStore` constructor map and start the saga fromthe same runtime owner that initialized the store.
+Then add the reducer to the `ReactStore` constructor map and start the saga from the same runtime owner that initialized the store.
 
 ## Verification cues
 
