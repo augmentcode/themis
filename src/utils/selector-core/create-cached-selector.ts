@@ -121,18 +121,50 @@ const isCollectionLike = (item: object): boolean => {
   return true;
 };
 
+// Path keys are built incrementally from length-prefixed segments (so a property
+// name embedding the separator cannot collide with a genuine nested path), and
+// tracking proxies are cached per (raw target, path key) in a per-selector context
+// so unchanged subtrees reuse their proxies across recomputes instead of
+// rebuilding the whole proxy tree and re-stringifying full paths on every access.
+const pathKeySeparator = "\u0001";
+
+export interface TrackingContext {
+  accessedPaths: Set<string>;
+  readonly parsedPaths: Map<string, AccessedPath>;
+  readonly proxyCache: WeakMap<object, Map<string, object>>;
+}
+
+export const createTrackingContext = (
+  parsedPaths: Map<string, AccessedPath>
+): TrackingContext => ({
+  accessedPaths: new Set(),
+  parsedPaths,
+  proxyCache: new WeakMap(),
+});
+
 export const createTrackingProxy = <T>(
   target: T,
-  accessedPaths: Set<string>,
-  parsedPaths: Map<string, AccessedPath>,
+  context: TrackingContext,
+  pathKey = "",
   currentPath: AccessedPath = []
 ): T => {
   if (target === null || target === undefined || typeof target !== "object") {
     return target;
   }
 
-  const rawTarget = getRawValue(target);
-  const proxy = new Proxy(rawTarget as object, {
+  const rawTarget = getRawValue(target) as object;
+  let proxiesByPath = context.proxyCache.get(rawTarget);
+  if (proxiesByPath) {
+    const cachedProxy = proxiesByPath.get(pathKey);
+    if (cachedProxy) {
+      return cachedProxy as T;
+    }
+  } else {
+    proxiesByPath = new Map();
+    context.proxyCache.set(rawTarget, proxiesByPath);
+  }
+
+  const proxy = new Proxy(rawTarget, {
     get(obj, prop) {
       const value = Reflect.get(obj, prop);
       if (!prop) {
@@ -143,10 +175,16 @@ export const createTrackingProxy = <T>(
         return value;
       }
 
-      const newPath = [...currentPath, prop];
-      const pathString = JSON.stringify(newPath);
-      parsedPaths.set(pathString, newPath);
-      accessedPaths.add(pathString);
+      const segment = typeof prop === "symbol" ? String(prop) : prop;
+      const encodedSegment = segment.length + ":" + segment;
+      const pathString =
+        pathKey === "" ? encodedSegment : pathKey + pathKeySeparator + encodedSegment;
+      let newPath = context.parsedPaths.get(pathString);
+      if (!newPath) {
+        newPath = [...currentPath, prop];
+        context.parsedPaths.set(pathString, newPath);
+      }
+      context.accessedPaths.add(pathString);
 
       if (
         value !== null &&
@@ -154,14 +192,15 @@ export const createTrackingProxy = <T>(
         !Array.isArray(value) &&
         !isCollectionLike(value)
       ) {
-        return createTrackingProxy(value, accessedPaths, parsedPaths, newPath);
+        return createTrackingProxy(value, context, pathString, newPath);
       }
 
       return value;
     },
   });
 
-  proxyValuesWeakMap.set(proxy, rawTarget as object);
+  proxyValuesWeakMap.set(proxy, rawTarget);
+  proxiesByPath.set(pathKey, proxy);
 
   return proxy as T;
 };
@@ -264,6 +303,7 @@ export const createCachedSelector = <STATE, ARGS extends unknown[] = [], R = und
   let previousState: STATE | undefined = undefined;
   let accessedPaths: Set<string> = new Set();
   const parsedPaths = new Map<string, AccessedPath>();
+  const trackingContext = createTrackingContext(parsedPaths);
 
   return (state: STATE, ...args: ARGS): R => {
     const rawValue = getRawValue(state);
@@ -301,7 +341,8 @@ export const createCachedSelector = <STATE, ARGS extends unknown[] = [], R = und
     }
 
     const newAccessedPaths = new Set<string>();
-    const trackedState = createTrackingProxy(state, newAccessedPaths, parsedPaths);
+    trackingContext.accessedPaths = newAccessedPaths;
+    const trackedState = createTrackingProxy(state, trackingContext);
     const executionStartedAt = traceExecution ? performance.now() : undefined;
     const maybeProxyResult = selectorFunc(trackedState, ...args);
     const result = getRawValue(maybeProxyResult);
