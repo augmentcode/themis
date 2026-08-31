@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.5 - 2026-08-31
+
+- Bumped package metadata for the 0.2.5 patch release.
+- PR #16 by Clement Pang: Improved selector performance by caching tracking proxies and building path keys incrementally.
+
 ## 0.2.4 - 2026-08-19
 
 - Refactored logging and selector-tracing streams, including custom logger lifecycle handling and expanded tracing contracts and tests.
