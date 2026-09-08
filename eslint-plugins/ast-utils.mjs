@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+
 export function unwrapExpression(node) {
   let current = node;
   while (["ChainExpression", "TSAsExpression", "TSTypeAssertion", "TSNonNullExpression", "TSInstantiationExpression"].includes(current?.type)) current = current.expression;
@@ -42,6 +44,12 @@ const storeConstructorByImportSource = new Map([
   ["@augmentcode/themis/streaming-store", "StreamingStore"],
 ]);
 
+const storeTypeDeclarationFiles = new Map([
+  ["Store", ["../src/svelte-store.ts", "../dist/svelte-store.d.ts"]],
+  ["ReactStore", ["../src/react-store.ts", "../dist/react-store.d.ts"]],
+  ["StreamingStore", ["../src/streaming-store.ts", "../dist/streaming-store.d.ts"]],
+].map(([name, paths]) => [name, new Set(paths.map((path) => fileURLToPath(new URL(path, import.meta.url)).replace(/\\/g, "/")))]));
+
 function staticMemberPropertyName(node) {
   if (node?.type !== "MemberExpression" && node?.type !== "Property") return undefined;
   return node.computed ? staticString(node.property ?? node.key) : staticPropertyName(node.property ?? node.key);
@@ -51,6 +59,39 @@ export function createStoreCreateSelectorTracker(sourceCode) {
   const constructorVariables = new WeakMap();
   const instanceVariables = new WeakMap();
   const selectorVariables = new WeakMap();
+  const parserServices = sourceCode?.parserServices;
+  const typeChecker = parserServices?.program?.getTypeChecker?.();
+  const estreeToTypeScriptNode = parserServices?.esTreeNodeToTSNodeMap;
+
+  function hasRecognizedStoreDeclaration(symbol) {
+    const expectedFiles = storeTypeDeclarationFiles.get(symbol?.getName?.());
+    return Boolean(expectedFiles && symbol.getDeclarations?.()?.some((declaration) => {
+      const fileName = declaration.getSourceFile?.()?.fileName?.replace(/\\/g, "/");
+      return expectedFiles.has(fileName);
+    }));
+  }
+
+  function isRecognizedStoreType(type, seen = new Set()) {
+    if (!type || seen.has(type)) return false;
+    seen.add(type);
+    if (type.isUnion?.()) return type.types.every((part) => isRecognizedStoreType(part, seen));
+    if (type.isIntersection?.()) return type.types.some((part) => isRecognizedStoreType(part, seen));
+
+    const symbols = [type.aliasSymbol, type.getSymbol?.(), type.symbol, type.target?.symbol];
+    if (symbols.some(hasRecognizedStoreDeclaration)) return true;
+    return type.getBaseTypes?.()?.some((baseType) => isRecognizedStoreType(baseType, seen)) ?? false;
+  }
+
+  function hasRecognizedStoreType(node) {
+    const current = unwrapExpression(node);
+    const typeScriptNode = estreeToTypeScriptNode?.get?.(current);
+    if (!typeChecker || !typeScriptNode) return false;
+    try {
+      return isRecognizedStoreType(typeChecker.getTypeAtLocation(typeScriptNode));
+    } catch {
+      return false;
+    }
+  }
 
   function variableForIdentifier(node) {
     const current = unwrapExpression(node);
@@ -105,7 +146,7 @@ export function createStoreCreateSelectorTracker(sourceCode) {
   }
 
   function isStoreInstanceIdentifier(node) {
-    return isStoreInstanceVariable(variableForIdentifier(node));
+    return isStoreInstanceVariable(variableForIdentifier(node)) || hasRecognizedStoreType(node);
   }
 
   function isStoreCreateSelectorMember(node) {
