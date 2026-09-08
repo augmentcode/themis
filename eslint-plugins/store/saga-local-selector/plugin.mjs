@@ -1,9 +1,7 @@
-import { calleeIdentifierName } from "../../ast-utils.mjs";
+import { createStoreCreateSelectorTracker } from "../../ast-utils.mjs";
 import { createArchitectureRule } from "../../rule-utils.mjs";
 
 export const ruleId = "saga-local-selector";
-
-const selectorFactories = new Set(["createSelector"]);
 
 function isSelectorIdentifier(node) {
   return node?.type === "Identifier" && /^select[A-Z]/.test(node.name);
@@ -14,9 +12,11 @@ export const rule = createArchitectureRule({
   summary: "Saga module defines a selector locally instead of importing it from a [slice]-selectors file.",
   why: "Saga-local selectors duplicate read APIs, bypass shared memoization, and prevent reuse from components and other sagas.",
   fix: "Move the selector into the slice's [slice]-selectors.ts module and import it into the saga.",
-  create(_context, { classifyPath, report }) {
+  create(_context, { sourceCode, classifyPath, report }) {
+    const storeSelectors = createStoreCreateSelectorTracker(sourceCode);
+
     function isSelectorFactoryCall(node) {
-      return node?.type === "CallExpression" && selectorFactories.has(calleeIdentifierName(node));
+      return storeSelectors.isStoreCreateSelectorCall(node);
     }
 
     return {

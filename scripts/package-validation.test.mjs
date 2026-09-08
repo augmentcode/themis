@@ -1,6 +1,8 @@
 import { readFile, readdir } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { Linter } from "eslint";
 import { parse } from "@babel/parser";
+import typescriptEslintParser from "@typescript-eslint/parser";
 import { describe, expect, it, vi } from "vitest";
 import * as architectureRootModule from "../eslint-plugins/index.mjs";
 import { architectureRulePlugins } from "../eslint-plugins/plugins/index.mjs";
@@ -66,14 +68,14 @@ const configByRuleId = (config, ruleId) =>
     return ruleConfig !== undefined && ruleSeverity(ruleConfig) !== "off";
   }) ??
   config.find((entry) => ruleConfigFor(entry.rules ?? {}, ruleId) !== undefined);
-const lintArchitectureRule = (ruleId, plugin, code, filename) => {
+const lintArchitectureRule = (ruleId, plugin, code, filename, languageOptions = architectureValidationLanguageOptions) => {
   const linter = new Linter();
   return linter.verify(
     code,
     [
       {
         files: ["**/*.{cjs,cts,js,jsx,mjs,mts,ts,tsx,svelte}"],
-        languageOptions: architectureValidationLanguageOptions,
+        languageOptions,
         plugins: { [pluginNamespace]: plugin },
         rules: { [namespacedRuleId(ruleId)]: "error" },
       },
@@ -172,7 +174,7 @@ describe("package metadata", () => {
     expect(packageJson.scripts["generate:eslint-plugins"]).toBeUndefined();
     expect(packageJson.dependencies["@tanstack/intent"]).toBeUndefined();
     expect(packageJson.devDependencies["@tanstack/intent"]).toBeUndefined();
-    expect(packageJson.devDependencies["@typescript-eslint/parser"]).toBeUndefined();
+    expect(packageJson.devDependencies["@typescript-eslint/parser"]).toBeDefined();
     expect(packageJson.devDependencies.eslint).toBeDefined();
     expect(packageJson.scripts.preuninstall).toBeUndefined();
   });
@@ -791,7 +793,6 @@ describe("package metadata", () => {
       namespacedRuleId("saga-local-selector"),
       namespacedRuleId("saga-local-selector"),
       namespacedRuleId("saga-local-selector"),
-      namespacedRuleId("saga-local-selector"),
     ]);
     expect(invalidMessages[0].message).toContain("[slice]-selectors");
 
@@ -823,6 +824,64 @@ describe("package metadata", () => {
     );
 
     expect(nonSagaMessages).toEqual([]);
+  });
+
+  it("tracks Store provenance for saga createSelector calls", () => {
+    const messages = lintArchitectureRule(
+      "saga-local-selector",
+      architectureRulePlugins["saga-local-selector"],
+      `
+        import { Store as ThemisStore } from "@augmentcode/themis/svelte-store";
+        import { createSelector } from "../utils/selector-core/create-cached-selector";
+
+        const store = new ThemisStore();
+        const unrelated = { createSelector };
+        const makeSelector = store.createSelector;
+        const { ["createSelector"]: buildSelector } = store;
+
+        const directStoreSelector = store["createSelector"]((state) => state.todos);
+        const aliasedStoreSelector = makeSelector((state) => state.todos);
+        const destructuredStoreSelector = buildSelector((state) => state.todos);
+        const standaloneSelector = createSelector((state) => state.todos);
+        const unrelatedSelector = unrelated.createSelector((state) => state.todos);
+
+        export function* todosSaga() {
+          function createSelector() { return undefined; }
+          const localSelector = createSelector((state) => state.todos);
+          return { localSelector };
+        }
+      `,
+      "src/todos/todos-saga.ts"
+    );
+
+    expect(messages.map(({ ruleId }) => ruleId)).toEqual([
+      namespacedRuleId("saga-local-selector"),
+      namespacedRuleId("saga-local-selector"),
+      namespacedRuleId("saga-local-selector"),
+    ]);
+  });
+
+  it("uses project type information for imported Store instances", async () => {
+    const fixtureUrl = new URL("../eslint-plugins/store/saga-local-selector/fixtures/type-aware-saga.ts", import.meta.url);
+    const projectUrl = new URL("../eslint-plugins/store/saga-local-selector/fixtures/tsconfig.json", import.meta.url);
+    const messages = lintArchitectureRule(
+      "saga-local-selector",
+      architectureRulePlugins["saga-local-selector"],
+      await readFile(fixtureUrl, "utf8"),
+      fileURLToPath(fixtureUrl),
+      {
+        parser: typescriptEslintParser,
+        parserOptions: {
+          project: [fileURLToPath(projectUrl)],
+          tsconfigRootDir: fileURLToPath(new URL("..", import.meta.url)),
+        },
+      }
+    );
+
+    expect(messages.map(({ ruleId }) => ruleId)).toEqual([
+      namespacedRuleId("saga-local-selector"),
+      namespacedRuleId("saga-local-selector"),
+    ]);
   });
 
   it("flags wildcard saga takes while allowing concrete actions, channels, and pattern arrays", () => {

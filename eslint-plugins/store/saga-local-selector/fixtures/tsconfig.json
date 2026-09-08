@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "baseUrl": "../../../..",
+    "paths": {
+      "@augmentcode/themis/svelte-store": ["src/svelte-store.ts"]
+    }
+  },
+  "include": ["./type-aware-*.ts"]
+}

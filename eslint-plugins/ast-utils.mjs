@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+
 export function unwrapExpression(node) {
   let current = node;
   while (["ChainExpression", "TSAsExpression", "TSTypeAssertion", "TSNonNullExpression", "TSInstantiationExpression"].includes(current?.type)) current = current.expression;
@@ -34,6 +36,171 @@ function isSelectorImportSpecifier(specifier) {
 
 function isRuntimeImportSpecifier(declaration, specifier) {
   return ![declaration?.importKind, specifier?.importKind].some((kind) => kind === "type" || kind === "typeof");
+}
+
+const storeConstructorByImportSource = new Map([
+  ["@augmentcode/themis/svelte-store", "Store"],
+  ["@augmentcode/themis/react-store", "ReactStore"],
+  ["@augmentcode/themis/streaming-store", "StreamingStore"],
+]);
+
+const storeTypeDeclarationFiles = new Map([
+  ["Store", ["../src/svelte-store.ts", "../dist/svelte-store.d.ts"]],
+  ["ReactStore", ["../src/react-store.ts", "../dist/react-store.d.ts"]],
+  ["StreamingStore", ["../src/streaming-store.ts", "../dist/streaming-store.d.ts"]],
+].map(([name, paths]) => [name, new Set(paths.map((path) => fileURLToPath(new URL(path, import.meta.url)).replace(/\\/g, "/")))]));
+
+function staticMemberPropertyName(node) {
+  if (node?.type !== "MemberExpression" && node?.type !== "Property") return undefined;
+  return node.computed ? staticString(node.property ?? node.key) : staticPropertyName(node.property ?? node.key);
+}
+
+export function createStoreCreateSelectorTracker(sourceCode) {
+  const constructorVariables = new WeakMap();
+  const instanceVariables = new WeakMap();
+  const selectorVariables = new WeakMap();
+  const parserServices = sourceCode?.parserServices;
+  const typeChecker = parserServices?.program?.getTypeChecker?.();
+  const estreeToTypeScriptNode = parserServices?.esTreeNodeToTSNodeMap;
+
+  function hasRecognizedStoreDeclaration(symbol) {
+    const expectedFiles = storeTypeDeclarationFiles.get(symbol?.getName?.());
+    return Boolean(expectedFiles && symbol.getDeclarations?.()?.some((declaration) => {
+      const fileName = declaration.getSourceFile?.()?.fileName?.replace(/\\/g, "/");
+      return expectedFiles.has(fileName);
+    }));
+  }
+
+  function isRecognizedStoreType(type, seen = new Set()) {
+    if (!type || seen.has(type)) return false;
+    seen.add(type);
+    if (type.isUnion?.()) return type.types.every((part) => isRecognizedStoreType(part, seen));
+    if (type.isIntersection?.()) return type.types.some((part) => isRecognizedStoreType(part, seen));
+
+    const symbols = [type.aliasSymbol, type.getSymbol?.(), type.symbol, type.target?.symbol];
+    if (symbols.some(hasRecognizedStoreDeclaration)) return true;
+    return type.getBaseTypes?.()?.some((baseType) => isRecognizedStoreType(baseType, seen)) ?? false;
+  }
+
+  function hasRecognizedStoreType(node) {
+    const current = unwrapExpression(node);
+    const typeScriptNode = estreeToTypeScriptNode?.get?.(current);
+    if (!typeChecker || !typeScriptNode) return false;
+    try {
+      return isRecognizedStoreType(typeChecker.getTypeAtLocation(typeScriptNode));
+    } catch {
+      return false;
+    }
+  }
+
+  function variableForIdentifier(node) {
+    const current = unwrapExpression(node);
+    if (current?.type !== "Identifier" || !sourceCode?.getScope) return undefined;
+    for (let scope = sourceCode.getScope(current); scope; scope = scope.upper) {
+      const variable = scope.set?.get(current.name);
+      if (variable) return variable;
+    }
+    return undefined;
+  }
+
+  function classifyVariable(variable, cache, classify) {
+    if (!variable) return false;
+    const cached = cache.get(variable);
+    if (cached !== undefined) return cached;
+    cache.set(variable, false);
+    const result = classify(variable);
+    cache.set(variable, result);
+    return result;
+  }
+
+  function isStoreConstructorVariable(variable) {
+    return classifyVariable(variable, constructorVariables, (current) => current.defs?.some((definition) => {
+      const specifier = definition.node;
+      const declaration = specifier?.parent ?? definition.parent;
+      const expectedName = storeConstructorByImportSource.get(staticString(declaration?.source));
+      return (
+        declaration?.type === "ImportDeclaration" &&
+        specifier?.type === "ImportSpecifier" &&
+        isRuntimeImportSpecifier(declaration, specifier) &&
+        staticPropertyName(specifier.imported) === expectedName
+      );
+    }) ?? false);
+  }
+
+  function isStoreConstructorIdentifier(node) {
+    return isStoreConstructorVariable(variableForIdentifier(node));
+  }
+
+  function isStoreInstanceVariable(variable) {
+    return classifyVariable(variable, instanceVariables, (current) => current.defs?.some((definition) => {
+      const declaration = definition.node;
+      const initializer = unwrapExpression(declaration?.init);
+      return (
+        declaration?.type === "VariableDeclarator" &&
+        declaration.id?.type === "Identifier" &&
+        declaration.id.name === current.name &&
+        initializer?.type === "NewExpression" &&
+        isStoreConstructorIdentifier(initializer.callee)
+      );
+    }) ?? false);
+  }
+
+  function isStoreInstanceIdentifier(node) {
+    return isStoreInstanceVariable(variableForIdentifier(node)) || hasRecognizedStoreType(node);
+  }
+
+  function isStoreCreateSelectorMember(node) {
+    const current = unwrapExpression(node);
+    return (
+      current?.type === "MemberExpression" &&
+      staticMemberPropertyName(current) === "createSelector" &&
+      isStoreInstanceIdentifier(current.object)
+    );
+  }
+
+  function patternBindsSelector(pattern, variableName) {
+    if (pattern?.type !== "ObjectPattern") return false;
+    return pattern.properties?.some((property) => {
+      if (property?.type !== "Property" || staticMemberPropertyName(property) !== "createSelector") return false;
+      const value = property.value?.type === "AssignmentPattern" ? property.value.left : property.value;
+      return value?.type === "Identifier" && value.name === variableName;
+    }) ?? false;
+  }
+
+  function isStoreCreateSelectorVariable(variable) {
+    return classifyVariable(variable, selectorVariables, (current) => current.defs?.some((definition) => {
+      const declaration = definition.node;
+      if (declaration?.type !== "VariableDeclarator") return false;
+      if (declaration.id?.type === "Identifier" && declaration.id.name === current.name) {
+        const initializer = unwrapExpression(declaration.init);
+        return isStoreCreateSelectorMember(initializer) || isStoreCreateSelectorIdentifier(initializer);
+      }
+      return patternBindsSelector(declaration.id, current.name) && isStoreInstanceIdentifier(declaration.init);
+    }) ?? false);
+  }
+
+  function isStoreCreateSelectorIdentifier(node) {
+    return isStoreCreateSelectorVariable(variableForIdentifier(node));
+  }
+
+  function isStoreCreateSelectorCallee(node) {
+    const current = unwrapExpression(node);
+    return isStoreCreateSelectorMember(current) || isStoreCreateSelectorIdentifier(current);
+  }
+
+  function isStoreCreateSelectorCall(node) {
+    const current = unwrapExpression(node);
+    return current?.type === "CallExpression" && isStoreCreateSelectorCallee(current.callee);
+  }
+
+  return {
+    isStoreConstructorIdentifier,
+    isStoreInstanceIdentifier,
+    isStoreCreateSelectorMember,
+    isStoreCreateSelectorIdentifier,
+    isStoreCreateSelectorCallee,
+    isStoreCreateSelectorCall,
+  };
 }
 
 export function createImportedSelectorTracker() {

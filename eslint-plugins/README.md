@@ -573,6 +573,21 @@ function* watchVisibleTodosGood() {
 
 Remediate by moving `select*` function or factory declarations out of saga modules and into the owning slice's `[slice]-selectors.ts`, then importing them into the saga file. Saga-local `select*` declarations are invalid even when they are not exported, because they put state-shape knowledge in the wrong layer and bypass selector ownership rules. This rule complements `themis/inline-saga-selector`, which rejects `yield* select((state) => ...)` call expressions.
 
+Store factory calls use provenance rather than the `createSelector` name alone. Locally constructed Store instances work with syntax-only parsing; Store instances imported from application modules require project-aware TypeScript parser services:
+
+```js
+import tsParser from "@typescript-eslint/parser";
+
+export default [{
+  languageOptions: {
+    parser: tsParser,
+    parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
+  },
+}];
+```
+
+Without project-aware services, the rule does not guess that imported objects are Store instances.
+
 ### `themis/no-extra-selector-caching`
 
 Invalid:
