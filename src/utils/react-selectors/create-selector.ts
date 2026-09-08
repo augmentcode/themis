@@ -7,7 +7,7 @@ import type { ReactStore } from "../../react-store";
 import type { StoreSelectorCallback, StoreState } from "../../types";
 import type { SignalArgs, StoreReactSelector } from "./types";
 import { createCachedSelector } from "../selector-core/create-cached-selector";
-import { getOrCreate } from "../selector-core/selector-output-cache";
+import { evictSelectorOutput, getOrCreate } from "../selector-core/selector-output-cache";
 import {
   getSelectorCacheTraceReporter,
   getSelectorComputationTraceOptions,
@@ -51,7 +51,8 @@ const signalArgToKefirProperty = <T>(arg: T | ReadonlySignal<T>): Observable<T, 
 };
 
 const kefirSelectorPropertyToSignal = <R>(
-  selected: KefirSelectorProperty<R>
+  selected: KefirSelectorProperty<R>,
+  onInactive?: () => void
 ): ReadonlySignal<R> => {
   let activeWatchers = 0;
   let subscription: Subscription | null = null;
@@ -83,6 +84,7 @@ const kefirSelectorPropertyToSignal = <R>(
         subscription?.unsubscribe();
         subscription = null;
         updateSnapshotIfAvailable();
+        onInactive?.();
       }
     },
   });
@@ -105,7 +107,8 @@ export const createSelector = <TStore extends ReactStore<any, any>, ARGS extends
     const traceOptions = getSelectorComputationTraceOptions<SignalState<TStore>, R, ARGS>(store);
     const traceCacheReporter = getSelectorCacheTraceReporter<SignalState<TStore>, R, ARGS>(store);
 
-    return getOrCreate(store, selectorFunc, restArgs, () => {
+    let releaseInactiveOutput = () => {};
+    const output = getOrCreate(store, selectorFunc, restArgs, () => {
       const argProperties = restArgs.map(signalArgToKefirProperty);
       const selected = createKefirSelectorProperty<TStore, ARGS, R>(
         store,
@@ -114,8 +117,10 @@ export const createSelector = <TStore extends ReactStore<any, any>, ARGS extends
         () => restArgs.map(readSignalArg) as ARGS,
         traceOptions
       );
-      return kefirSelectorPropertyToSignal(selected);
+      return kefirSelectorPropertyToSignal(selected, () => releaseInactiveOutput());
     }, traceCacheReporter ? { traceReporter: traceCacheReporter } : undefined);
+    releaseInactiveOutput = () => evictSelectorOutput(store, selectorFunc, restArgs, output);
+    return output;
   };
 
   const signalSelector = ((...restArgs: SignalArgs<ARGS>) => {

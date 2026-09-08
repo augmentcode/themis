@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { evictSelectorOutputsForStateSource, getOrCreate } from "./selector-output-cache";
+import { evictSelectorOutput, evictSelectorOutputsForStateSource, getOrCreate } from "./selector-output-cache";
 
 const getGarbageCollector = (): (() => void) | undefined =>
   (globalThis as typeof globalThis & { gc?: () => void }).gc;
@@ -72,6 +72,22 @@ describe("selector output cache", () => {
     expect(getOrCreate(sourceB, selectorA, [argA], () => ({ value: "fresh-b-a-1" }))).toBe(
       sourceBSelectorAArgA
     );
+  });
+
+  it("evicts only the matching inactive output", () => {
+    const source = { name: "source" };
+    const selector = (_state: unknown, arg: object) => arg;
+    const argA = { id: "item-1" };
+    const argB = { id: "item-2" };
+    const outputA = { value: "a" };
+    const outputB = { value: "b" };
+
+    getOrCreate(source, selector, [argA], () => outputA);
+    getOrCreate(source, selector, [argB], () => outputB);
+    evictSelectorOutput(source, selector, [argA], outputA);
+
+    expect(getOrCreate(source, selector, [argA], () => ({ value: "fresh-a" }))).not.toBe(outputA);
+    expect(getOrCreate(source, selector, [argB], () => ({ value: "fresh-b" }))).toBe(outputB);
   });
 
   it("traces cache requests without increasing cached count on hits", () => {

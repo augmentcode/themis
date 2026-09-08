@@ -304,4 +304,32 @@ describe("streaming createSelector", () => {
       "createSelector requires a Store-like state source as the first argument."
     );
   });
+
+  it("evicts an observable only after its final observer leaves", () => {
+    const state = createMutableProperty(withUtility({ counter: { count: 1 } }));
+    const selectorStore = createMockRuntimeStoreBinding(state.stream, state.get);
+    const selectScaled = createSelector(selectorStore, (value, factor: number) => value.counter.count * factor);
+    const first = selectScaled(2);
+    const concurrent = selectScaled(3);
+    const firstSubscriptionA = first.observe(() => {});
+    const firstSubscriptionB = first.observe(() => {});
+    const concurrentSubscription = concurrent.observe(() => {});
+
+    expect(selectScaled(2)).toBe(first);
+    firstSubscriptionA.unsubscribe();
+    expect(selectScaled(2)).toBe(first);
+    concurrentSubscription.unsubscribe();
+    firstSubscriptionB.unsubscribe();
+
+    const stateSubscription = state.stream.observe(() => {});
+    state.set(withUtility({ counter: { count: 5 } }));
+    const fresh = selectScaled(2);
+    expect(fresh).not.toBe(first);
+    const values: number[] = [];
+    const freshSubscription = fresh.observe((value) => values.push(value));
+    freshSubscription.unsubscribe();
+    stateSubscription.unsubscribe();
+    expect(values).toEqual([10]);
+    expect(selectScaled(3)).not.toBe(concurrent);
+  });
 });

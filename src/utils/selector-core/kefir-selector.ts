@@ -41,7 +41,8 @@ export const createKefirSelectorProperty = <TStore extends StoreRuntime<any, any
   selectorFunc: StoreSelectorCallback<R, ARGS, StoreState<TStore>>,
   argProperties: Array<Observable<any, any>>,
   getArgsSnapshot: (() => ARGS) | undefined,
-  traceOptions?: SelectorComputationTraceOptions<StoreState<TStore>, R, ARGS>
+  traceOptions?: SelectorComputationTraceOptions<StoreState<TStore>, R, ARGS>,
+  onInactive?: () => void
 ): KefirSelectorProperty<R> => {
   const cachedSelector = createCachedSelector<StoreState<TStore>, ARGS, R>(selectorFunc, {
     lockUpdatesPredicate: areStoreUpdatesLocked,
@@ -61,9 +62,25 @@ export const createKefirSelectorProperty = <TStore extends StoreRuntime<any, any
     .skipDuplicates((a, b) => {
       return shallowEqual(a, b);
     });
-  const property = (getArgsSnapshot
+  const selectedProperty = (getArgsSnapshot
     ? selected.toProperty(getSnapshot)
     : selected.toProperty()) as Property<R, any>;
+
+  if (!onInactive) {
+    return { property: selectedProperty, getSnapshot };
+  }
+
+  const property = (Kefir.stream<R, any>((emitter) => {
+    const subscription = selectedProperty.observe({
+      value: (value) => emitter.value(value),
+      error: (error) => emitter.error(error),
+      end: () => emitter.end(),
+    });
+    return () => {
+      subscription.unsubscribe();
+      onInactive();
+    };
+  }).toProperty(getArgsSnapshot ? getSnapshot : undefined) as Property<R, any>);
 
   return { property, getSnapshot };
 };
