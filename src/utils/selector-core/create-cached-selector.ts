@@ -298,7 +298,7 @@ export const createCachedSelector = <STATE, ARGS extends unknown[] = [], R = und
   const traceArguments = Boolean(traceReporter && options?.traceArguments);
   const traceResults = Boolean(traceReporter && options?.traceResults);
   const traceState = traceReporter ? { recomputationCount: 0 } : undefined;
-  let previousSelectResult: R | undefined = undefined;
+  let previousSelectResult: { value: R } | undefined = undefined;
   let previousArgs: ARGS | undefined = undefined;
   let previousState: STATE | undefined = undefined;
   let accessedPaths: Set<string> = new Set();
@@ -308,7 +308,7 @@ export const createCachedSelector = <STATE, ARGS extends unknown[] = [], R = und
   return (state: STATE, ...args: ARGS): R => {
     const rawValue = getRawValue(state);
     if (options?.lockUpdatesPredicate?.(rawValue) && previousSelectResult !== undefined) {
-      return previousSelectResult;
+      return previousSelectResult.value;
     }
 
     const firstExecution = previousArgs === undefined;
@@ -330,13 +330,13 @@ export const createCachedSelector = <STATE, ARGS extends unknown[] = [], R = und
 
     if (!argsChanged && !stateChanged && previousSelectResult !== undefined) {
       previousState = rawValue;
-      return previousSelectResult;
+      return previousSelectResult.value;
     }
 
     if (rawValue !== state) {
       const result = selectorFunc(state, ...args);
       previousArgs = args;
-      previousSelectResult = result;
+      previousSelectResult = { value: result };
       return result;
     }
 
@@ -348,9 +348,10 @@ export const createCachedSelector = <STATE, ARGS extends unknown[] = [], R = und
     const result = getRawValue(maybeProxyResult);
     const executionDurationMs =
       executionStartedAt === undefined ? undefined : performance.now() - executionStartedAt;
+    const previousResult = previousSelectResult;
     const retainedPreviousReference =
-      previousSelectResult !== undefined && shallowEqual(previousSelectResult, result);
-    const finalResult: R = retainedPreviousReference ? previousSelectResult as R : result;
+      previousResult !== undefined && shallowEqual(previousResult.value, result);
+    const finalResult: R = retainedPreviousReference ? previousResult.value : result;
 
     if (traceState) {
       traceState.recomputationCount += 1;
@@ -418,7 +419,7 @@ export const createCachedSelector = <STATE, ARGS extends unknown[] = [], R = und
       });
     }
 
-    previousSelectResult = finalResult;
+    previousSelectResult = { value: finalResult };
     previousArgs = args;
     previousState = rawValue;
     accessedPaths = newAccessedPaths;

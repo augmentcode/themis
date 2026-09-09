@@ -139,23 +139,41 @@ describe("createCachedSelector tracing", () => {
     expect(resultsReporter.mock.calls[0][0]).not.toHaveProperty("executionDurationMs");
   });
 
-  it("reports recomputation when an undefined result cannot be retained", () => {
+  it("reuses an undefined result when accessed state paths are unchanged", () => {
     const traceReporter = vi.fn();
+    const select = vi.fn((state: { count: number }) => {
+      void state.count;
+      return undefined;
+    });
     const selector = createCachedSelector(
-      (_state: { count: number }) => undefined,
+      select,
       { traceReporter, traceExecution: false, traceInvalidation: true, traceResults: true }
     );
 
-    selector({ count: 1 });
-    selector({ count: 1 });
+    expect(selector({ count: 1 })).toBeUndefined();
+    expect(selector({ count: 1 })).toBeUndefined();
+    expect(selector({ count: 2 })).toBeUndefined();
 
+    expect(select).toHaveBeenCalledTimes(2);
     expect(traceReporter.mock.calls.map(([trace]) => trace)).toEqual([
       expect.objectContaining({ invalidationReason: "first-execution", resultOutcome: "initial" }),
       expect.objectContaining({
-        invalidationReason: "previous-result-unavailable",
-        resultOutcome: "changed",
+        invalidationReason: "accessed-state-paths-changed",
+        resultOutcome: "retained-reference",
       }),
     ]);
+  });
+
+  it("reuses an undefined result while updates are locked", () => {
+    const lockUpdatesPredicate = vi.fn(() => true);
+    const select = vi.fn((_state: { count: number }) => undefined);
+    const selector = createCachedSelector(select, { lockUpdatesPredicate });
+
+    expect(selector({ count: 1 })).toBeUndefined();
+    expect(selector({ count: 2 })).toBeUndefined();
+
+    expect(select).toHaveBeenCalledTimes(1);
+    expect(lockUpdatesPredicate).toHaveBeenCalledTimes(2);
   });
 
   it("does no tracing work when no reporter is configured", () => {
