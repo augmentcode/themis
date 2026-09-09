@@ -8,7 +8,7 @@ import { readable, get, type Readable } from "svelte/store";
 import type { Observable } from "kefir";
 import { select } from "typed-redux-saga";
 import { createCachedSelector } from "../selector-core/create-cached-selector";
-import { evictSelectorOutput, getOrCreate } from "../selector-core/selector-output-cache";
+import { getOrCreate } from "../selector-core/selector-output-cache";
 import {
   getSelectorCacheTraceReporter,
   getSelectorComputationTraceOptions,
@@ -90,8 +90,7 @@ export const createSelector = <TStore extends Store<any, any>, ARGS extends any[
     const traceOptions = getSelectorComputationTraceOptions<SvelteState<TStore>, R, ARGS>(store);
     const traceCacheReporter = getSelectorCacheTraceReporter<SvelteState<TStore>, R, ARGS>(store);
 
-    let releaseInactiveOutput = () => {};
-    const output = getOrCreate(store, selectorFunc, restArgs, () => {
+    const output = getOrCreate(store, selectorFunc, restArgs, (releaseInactiveOutput) => {
       const argProperties = restArgs.map(readableArgToKefirProperty);
       const selected = createKefirSelectorProperty<TStore, ARGS, R>(
         store,
@@ -100,9 +99,8 @@ export const createSelector = <TStore extends Store<any, any>, ARGS extends any[
         () => restArgs.map(readReadableArg) as ARGS,
         traceOptions
       );
-      return kefirSelectorPropertyToReadable(selected, () => releaseInactiveOutput());
+      return kefirSelectorPropertyToReadable(selected, releaseInactiveOutput);
     }, traceCacheReporter ? { traceReporter: traceCacheReporter } : undefined);
-    releaseInactiveOutput = () => evictSelectorOutput(store, selectorFunc, restArgs, output);
     return output;
   };
 

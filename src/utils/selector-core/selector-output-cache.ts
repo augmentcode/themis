@@ -174,7 +174,11 @@ export const getOrCreate = <OUTPUT>(
     return current.value as OUTPUT;
   }
 
-  const value = factory();
+  let value: OUTPUT;
+  const releaseInactiveOutput = () => {
+    evictSelectorOutput(stateSource, selectorFunc, selectorArgs, value);
+  };
+  value = factory(releaseInactiveOutput);
   current.value = value;
   current.hasValue = true;
   if (traceState) {

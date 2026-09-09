@@ -5,7 +5,7 @@ import type { StreamingStore } from "../../streaming-store";
 import type { StoreSelectorCallback, StoreState } from "../../types";
 import type { StreamingArgs, StoreStreamingSelector } from "./types";
 import { createCachedSelector } from "../selector-core/create-cached-selector";
-import { evictSelectorOutput, getOrCreate } from "../selector-core/selector-output-cache";
+import { getOrCreate } from "../selector-core/selector-output-cache";
 import {
   getSelectorCacheTraceReporter,
   getSelectorComputationTraceOptions,
@@ -48,8 +48,7 @@ export const createSelector = <TStore extends StreamingStore<any, any>, ARGS ext
     const traceOptions = getSelectorComputationTraceOptions<StreamingState<TStore>, R, ARGS>(store);
     const traceCacheReporter = getSelectorCacheTraceReporter<StreamingState<TStore>, R, ARGS>(store);
 
-    let releaseInactiveOutput = () => {};
-    const output = getOrCreate(store, selectorFunc, restArgs, () => {
+    const output = getOrCreate(store, selectorFunc, restArgs, (releaseInactiveOutput) => {
       const hasObservableSelectorArgs = hasObservableArgs(restArgs);
       const selected = createKefirSelectorProperty<TStore, ARGS, R>(
         store,
@@ -57,11 +56,10 @@ export const createSelector = <TStore extends StreamingStore<any, any>, ARGS ext
         restArgs.map(toKefirObservable),
         hasObservableSelectorArgs ? undefined : () => restArgs as ARGS,
         traceOptions,
-        () => releaseInactiveOutput()
+        releaseInactiveOutput
       );
       return selected.property;
     }, traceCacheReporter ? { traceReporter: traceCacheReporter } : undefined);
-    releaseInactiveOutput = () => evictSelectorOutput(store, selectorFunc, restArgs, output);
     return output;
   };
 

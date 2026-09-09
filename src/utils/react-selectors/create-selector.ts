@@ -7,7 +7,7 @@ import type { ReactStore } from "../../react-store";
 import type { StoreSelectorCallback, StoreState } from "../../types";
 import type { SignalArgs, StoreReactSelector } from "./types";
 import { createCachedSelector } from "../selector-core/create-cached-selector";
-import { evictSelectorOutput, getOrCreate } from "../selector-core/selector-output-cache";
+import { getOrCreate } from "../selector-core/selector-output-cache";
 import {
   getSelectorCacheTraceReporter,
   getSelectorComputationTraceOptions,
@@ -107,8 +107,7 @@ export const createSelector = <TStore extends ReactStore<any, any>, ARGS extends
     const traceOptions = getSelectorComputationTraceOptions<SignalState<TStore>, R, ARGS>(store);
     const traceCacheReporter = getSelectorCacheTraceReporter<SignalState<TStore>, R, ARGS>(store);
 
-    let releaseInactiveOutput = () => {};
-    const output = getOrCreate(store, selectorFunc, restArgs, () => {
+    const output = getOrCreate(store, selectorFunc, restArgs, (releaseInactiveOutput) => {
       const argProperties = restArgs.map(signalArgToKefirProperty);
       const selected = createKefirSelectorProperty<TStore, ARGS, R>(
         store,
@@ -117,9 +116,8 @@ export const createSelector = <TStore extends ReactStore<any, any>, ARGS extends
         () => restArgs.map(readSignalArg) as ARGS,
         traceOptions
       );
-      return kefirSelectorPropertyToSignal(selected, () => releaseInactiveOutput());
+      return kefirSelectorPropertyToSignal(selected, releaseInactiveOutput);
     }, traceCacheReporter ? { traceReporter: traceCacheReporter } : undefined);
-    releaseInactiveOutput = () => evictSelectorOutput(store, selectorFunc, restArgs, output);
     return output;
   };
 

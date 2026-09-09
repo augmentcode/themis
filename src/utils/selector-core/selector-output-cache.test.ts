@@ -90,6 +90,29 @@ describe("selector output cache", () => {
     expect(getOrCreate(source, selector, [argB], () => ({ value: "fresh-b" }))).toBe(outputB);
   });
 
+  it("passes output-scoped cleanup to the factory and ignores stale cleanup", () => {
+    const source = { name: "source" };
+    const selector = (_state: unknown, arg: object) => arg;
+    const arg = { id: "item-1" };
+    const outputA = { value: "a" };
+    const outputB = { value: "b" };
+    let releaseOutputA: (() => void) | undefined;
+
+    expect(
+      getOrCreate(source, selector, [arg], (releaseInactiveOutput) => {
+        releaseOutputA = releaseInactiveOutput;
+        return outputA;
+      })
+    ).toBe(outputA);
+    expect(releaseOutputA).toEqual(expect.any(Function));
+
+    releaseOutputA?.();
+    expect(getOrCreate(source, selector, [arg], () => outputB)).toBe(outputB);
+
+    releaseOutputA?.();
+    expect(getOrCreate(source, selector, [arg], () => ({ value: "still-b" }))).toBe(outputB);
+  });
+
   it("traces cache requests without increasing cached count on hits", () => {
     const source = { name: "trace-source" };
     const selector = (_state: unknown, arg: object) => arg;
