@@ -48,17 +48,19 @@ export const createSelector = <TStore extends StreamingStore<any, any>, ARGS ext
     const traceOptions = getSelectorComputationTraceOptions<StreamingState<TStore>, R, ARGS>(store);
     const traceCacheReporter = getSelectorCacheTraceReporter<StreamingState<TStore>, R, ARGS>(store);
 
-    return getOrCreate(store, selectorFunc, restArgs, () => {
+    const output = getOrCreate(store, selectorFunc, restArgs, (releaseInactiveOutput) => {
       const hasObservableSelectorArgs = hasObservableArgs(restArgs);
       const selected = createKefirSelectorProperty<TStore, ARGS, R>(
         store,
         selectorFunc,
         restArgs.map(toKefirObservable),
         hasObservableSelectorArgs ? undefined : () => restArgs as ARGS,
-        traceOptions
+        traceOptions,
+        releaseInactiveOutput
       );
       return selected.property;
     }, traceCacheReporter ? { traceReporter: traceCacheReporter } : undefined);
+    return output;
   };
 
   const streamSelector = ((...restArgs: StreamingArgs<ARGS>) => {

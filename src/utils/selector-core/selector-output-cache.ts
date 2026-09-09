@@ -77,6 +77,33 @@ export const evictSelectorOutputsForStateSource = (stateSource: object): void =>
   traceStateByStateSource.delete(stateSource);
 };
 
+export const evictSelectorOutput = (
+  stateSource: object,
+  selectorFunc: SelectorOutputCacheKey,
+  selectorArgs: readonly unknown[],
+  expectedOutput?: unknown
+): void => {
+  let current = root.weakChildren?.get(stateSource);
+  if (!current) return;
+
+  current = current.weakChildren?.get(selectorFunc);
+  if (!current) return;
+
+  for (const arg of selectorArgs) {
+    current = isWeakCacheKey(arg)
+      ? current.weakChildren?.get(arg)
+      : current.primitiveChildren?.get(arg as PrimitiveCacheKey);
+    if (!current) return;
+  }
+
+  if (!current.hasValue || (expectedOutput !== undefined && current.value !== expectedOutput)) {
+    return;
+  }
+
+  current.hasValue = undefined;
+  current.value = undefined;
+};
+
 const getTraceState = (
   stateSource: object,
   selectorFunc: SelectorOutputCacheKey
@@ -147,7 +174,11 @@ export const getOrCreate = <OUTPUT>(
     return current.value as OUTPUT;
   }
 
-  const value = factory();
+  let value: OUTPUT;
+  const releaseInactiveOutput = () => {
+    evictSelectorOutput(stateSource, selectorFunc, selectorArgs, value);
+  };
+  value = factory(releaseInactiveOutput);
   current.value = value;
   current.hasValue = true;
   if (traceState) {

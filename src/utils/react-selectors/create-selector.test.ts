@@ -281,4 +281,27 @@ describe("react createSelector", () => {
       "createSelector requires a Store-like state source as the first argument."
     );
   });
+
+  it("evicts a signal only after its final watcher leaves", () => {
+    const state = signal<CounterState>(withUtility({ counter: { count: 1 } }));
+    const selectorStore = createMockStoreBinding(state);
+    const selectScaled = createSelector(selectorStore, (value, factor: number) => value.counter.count * factor);
+    const first = selectScaled(2);
+    const concurrent = selectScaled(3);
+    const firstSubscriptionA = first.subscribe(() => {});
+    const firstSubscriptionB = first.subscribe(() => {});
+    const concurrentSubscription = concurrent.subscribe(() => {});
+
+    expect(selectScaled(2)).toBe(first);
+    firstSubscriptionA();
+    expect(selectScaled(2)).toBe(first);
+    concurrentSubscription();
+    firstSubscriptionB();
+
+    state.value = withUtility({ counter: { count: 5 } });
+    const fresh = selectScaled(2);
+    expect(fresh).not.toBe(first);
+    expect(fresh.value).toBe(10);
+    expect(selectScaled(3)).not.toBe(concurrent);
+  });
 });

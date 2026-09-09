@@ -51,7 +51,8 @@ const readReadableArg = <T>(arg: T | Readable<T>): T => {
 type SvelteState<TStore> = StoreState<TStore>;
 
 const kefirSelectorPropertyToReadable = <R>(
-  selected: KefirSelectorProperty<R>
+  selected: KefirSelectorProperty<R>,
+  onInactive?: () => void
 ): Readable<R> => {
   let currentValue = selected.getSnapshot();
 
@@ -67,6 +68,7 @@ const kefirSelectorPropertyToReadable = <R>(
 
     return () => {
       subscription.unsubscribe();
+      onInactive?.();
     };
   });
 };
@@ -88,7 +90,7 @@ export const createSelector = <TStore extends Store<any, any>, ARGS extends any[
     const traceOptions = getSelectorComputationTraceOptions<SvelteState<TStore>, R, ARGS>(store);
     const traceCacheReporter = getSelectorCacheTraceReporter<SvelteState<TStore>, R, ARGS>(store);
 
-    return getOrCreate(store, selectorFunc, restArgs, () => {
+    const output = getOrCreate(store, selectorFunc, restArgs, (releaseInactiveOutput) => {
       const argProperties = restArgs.map(readableArgToKefirProperty);
       const selected = createKefirSelectorProperty<TStore, ARGS, R>(
         store,
@@ -97,8 +99,9 @@ export const createSelector = <TStore extends Store<any, any>, ARGS extends any[
         () => restArgs.map(readReadableArg) as ARGS,
         traceOptions
       );
-      return kefirSelectorPropertyToReadable(selected);
+      return kefirSelectorPropertyToReadable(selected, releaseInactiveOutput);
     }, traceCacheReporter ? { traceReporter: traceCacheReporter } : undefined);
+    return output;
   };
 
   const readableSelector = ((...restArgs: SvelteReadableArgs<ARGS>) => {

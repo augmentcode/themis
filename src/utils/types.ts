@@ -113,7 +113,7 @@ export type SelectorCadenceSourceSource = SelectorCadenceSource | SelectorCadenc
 
 export type SelectorOutputCacheKey = (...args: any[]) => unknown;
 
-export type SelectorOutputFactory<OUTPUT> = () => OUTPUT;
+export type SelectorOutputFactory<OUTPUT> = (releaseInactiveOutput: () => void) => OUTPUT;
 
 export type SelectorOutputCacheOptions = {
   traceReporter?: SelectorTraceReporter<any, any, any[]>;

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.7 - 2026-09-09
+
+- Cleared inactive selector output caches after the final consumer unsubscribes across Svelte, React, and Streaming selectors, with cleanup centralized in `getOrCreate`.
+- Prevented inactive outputs from retaining historical Redux snapshots; see https://github.com/intent-hq/intent/issues/4596#issuecomment-5592920634.
+
 ## 0.2.5 - 2026-08-31
 
 - Bumped package metadata for the 0.2.5 patch release.
