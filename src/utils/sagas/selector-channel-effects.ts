@@ -89,8 +89,9 @@ export function* createChannelFromSelector<R, ARGS extends any[]>(
         if (shallowEqual(prevValue, payload)) {
           return;
         }
-        emitter({ payload, prevPayload: prevValue });
+        const prevPayload = prevValue;
         prevValue = payload;
+        emitter({ payload, prevPayload });
       } catch (e) {
         reportRuntimeError?.({
           error: e,

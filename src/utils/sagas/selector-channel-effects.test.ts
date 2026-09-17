@@ -2,7 +2,9 @@ import type { ReadonlySignal } from "@preact/signals-react";
 import type { Observable } from "kefir";
 import type { Readable } from "svelte/store";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
-import { runSaga, type EventChannel } from "redux-saga";
+import { applyMiddleware, createStore } from "redux";
+import createSagaMiddleware, { runSaga, type EventChannel } from "redux-saga";
+import { put } from "typed-redux-saga";
 import type { StoreSelector, StoreState } from "../../types";
 import type { StoreReactSelector } from "../react-selectors/create-selector";
 import type { StoreStreamingSelector } from "../streaming-selectors/create-selector";
@@ -43,6 +45,21 @@ const createMockReduxStore = (initialState: CounterState) => {
       return listeners.size;
     },
   };
+};
+
+type CounterAction =
+  | { type: "counter/set"; payload: number }
+  | { type: "counter/noop" };
+
+const createSagaReduxStore = () => {
+  const sagaMiddleware = createSagaMiddleware();
+  const reduxStore = createStore(
+    (state: CounterState = withUtility(1), action: CounterAction) =>
+      action.type === "counter/set" ? withUtility(action.payload) : state,
+    applyMiddleware(sagaMiddleware)
+  );
+  sagaMiddleware.setContext({ reduxStore });
+  return { reduxStore, sagaMiddleware };
 };
 
 const createCountSelector = () => ({
@@ -179,13 +196,71 @@ describe("createChannelFromSelector", () => {
     await task.toPromise();
   });
 
-  it("reports selector evaluation errors through saga context", async () => {
+  it("does not duplicate a transition when its worker dispatches a reducer no-op", async () => {
+    const { reduxStore, sagaMiddleware } = createSagaReduxStore();
+    const selector = createCountSelector();
+    const received: SelectorChannelPayload<number>[] = [];
+
+    function* watchSelector() {
+      yield* takeEveryFromSelector(selector, [1], function* (payload) {
+        received.push(payload);
+        if (payload.payload === 2) {
+          yield* put({ type: "counter/noop" });
+        }
+      });
+    }
+
+    const task = sagaMiddleware.run(watchSelector);
+    await vi.waitFor(() => expect(received).toHaveLength(1));
+    reduxStore.dispatch({ type: "counter/set", payload: 2 });
+    await vi.waitFor(() => expect(received).toHaveLength(2));
+
+    expect(received).toEqual([
+      { payload: 1, prevPayload: null },
+      { payload: 2, prevPayload: 1 },
+    ]);
+    task.cancel();
+    await task.toPromise();
+  });
+
+  it("uses the emitted value as the baseline for a nested state change", async () => {
+    const { reduxStore, sagaMiddleware } = createSagaReduxStore();
+    const selector = createCountSelector();
+    const received: SelectorChannelPayload<number>[] = [];
+
+    function* watchSelector() {
+      yield* takeEveryFromSelector(selector, [1], function* (payload) {
+        received.push(payload);
+        if (payload.payload === 2) {
+          yield* put({ type: "counter/set", payload: 3 });
+        }
+      });
+    }
+
+    const task = sagaMiddleware.run(watchSelector);
+    await vi.waitFor(() => expect(received).toHaveLength(1));
+    reduxStore.dispatch({ type: "counter/set", payload: 2 });
+    await vi.waitFor(() => expect(received).toHaveLength(3));
+
+    expect(received).toEqual([
+      { payload: 1, prevPayload: null },
+      { payload: 2, prevPayload: 1 },
+      { payload: 3, prevPayload: 2 },
+    ]);
+    task.cancel();
+    await task.toPromise();
+  });
+
+  it("reports selector evaluation errors without replacing the successful baseline", async () => {
     const error = new Error("selector boom");
     const reportRuntimeError = vi.fn();
     const reduxStore = createMockReduxStore(withUtility(1));
     const selector = {
-      select: vi.fn(() => {
-        throw error;
+      select: vi.fn((state: CounterState) => {
+        if (state.counter.count === 2) {
+          throw error;
+        }
+        return state.counter.count;
       }),
     } as unknown as SelectorChannelSelector<number, [], CounterState>;
 
@@ -198,6 +273,12 @@ describe("createChannelFromSelector", () => {
       createChannel
     ).toPromise() as EventChannel<SelectorChannelPayload<number>>;
 
+    const initialPayload = new Promise<SelectorChannelPayload<number>>((resolve) => channel.take(resolve));
+    await expect(initialPayload).resolves.toEqual({ payload: 1, prevPayload: null });
+    const nextPayload = new Promise<SelectorChannelPayload<number>>((resolve) => channel.take(resolve));
+    reduxStore.setState(withUtility(2));
+    reduxStore.setState(withUtility(3));
+    await expect(nextPayload).resolves.toEqual({ payload: 3, prevPayload: 1 });
     channel.close();
     expect(reportRuntimeError).toHaveBeenCalledWith({
       error,
