@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.9 - 2026-09-17
+
+- Fixed selector-channel re-entrant updates so synchronous worker dispatches advance the previous payload baseline before emission, preventing duplicate or stale transitions.
+- Added regression coverage for reducer no-op and nested B-to-C dispatches while preserving initial selector emission and runtime-error behavior.
+
 ## 0.2.8 - 2026-09-17
 
 - Fixed selector-channel initial emissions by retaining the latest synchronous update in a one-item sliding buffer until the first taker consumes it.
