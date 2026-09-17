@@ -117,6 +117,9 @@ describe("createChannelFromSelector", () => {
     ).toPromise() as EventChannel<SelectorChannelPayload<number>>;
 
     try {
+      const initialPayload = new Promise<SelectorChannelPayload<number>>((resolve) => channel.take(resolve));
+      await expect(initialPayload).resolves.toEqual({ payload: 2, prevPayload: null });
+
       const nextPayload = new Promise<SelectorChannelPayload<number>>((resolve) => channel.take(resolve));
       reduxStore.setState(withUtility(3));
       const payload = await nextPayload;
@@ -130,6 +133,50 @@ describe("createChannelFromSelector", () => {
     expect(reduxStore.getState).toHaveBeenCalled();
     expect(selector.select).toHaveBeenCalledWith(withUtility(1), 2);
     expect(reduxStore.listenerCount()).toBe(0);
+  });
+
+  it("delivers the initial selector value when it never changes", async () => {
+    const reduxStore = createMockReduxStore(withUtility(1));
+    const selector = createCountSelector();
+    const received: SelectorChannelPayload<number>[] = [];
+
+    function* watchSelector() {
+      yield* takeEveryFromSelector(selector, [2], function* (payload) {
+        received.push(payload);
+      });
+    }
+
+    const task = runSaga({ context: { reduxStore } }, watchSelector);
+    await vi.waitFor(() => expect(received).toHaveLength(1));
+
+    expect(received).toEqual([{ payload: 2, prevPayload: null }]);
+    task.cancel();
+    await task.toPromise();
+  });
+
+  it("delivers the initial selector value once before a later change", async () => {
+    const reduxStore = createMockReduxStore(withUtility(1));
+    const selector = createCountSelector();
+    const received: SelectorChannelPayload<number>[] = [];
+
+    function* watchSelector() {
+      yield* takeEveryFromSelector(selector, [2], function* (payload) {
+        received.push(payload);
+      });
+    }
+
+    const task = runSaga({ context: { reduxStore } }, watchSelector);
+    await vi.waitFor(() => expect(received).toHaveLength(1));
+
+    reduxStore.setState(withUtility(3));
+    await vi.waitFor(() => expect(received).toHaveLength(2));
+
+    expect(received).toEqual([
+      { payload: 2, prevPayload: null },
+      { payload: 6, prevPayload: 2 },
+    ]);
+    task.cancel();
+    await task.toPromise();
   });
 
   it("reports selector evaluation errors through saga context", async () => {

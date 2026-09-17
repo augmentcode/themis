@@ -25,7 +25,7 @@
  * These effects automatically fork themselves, so you don't need to wrap them in fork().
  */
 import { take, cancel, fork, getContext as getSagaContext } from "typed-redux-saga";
-import { eventChannel, type EventChannel, type Task } from "redux-saga";
+import { buffers, eventChannel, type EventChannel, type Task } from "redux-saga";
 import type { ReduxStore } from "../../internal-types";
 import type { StoreRuntimeErrorReporter, StoreState } from "../../types";
 import { shallowEqual } from "fast-equals";
@@ -102,7 +102,7 @@ export function* createChannelFromSelector<R, ARGS extends any[]>(
     const unsubscribe = reduxStore.subscribe(emitCurrentValue);
     emitCurrentValue();
     return unsubscribe;
-  });
+  }, buffers.sliding(1));
 
   return channel;
 }
