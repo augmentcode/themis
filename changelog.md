@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.8 - 2026-09-17
+
+- Fixed selector-channel initial emissions by retaining the latest synchronous update in a one-item sliding buffer until the first taker consumes it.
+- Added regression coverage for initial and subsequent selector-channel transitions, and bumped the package metadata for the 0.2.8 release.
+
 ## 0.2.7 - 2026-09-09
 
 - Cleared inactive selector output caches after the final consumer unsubscribes across Svelte, React, and Streaming selectors, with cleanup centralized in `getOrCreate`.
