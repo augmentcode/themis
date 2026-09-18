@@ -43,6 +43,8 @@ triggers:
 
 - `createAsyncAction<[Args], Success>(asyncType, stagesType)` creates the request creator plus static `.success` and `.failure` creators.
 - A dispatched request action carries `payload`, `promise`, and per-instance `success`/`failure` creators.
+- Themis internally observes ignored async-action rejections, preventing unhandled-rejection events without changing the original promise; explicit awaiters still receive the original rejection.
+- Prefer `try/catch` around `await store.dispatch(asyncAction(...))` when handling a result or failure; dispatch returns the request's original, typed promise.
 - Reducers normally handle the request creator, `.success`, and `.failure` to update loading/data/error fields.
 - Sagas watch the request creator unless they are intentionally reacting to success/failure events.
 
@@ -103,6 +105,19 @@ const success = request.success({ id: "todo-1", title: "Ship docs" });
 success.payload.request.id satisfies string;
 ```
 
+### Await dispatch when the caller needs the result
+
+Using `loadTodo` above and an initialized Themis `store` whose saga settles the request:
+
+```ts
+try {
+  const todo = await store.dispatch(loadTodo("todo-1"));
+  todo satisfies Todo;
+} catch (error) {
+  console.error("Unable to load todo", error);
+}
+```
+
 ### Watch request creators directly in sagas
 
 ```ts
@@ -142,6 +157,7 @@ const [{ id, title }] = renameTodoFromList({ id: "todo-1", title: "Ship docs" })
 - Do not pass `.type` to saga watchers; pass the creator.
 - Do not use object payload types for one-argument actions unless an existing public contract already requires that shape.
 - Do not place generated timestamps or IDs in reducers; generate them before dispatch.
+- Do not attach `action.promise.catch(...)` to Themis async actions, including defensive `action.promise.catch(() => undefined)`: it is redundant and reported by `redundant-async-action-catch` when the promise is statically proven to come from a Themis async action. Use the dispatch-await pattern above for caller-owned error handling.
 
 ## Verification cues
 
