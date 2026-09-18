@@ -23,7 +23,7 @@ triggers:
 ---
 # Actions — `createAction` / `createAsyncAction`
 
-> Operational guidance for action creator work. API details and longer examples live in `@augmentcode/themis/docs/REDUCERS.md` → Actions and Async Actions. Public API: `@augmentcode/themis/utils/store/create-action`; related family guidance: `../SKILL.md` §3.
+> Operational guidance for action creator work. API details and longer examples live in `@augmentcode/themis/docs/REDUCERS.md` → Actions and Async Actions. Public API: `@augmentcode/themis/utils/store/create-action`; related reducer guidance: [Do](../reducers/SKILL.md#do).
 
 ## Use when
 

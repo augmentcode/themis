@@ -17,7 +17,7 @@ triggers:
 ---
 # State Serialization
 
-> Operational checklist for reducer state shape. Full rationale and examples: `@augmentcode/themis/docs/REDUCERS.md` → State Serialization Rules. Reducer API: `@augmentcode/themis/utils/store/create-reducer`; related guidance: `../SKILL.md` §12.
+> Operational checklist for reducer state shape. Full rationale and examples: `@augmentcode/themis/docs/REDUCERS.md` → State Serialization Rules. Reducer API: `@augmentcode/themis/utils/store/create-reducer`; canonical checklist: [Do](./SKILL.md#do) and [Don't](./SKILL.md#dont).
 
 ## Use when
 

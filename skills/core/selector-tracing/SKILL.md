@@ -24,7 +24,7 @@ reuse, invalidation, scheduling, or selector duration. The authoritative public
 reference is `@augmentcode/themis/docs/SELECTORS.md`; selector tracing types and
 runtime behavior are implementation evidence, not a second public API.
 
-## 1. Scope and safety rules
+## Scope and safety rules
 
 - Tracing is an opt-in diagnostic and is disabled by default in every build. Enable it only
   for a focused reproduction, then remove it or set it back to `false`.
@@ -39,7 +39,7 @@ runtime behavior are implementation evidence, not a second public API.
 - Prefer the smallest event-category set that answers the question. A broad
   `true` preset is useful for a short reproduction, not a permanent setting.
 
-## 2. Configure the Store
+## Configure the Store
 
 Tracing is configured as the third constructor argument of `Store`,
 `ReactStore`, or `StreamingStore`; pass `undefined` for middleware when there is
@@ -84,7 +84,7 @@ collector and publish period aggregates while retaining lifetime snapshots.
 execution, arguments, results, cache, or cadence. All threshold fields must be
 finite and non-negative; category and `summaryEnabled` fields must be boolean.
 
-## 2a. Store-owned logging streams
+## Store-owned logging streams
 
 Selector diagnostics use `traceStreams.selectorDetail`, `selectorSummary`, and
 `selectorCadence`; their events follow this skill's selector privacy contract.
@@ -97,14 +97,14 @@ When replacing console output with `loggerFactory` or wiring stream subscription
 cleanup, follow [Logger factory lifecycle](../redux-action-logging/SKILL.md#logger-factory-lifecycle).
 That section owns default/custom logger behavior, the factory example, and
 disposal/re-initialization; selector summary intervals remain covered below in
-[Aggregate summaries](./SKILL.md#4-aggregate-summaries).
+[Aggregate summaries](./SKILL.md#aggregate-summaries).
 
 The legacy `store.traceSelectors()` compatibility method can activate the same
 event preset in any build when construction used omitted or `false` tracing
 options. A configured object remains authoritative; do not use the method to
 override it.
 
-## 3. Read console aggregates as evidence
+## Read console aggregates as evidence
 
 Selector metadata is collected without per-call console output. When
 `summaryEnabled: true`, each non-empty interval emits one `console.info` call
@@ -150,7 +150,7 @@ Cadence diagnostics are separate scheduling messages, not selector payloads:
 Use them to distinguish Store scheduling pressure from selector computation.
 They do not expose state or selector values.
 
-## 4. Aggregate summaries
+## Aggregate summaries
 
 Set `summaryEnabled: true`—the sole switch that allocates the summary collector—
 for privacy-preserving per-selector aggregation, then
@@ -188,7 +188,7 @@ is allocated, even when detailed tracing categories are enabled. Repeated
 `store.dispose()` stop the interval and clear pending period data. Cadence
 subscribe and tick diagnostics remain immediate rather than aggregated.
 
-## 5. Store-family symmetry and lifecycle
+## Store-family symmetry and lifecycle
 
 The tracing options, events, summary shape, privacy behavior, and
 default-off/explicit-activation semantics are shared by all three Store
@@ -217,7 +217,7 @@ outputs, stops summary intervals, disposes cadence resources, and stops running
 sagas. Do not infer a tracing failure from the absence of records before
 `init()` or after disposal.
 
-## 6. Default-off production behavior and privacy
+## Default-off production behavior and privacy
 
 Tracing remains disabled by default in production as well as development. When
 explicitly enabled, production constructor options, the legacy activation
@@ -235,7 +235,7 @@ fixed invalidation, argument, and result labels. Treat `selectorSource` as
 callback identity only; it is limited to the first five source lines and 500
 characters and is not a state snapshot.
 
-## 7. Common mistakes
+## Common mistakes
 
 - **Expecting `true` to retain lifetime summaries:** `true` enables six event
   categories only; explicitly set `summaryEnabled: true` for the collector,
@@ -258,7 +258,7 @@ characters and is not a state snapshot.
 - **Logging values to enrich a trace:** this violates the privacy contract. Use
   source identity, counts, durations, cache metrics, and fixed labels only.
 
-## 8. Concise troubleshooting workflow
+## Concise troubleshooting workflow
 
 1. Confirm the Store family and the exact Store instance. Add the smallest flat
    object configuration needed, call `init()`, and reproduce through the real
@@ -282,7 +282,7 @@ characters and is not a state snapshot.
    before and after the change, compare counts, invalidation labels, cache
    ratios, and bounded p95, then dispose and turn tracing off.
 
-## 9. Evidence-oriented handoff
+## Evidence-oriented handoff
 
 Report the exact Store family, option fields enabled, initialization/disposal
 sequence, reproduction boundary, and relevant field names. Include redacted

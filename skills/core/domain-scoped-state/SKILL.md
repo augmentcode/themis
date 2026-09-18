@@ -6,7 +6,7 @@ description: >-
   returns getDomainState, setDomainState, and clearDomainState — immutable
   helpers that read with an emptyState fallback, write per-domain entries, and
   drop domains (returning the same reference when the id was absent). Public API:
-  @augmentcode/themis/utils/store/domain-scoped; related guidance: ../SKILL.md §10.
+  @augmentcode/themis/utils/store/domain-scoped; related guidance: ./SKILL.md#shape.
 type: sub-skill
 library: themis
 requires:
@@ -25,7 +25,7 @@ triggers:
 
 > State keyed by a domain id (e.g. workspace id, project id, tenant id). All three returned helpers are immutable: reads fall through to `emptyState`, writes produce a new state when the domain value changes, and `clearDomainState` returns the same reference when the id was already absent.
 
-## 1. Shape
+## Shape
 
 From `@augmentcode/themis/utils/store/domain-scoped`:
 
@@ -188,7 +188,7 @@ Because `clearDomainState` returns the same reference if the id was absent, sele
 )
 ```
 
-Source: `../SKILL.md §10`.
+Source: [Shape](./SKILL.md#shape).
 
 ### Storing a non-serializable `emptyState`
 
@@ -205,7 +205,7 @@ const emptyState = {
 };
 ```
 
-*Source: `../SKILL.md §10, §12`. See also `core/state-serialization`.*
+*Source: [Shape](./SKILL.md#shape), [State Serialization — Do](../state-serialization/SKILL.md#do) and [Don't](../state-serialization/SKILL.md#dont).*
 
 ### Using a different key than `byDomainId`
 

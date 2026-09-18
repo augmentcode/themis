@@ -60,7 +60,7 @@ lazily as described in **Read one action's group** below. Action/state payloads
 may contain application data; redact secrets and sensitive values before sharing.
 
 Selector metadata has a separate privacy contract; follow
-[Scope and safety rules](../selector-tracing/SKILL.md#1-scope-and-safety-rules).
+[Scope and safety rules](../selector-tracing/SKILL.md#scope-and-safety-rules).
 
 ## 2. Read one action's group
 
@@ -110,7 +110,7 @@ For default/custom rendering, factory attachment, and cleanup, follow
 
 Selector aggregation is independent of action logging. For `summaryEnabled`
 and collector allocation/publication, follow
-[Aggregate summaries](../selector-tracing/SKILL.md#4-aggregate-summaries).
+[Aggregate summaries](../selector-tracing/SKILL.md#aggregate-summaries).
 
 To disable logging, omit the option or set `logReduxActions: false` **and
 construct a new Store instance**. Changing an options object, calling `init()`
