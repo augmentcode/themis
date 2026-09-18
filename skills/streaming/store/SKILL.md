@@ -3,7 +3,8 @@ name: streaming/store
 description: >-
   StreamingStore import, initialization, disposal, and Store-runtime guidance for
   the Kefir/observable Store variant. Use for @augmentcode/themis/streaming-store,
-  inherited runSaga/dispatch/state behavior, and observable selector lifecycle.
+  process bootstrap and whole-Store ownership. Selector call validity and consumer
+  subscriptions belong to streaming/selector-lifecycle.
 type: sub-skill
 requires:
   - streaming
@@ -15,7 +16,7 @@ sources:
 triggers:
   - StreamingStore
   - streaming-store import
-  - Store state lifecycle
+  - Streaming Store state lifecycle
   - Kefir Store
   - observable Store
 ---
@@ -32,37 +33,47 @@ This is Streaming Store family guidance. For the same app/package/code path, do 
 
 ```ts
 import { StreamingStore } from "@augmentcode/themis/streaming-store";
+import type { StoreState } from "@augmentcode/themis/types";
 
 export const streamStore = new StreamingStore({ todos: todosReducer });
-const dispose = streamStore.init();
+export type AppState = StoreState<typeof streamStore>;
 ```
 
 ## Lifecycle rules
 
-- Construct `StreamingStore` with app-owned reducers and optional middleware, then call `streamStore.init(initialState?)` before invoking streaming selector calls.
-- Streaming selector calls return Kefir `Observable` outputs backed by the Store-owned Kefir state stream after initialization and throw before `init()` or after `dispose()`.
-- `streamStore.dispatch`, `streamStore.state`, `streamStore.runSaga(sagaFn)`, and `streamStore.dispose()` follow the shared Store runtime behavior documented in core Store guidance.
-- Do not manually register package-owned `@internal_` reducers or internal sagas.
+- The process/server/worker/test owner constructs the `StreamingStore` with app-owned reducers and optional middleware/options, calls `streamStore.init(initialState?)`, and retains the returned disposer for that owner's shutdown.
+- Initialization creates the Redux runtime and its Store-owned Kefir state source. The returned disposer delegates to `streamStore.dispose()` for whole-Store teardown. Selector invocation errors and observation timing are owned by `../selector-lifecycle/SKILL.md` — **Lifecycle map** and **Operational guardrails**.
+- Preserve constructor inference with `StoreState<typeof streamStore>` rather than widening the configured instance. For reducer registration, state shape, and reserved package-owned domains, read `../../core/file-structure/SKILL.md` — **Register a normal slice** and `../../core/saga-manager/SKILL.md` — **Store saga lifecycle**.
+- Use the initialized instance for `streamStore.state` and `streamStore.dispatch`; action/async-dispatch semantics belong to `../../core/actions/SKILL.md` — **Await dispatch when the caller needs the result**. App-saga placement belongs to `../../core/sagas/SKILL.md` — **Application saga startup**; startup, cancellation, and internal-manager boundaries belong to `../../core/saga-manager/SKILL.md` — **Store saga lifecycle**.
+
+## Process bootstrap
+
+Keep initialization and shutdown at one non-UI owner boundary. Application-specific saga and observer logic stay in their own modules; this example assumes `todosSaga` and `startConsumers` are app-owned functions.
+
+```ts
+const dispose = streamStore.init();
+const cancelTodosSaga = streamStore.runSaga(todosSaga);
+const stopConsumers = startConsumers();
+// When the process/test owner ends:
+stopConsumers();
+cancelTodosSaga();
+dispose();
+```
+
+For the Kefir subscription implementation behind `startConsumers`, read `../selector-lifecycle/SKILL.md` — **Consumer subscription ownership**. Store initialization does not start app sagas; follow `../../core/saga-manager/SKILL.md` — **Store saga lifecycle** for their explicit registration.
 
 ## Logging and tracing streams
 
-`StreamingStore.traceStreams` is a frozen, read-only collection of Kefir
-observables shared symmetrically with `Store` and `ReactStore`: `selectorDetail`,
-`selectorSummary`, `selectorCadence`, `sagaMonitor`, `runtimeError`, and
-`reduxAction`. Import
-`StoreTraceStreams` and `StoreLoggerFactory` from
-`@augmentcode/themis/types` when annotating a custom logger. The default logger
-subscribes to these streams and writes the established console prefixes. Redux
-action middleware is a pure event producer; StoreRuntime owns the default
-legend/group rendering. A custom `loggerFactory` replaces it and may return a
-disposer.
-
-Use `summaryEnabled: true` in the flat `traceSelectors` options object to opt
-into selector summary allocation. `summaryIntervalMs` controls publication
-cadence; detailed trace flags do not allocate summaries. Dispose direct Kefir
-subscriptions before `streamStore.dispose()`. Store disposal stops the logger,
-summary interval, selector cadence resources, and other Store-owned tracing
-resources; a later successful `init()` reattaches the configured logger.
+StreamingStore uses the cross-family diagnostics contract, not a separate Kefir
+logging API. Read `../../core/selector-tracing/SKILL.md` — **Configure the Store**,
+**Aggregate summaries**, and **Store-family symmetry and lifecycle** for tracing
+options, summary allocation, and selector-resource cleanup.
+Read `../../core/redux-action-logging/SKILL.md` — **Store-owned logging streams**,
+**Logger factory lifecycle**, **Read one action's group**, and **Keep logging
+opt-in and temporary** for the read-only stream inventory/types, logger
+replacement/disposer and reinitialization, middleware events, and rendering. Direct Kefir consumers
+follow `../selector-lifecycle/SKILL.md` — **Consumer subscription ownership**;
+they do not take over Store-owned logger or timer cleanup.
 
 ## Streaming family boundary
 
@@ -73,10 +84,11 @@ resources; a later successful `init()` reattaches the configured logger.
 
 - Imports use `@augmentcode/themis/streaming-store` for `StreamingStore`.
 - Examples and docs do not describe `Store` as a streaming API.
-- Streaming selector usage is initialized before observation, or tests explicitly assert the pre-init error path.
+- Process/test shutdown invokes the Store disposer and the app-owned saga cancel functions.
+- Selector usage follows `../selector-lifecycle/SKILL.md` — **Verification cues**, including error-path tests when applicable.
 
 ## See also
 
-- `streaming/selectors/SKILL.md` — Kefir selector return model.
-- `streaming/selector-lifecycle/SKILL.md` — safe invocation/teardown timing.
-- `core/import-boundaries/SKILL.md` — public package import surface.
+- `../selectors/SKILL.md` — **Call forms** for the Kefir selector return model.
+- `../selector-lifecycle/SKILL.md` — **Lifecycle map** for invocation/teardown timing.
+- `../../core/import-boundaries/SKILL.md` — **Setup — the package export surface**.

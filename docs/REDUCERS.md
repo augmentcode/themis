@@ -82,9 +82,28 @@ An async action creator returns:
 - `type` — The action type string
 - `asyncActionType` — The async operation type
 - `payload` — The request payload
-- `promise` — A promise that resolves with the response
+- `promise` — The original promise, resolved with the response by `action.success(response)` or rejected with the original error by `action.failure(error)`
 - `success` — Action creator for the success case
 - `failure` — Action creator for the failure case
+
+### Awaiting Results and Handling Failures
+
+Themis internally observes ignored async-action rejections, so fire-and-forget requests do not produce unhandled-rejection events. This does not replace the original promise or swallow errors for explicit awaiters: awaiting `action.promise` or the result of `store.dispatch(action)` still receives the original rejection.
+
+When the caller needs the result or must recover from failure, prefer `try/catch` around `await store.dispatch(asyncAction(...))`. Dispatch on an initialized Themis `Store`, `ReactStore`, or `StreamingStore` returns the request's original, typed promise. Using `fetchItems` above with a running saga that settles the request:
+
+```typescript
+try {
+  const response = await store.dispatch(fetchItems("active"));
+  console.log(response.items, response.total);
+} catch (error) {
+  console.error("Unable to fetch items", error);
+}
+```
+
+If the caller does not need the result, use `store.dispatch(fetchItems("active"))` without a defensive catch. Attaching `action.promise.catch(...)`, including `action.promise.catch(() => undefined)`, is redundant; the `themis/redundant-async-action-catch` ESLint rule reports catch calls when the promise is statically proven to come from a Themis async action. Move meaningful recovery into the dispatch-await `try/catch` pattern instead.
+
+Sagas should settle each request with its per-instance `action.success(...)` or `action.failure(...)` creators; reducers still handle the creator's static `.success` and `.failure` stages as shown below. See [Async Action Error Flow](./SAGAS.md#async-action-error-flow).
 
 ### Handling Async Actions in Reducers
 

@@ -102,6 +102,8 @@ export function createAsyncAction<ARGS extends any[] = [], PL = ARGS, R = unknow
       resolve = res;
       reject = rej;
     });
+    // Observe ignored failures without replacing the promise callers await.
+    void promise.catch(() => undefined);
 
     if (payloadModifier) {
       payload = (payloadModifier as any)(...args);

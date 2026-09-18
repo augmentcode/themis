@@ -1,9 +1,9 @@
 ---
 name: react/migration/setup
 description: >-
-  Pre-migration ReactStore setup. Use the canonical setup skill plus ReactStore
-  routing to create the configured store, initialize/dispose it at the React app
-  owner, register app reducers, and start app sagas.
+  ReactStore adoption checkpoint before migrating existing React state owners.
+  Confirms installation, the selected family, and the app lifecycle owner by
+  following setup and React component-integration, without repeating bootstrap.
 type: sub-skill
 requires:
   - react
@@ -11,99 +11,44 @@ requires:
   - react/migration
 triggers:
   - ReactStore migration setup
-  - bootstrap ReactStore
-  - React reducer registry
+  - prepare React state migration
+  - React migration readiness
 ---
 # React migration setup
 
-Complete this once before migrating individual React state owners. Start at the canonical root setup skill (`../../../setup/SKILL.md`), choose the React Store family, and keep the app on `ReactStore` for this code path.
+Use this checkpoint only when adopting `ReactStore` into an existing app. For a
+new app or an unresolved family choice, start with
+[Store-family decision gate](../../../setup/SKILL.md#store-family-decision-gate)
+and [Installation workflow](../../../setup/SKILL.md#installation-workflow).
+Runtime bootstrap mechanics belong to `../../component-integration/SKILL.md`.
 
-## 1. Import the public ReactStore runtime
+## Adoption checkpoint
 
-Use the npm package directly. Do not copy package source files into the app.
+Before migrating the first state owner, record the existing or newly configured
+app runtime and the evidence for each checkpoint:
 
-```ts
-import { ReactStore } from "@augmentcode/themis/react-store";
-import type { StoreState } from "@augmentcode/themis/types";
-```
+| Migration checkpoint | Canonical implementation |
+| --- | --- |
+| Package installed, public imports used rather than copied source | [Installation workflow](../../../setup/SKILL.md#installation-workflow) and [Correct import and class choice](../../store/SKILL.md#correct-import-and-class-choice) |
+| One app-owned store and reducer map, with no package-internal registrations | [Create and configure ReactStore](../../component-integration/SKILL.md#create-and-configure-reactstore) |
+| Migrated selector users cannot render before initialization | [Initialize before React renders selector users](../../component-integration/SKILL.md#initialize-before-react-renders-selector-users) |
+| The same bootstrap, test, or mount adapter owns cleanup, not a child effect | [Dispose at the same owner boundary](../../component-integration/SKILL.md#dispose-at-the-same-owner-boundary) |
+| Migrated sagas start explicitly after initialization and have a cancellation owner | [Start app sagas explicitly](../../component-integration/SKILL.md#start-app-sagas-explicitly) |
 
-## 2. Create an app-owned ReactStore module
+Reuse an existing configured store rather than introducing a second runtime. If
+no slice has migrated yet, its initial app-owned reducer map can be empty; add
+reducers as their owners migrate using the linked configuration procedure.
 
-Start with the migrated reducer map you already have, or an empty app-owned map when preparing the runtime before the first slice.
+## Add slices incrementally
 
-```ts
-// src/store/react-store.ts
-import { ReactStore } from "@augmentcode/themis/react-store";
-import type { StoreState } from "@augmentcode/themis/types";
-
-export const reactStore = new ReactStore({});
-export type AppState = StoreState<typeof reactStore>;
-```
-
-As slices migrate, add app-owned reducers to the constructor map. Do not manually register package-owned `@internal_` reducers or internal sagas.
-
-## 3. Initialize before rendering selector users
-
-Call `reactStore.init(initialState?)` at the React bootstrap, test harness, or
-micro-frontend mount boundary before components call direct selector signals or
-`.useValue(...args)` fallbacks.
-
-```tsx
-// src/main.tsx
-import React from "react";
-import { createRoot } from "react-dom/client";
-import { App } from "./App";
-import { reactStore } from "./store/react-store";
-
-const root = createRoot(document.getElementById("root")!);
-const disposeStore = reactStore.init();
-
-root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
-
-export function disposeApp() {
-  root.unmount();
-  disposeStore();
-}
-```
-
-Do not hide `init()` in a child component `useEffect`; effects run after the
-first render and can be too late for direct selector signal calls or
-`.useValue(...args)` fallbacks.
-
-## 4. Start app sagas explicitly after init
-
-`reactStore.init()` starts package-owned runtime work, not app sagas. Start each migrated app saga with `reactStore.runSaga(sagaFn)` after initialization.
-
-```ts
-import { reactStore } from "./store/react-store";
-import { cartSaga } from "./store/cart/sagas/cart-saga";
-
-const disposeStore = reactStore.init();
-const cancelCartSaga = reactStore.runSaga(cartSaga);
-
-export function disposeRuntime() {
-  cancelCartSaga();
-  disposeStore();
-}
-```
-
-## 5. Add slices incrementally
-
-Per migrated slice, create app files such as:
-
-- `src/store/{slice}/{slice}-slice.ts` for initial state, actions, reducer.
-- `src/store/{slice}/{slice}-selectors.ts` for `reactStore.createSelector(...)`.
-- `src/store/{slice}/sagas/{slice}-saga.ts` for async/shared side effects.
-
-Then add the reducer to the `ReactStore` constructor map and start the saga from the same runtime owner that initialized the store.
+Migrate one inventoried owner at a time. Follow
+[Setup — slice directory layout](../../../core/file-structure/SKILL.md#setup--slice-directory-layout)
+for slice types, actions/reducers, selectors, sagas, and tests rather than copying
+a second layout here. Register the migrated reducer and start its saga through
+the same runtime owner recorded in the checkpoint above.
 
 ## Verification cues
 
-- `ReactStore` comes from `@augmentcode/themis/react-store`.
-- Store initialization happens before React renders selector users.
-- App sagas start with `reactStore.runSaga(sagaFn)` after `init()`.
-- Setup instructions keep initialization and saga ownership at the React app boundary.
+- Record the configured store module, bootstrap/mount owner, teardown path, and
+  migrated reducer/saga registrations; verify each against its canonical section above.
+- Continue to `../writable-stores/SKILL.md` only after this checkpoint is satisfied.

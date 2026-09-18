@@ -56,6 +56,11 @@ export type StoreAsyncAction<PL = undefined, R = unknown> = {
   failure: StoreActionCreator<[Error], ErrorResponse<PL>>;
 };
 
+export type StoreDispatch = {
+  <PL, R>(action: StoreAsyncAction<PL, R>): Promise<R>;
+  <T extends UnknownAction>(action: T): T;
+};
+
 export type StoreAsyncActionCreator<ARGS extends any[] = [], PL = ARGS, R = unknown> = {
   (...args: ARGS): StoreAsyncAction<PL, R>;
   type: string;

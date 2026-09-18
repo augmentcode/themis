@@ -26,6 +26,7 @@ function architectureErrorRules(rulePlugins) {
 }
 
 export const architectureRules = {
+  redundantAsyncActionCatch: "redundant-async-action-catch",
   duplicateActionType: "duplicate-action-type",
   duplicateSelectorExport: "duplicate-selector-export",
   duplicateSelectorImplementation: "duplicate-selector-implementation",

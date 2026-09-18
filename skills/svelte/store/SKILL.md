@@ -16,9 +16,9 @@ sources:
   - "@augmentcode/themis/docs/ARCHITECTURE.md"
   - "@augmentcode/themis/README.md"
 triggers:
-  - Store class
+  - Svelte Store class
   - svelte-store import
-  - Store state lifecycle
+  - Svelte Store state lifecycle
   - useInitStore
   - useRunSaga
   - Svelte readable Store
@@ -44,10 +44,29 @@ const dispose = store.init();
 ## Lifecycle rules
 
 - Construct `Store` with app-owned reducers and optional middleware, then call `store.init(initialState?)` before invoking direct selector calls.
+- Infer state with `StoreState<typeof store>` from `@augmentcode/themis/types`; avoid an explicit `: Store` annotation that loses constructor reducer-map inference. `getReducers()` exposes the app-owned reducer map; `addMiddleware(...)` adds middleware before initialization. Custom middleware is prepended before the base chain.
 - Direct selector calls return Svelte `Readable` outputs backed by the Store-owned state stream after initialization and throw before `init()` or after `dispose()`.
-- If a store context already exists in the Svelte component tree, `init()` skips setup and returns a noop disposer, so nested Store components do not double-initialize.
-- `store.dispatch`, `store.state`, `store.runSaga(sagaFn)`, and `store.dispose()` follow the shared Store runtime behavior documented in core Store guidance.
+- If a Store runtime or context already exists in the Svelte component tree, `init()` skips setup and returns a noop disposer. Do not try to add child-layout reducers, middleware, or sagas by repeating `init()`; configure the owning Store instead.
+- `init()` creates Redux/readable state and starts the package-owned saga manager, but does **not** start app sagas. Start each app saga explicitly after initialization; see **App saga lifetime** below.
+- Capture the disposer returned by `init()` and register `onDestroy(dispose)` in a component owner. It is equivalent to `store.dispose()`, which stops Store-owned tasks/subscriptions, removes devtools registration, and is safe before initialization. Tests and non-component owners must also dispose their Store.
+- `initDevTool()` explicitly registers an initialized Store for inspection and returns its own cleanup function; it is not part of normal bootstrap. See `../../core/debugging/SKILL.md` for diagnostics.
+- Use `store.dispatch(action)` and `store.state` on the initialized Store. For async dispatch completion use `../../core/actions/SKILL.md`; for app selector creation use `../selectors/SKILL.md` → **Choose the factory**.
 - Do not manually register package-owned `@internal_` reducers or internal sagas.
+
+## App saga lifetime
+
+- `store.runSaga(sagaFn)` derives the managed name from the function, starts the saga, and returns a per-saga cancel function. It throws before `init()` or for a reserved internal name; never start `@internal_sagaManager` yourself.
+- In a component, `onMount(() => store.runSaga(sagaFn))` starts on mount and returns cancellation to Svelte for unmount. Remounting starts it again; this is not a once-per-Store-creation initializer.
+- In a service or test, keep `const cancel = store.runSaga(sagaFn)` and call `cancel()` when that operation ends.
+- Per-saga cancellation is distinct from whole-Store teardown. Use the cancel function for ordinary mount/operation cleanup and `store.dispose()` only when the owner ends the Store lifetime.
+- Framework-neutral lifetime placement lives in `../../core/sagas/SKILL.md` → **Application saga startup**; managed startup/cancellation/disposal lives in `../../core/saga-manager/SKILL.md` → **Store saga lifecycle**. Root-layout wiring lives in `../component-integration/SKILL.md` → **Root layout wiring**.
+
+```ts
+const dispose = store.init();
+const cancel = store.runSaga(editorSaga);
+cancel(); // end this saga's operation
+dispose(); // end the Store owner's lifetime
+```
 
 ## Svelte component lifecycle helpers
 
@@ -69,7 +88,7 @@ const dispose = store.init();
 
 ## See also
 
-- `../selectors/SKILL.md` — `store.createSelector` and selector call modes.
+- `../selectors/SKILL.md` — `store.createSelector`, composition, and cache contracts.
 - `../selector-lifecycle/SKILL.md` — component-init, handler, and saga call modes.
 - `../component-integration/SKILL.md` — root layout wiring and template reactivity.
 - `../../core/import-boundaries/SKILL.md` — public package import surface.

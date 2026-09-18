@@ -2,12 +2,12 @@
 name: react/migration/component-migration
 description: >-
   Migrate React JSX/TSX components and custom hooks to ReactStore selectors and
-  Store-first dispatch. Prefer direct selector signals in components/hooks, use
-  selector .useValue(...args) only for necessary hook/plain-value fallback reads,
-  .select(state, ...args) in handlers/tests.
+  Store-first dispatch. Owns before/after consumer mapping and rollout order;
+  defers call-mode decisions to React selector lifecycle.
 type: sub-skill
 requires:
   - react/component-integration
+  - react/selector-lifecycle
   - react/migration
 triggers:
   - migrate React component
@@ -17,12 +17,12 @@ triggers:
 # React component migration
 
 Replace old React state/context/custom-hook reads with `ReactStore` selectors,
-read in components and custom hooks via direct selector signals where possible,
-use `.useValue(...args)` only when a plain value is necessary, and dispatch through the
-configured `ReactStore` instance.
+prefer signal-aware consumers, and dispatch through the configured store.
 
-React migration steps use component/custom-hook boundaries and the explicit
-selector call modes described below.
+Choose render, hook, handler, and test entry points using
+[Call-mode map](../../selector-lifecycle/SKILL.md#call-mode-map). Apply
+[React signal consumption guardrails](../../selector-lifecycle/SKILL.md#react-signal-consumption-guardrails)
+to the `.value` reads in the migrated example, including React tracking.
 
 ## Before: context/custom hook consumption
 
@@ -55,58 +55,31 @@ export function CartButton({ id }: { id: string }) {
 
 ## Custom hook migration
 
-Prefer returning signals from migrated custom hooks when callers can accept them.
-Use `.useValue(...args)` only for legacy hook contracts that must return plain values.
-
-```tsx
-import { selectCartTotal, selectIsCartSaving } from "../store/cart/cart-selectors";
-
-export function useCartSummary() {
-  const total = selectCartTotal();
-  const isSaving = selectIsCartSaving();
-  return { total, isSaving };
-}
-```
+Record which existing hook contracts can become signal-aware and which must
+keep plain values. Follow [Call-mode map](../../selector-lifecycle/SKILL.md#call-mode-map)
+and [Fallback hook/plain-value read](../../selector-lifecycle/SKILL.md#fallback-hookplain-value-read)
+instead of maintaining a second hook-consumption recipe here.
 
 ## Handler one-shot reads
 
-Handlers should not call `.useValue(...args)` and should not create direct signals just
-to read once. Use `.select(reactStore.state, ...args)`.
-
-```tsx
-import { reactStore } from "../store/react-store";
-import { checkoutRequested } from "../store/cart/cart-slice";
-import { selectCanCheckout } from "../store/cart/cart-selectors";
-
-export function CheckoutButton() {
-  function onCheckout() {
-    if (selectCanCheckout.select(reactStore.state)) {
-      reactStore.dispatch(checkoutRequested());
-    }
-  }
-  return <button onClick={onCheckout}>Checkout</button>;
-}
-```
+Move old context snapshots to the configured store without introducing a render
+subscription. Use [Handler and test one-shot reads](../../selector-lifecycle/SKILL.md#handler-and-test-one-shot-reads)
+for the implementation and hook-boundary restrictions.
 
 ## Rollout order per component
 
-1. Replace old state/context/custom-hook imports with the new slice actions,selectors, and configured `reactStore` instance.
-2. Replace render-time reads with direct selector signals; use `.useValue(...args)` only
-   for necessary plain-value boundaries.
+1. Replace old state/context/custom-hook imports with the new slice actions, selectors, and configured `reactStore` instance.
+2. Map each read boundary using [Call-mode map](../../selector-lifecycle/SKILL.md#call-mode-map).
 3. Replace writes with `reactStore.dispatch(actionCreator(...))`.
-4. Replace handler/test one-shot reads with `.select(reactStore.state, ...args)`.
-5. Keep single-component ephemeral UI state in React component state.
+4. Verify both render consumers and one-shot handlers against the lifecycle examples above.
+5. Preserve local-state decisions from [Decision framework](../assessment/SKILL.md#decision-framework).
 6. Remove obsolete providers/hooks only after all consumers migrate.
 
 ## Bad: calling `.useValue` in an event handler
 
-```tsx
-// BAD: .useValue belongs in React components/custom hooks during render, not handlers.
-function onSubmit() {
-  const canCheckout = selectCanCheckout.useValue();
-  if (canCheckout) reactStore.dispatch(checkoutRequested());
-}
-```
+Moving a custom-hook read into an event handler can violate React hook rules.
+Check [Pitfalls](../../selector-lifecycle/SKILL.md#pitfalls) before replacing the
+old consumer; do not carry its render-only call mode into callbacks.
 
 ## Bad: duplicate old and new owners
 

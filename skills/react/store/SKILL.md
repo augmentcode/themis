@@ -3,7 +3,8 @@ name: react/store
 description: >-
   ReactStore import, initialization, disposal, and Store-runtime guidance for the
   React signal Store variant. Use for @augmentcode/themis/react-store,
-  inherited runSaga/dispatch/state behavior, and React signal selector call modes.
+  inherited runSaga/dispatch/state behavior, with app wiring and selector call
+  modes delegated to their React owners.
 type: sub-skill
 requires:
   - react
@@ -15,7 +16,7 @@ sources:
 triggers:
   - ReactStore
   - react-store import
-  - Store state lifecycle
+  - ReactStore state lifecycle
   - signal Store
 ---
 # ReactStore import and lifecycle
@@ -38,6 +39,12 @@ const dispose = reactStore.init();
 
 ## Lifecycle rules
 
+This is a runtime API summary. Bootstrap, init/dispose ownership, and app saga
+startup procedures belong to
+[Create and configure ReactStore](../component-integration/SKILL.md#create-and-configure-reactstore)
+and its lifecycle sections. Consumer call-mode decisions belong to
+[Call-mode map](../selector-lifecycle/SKILL.md#call-mode-map).
+
 - Construct `ReactStore` with app-owned reducers and optional middleware, then
   call `reactStore.init(initialState?)` before invoking direct selector calls or
   `.useValue(...args)`.
@@ -47,7 +54,8 @@ const dispose = reactStore.init();
   module-level shared Preact signals.
 - `reactStore.dispatch`, `reactStore.state`, `reactStore.runSaga(sagaFn)`, and
   `reactStore.dispose()` follow the shared Store runtime behavior documented in
-  core Store guidance.
+  `@augmentcode/themis/docs/ARCHITECTURE.md`; saga runtime mechanics are in
+  [Store saga lifecycle](../../core/saga-manager/SKILL.md#store-saga-lifecycle).
 - Do not manually register package-owned `@internal_` reducers or internal sagas.
 
 ## Verification cues

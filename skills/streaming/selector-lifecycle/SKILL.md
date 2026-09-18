@@ -3,8 +3,8 @@ name: streaming/selector-lifecycle
 description: >-
   Lifecycle guidance for StreamingStore selectors: selectors may be defined from
   the configured StreamingStore, but direct observable calls require init();
-  dispose() tears down the Store-owned stream state. Use this for
-  stream observation timing and withStore(streamStore) bindings.
+  direct calls are invalid after disposal. Owns consumer subscription timing and
+  withStore(streamStore) bindings, not Store construction or runtime teardown.
 type: sub-skill
 requires:
   - streaming
@@ -16,7 +16,7 @@ sources:
 triggers:
   - stream selector lifecycle
   - observe selector stream
-  - selector before init
+  - streaming selector before init
   - streaming selector teardown
   - withStore stream
 ---
@@ -25,6 +25,8 @@ triggers:
 Use this skill to decide when a Streaming selector can be invoked, observed, or bound to an alternate StreamingStore.
 
 Use it only for apps that chose the Streaming Store family. Do not combine these Streaming lifecycle/setup rules with alternate Store or selector lifecycle/setup patterns in the same app.
+
+For construction, initialization, and whole-Store shutdown, read `../store/SKILL.md` — **Lifecycle rules** and **Process bootstrap**. This leaf owns when consumers may call and observe selectors, not how the Store runtime is initialized or disposed.
 
 ## Lifecycle map
 
@@ -36,19 +38,33 @@ Use it only for apps that chose the Streaming Store family. Do not combine these
 | Tests/composition | Use selectFoo.select(state, ...args) | Pure synchronous selector path, no Store lifecycle needed. |
 | Sagas | Use yield* selectFoo.effect(...args) | Keeps named selector ownership and typed-redux-saga style. |
 | Explicit StreamingStore binding | Use selectFoo.withStore(streamStore)(...args) | Binds to another initialized StreamingStore. |
-| Teardown | Stop consumers and call streamStore.dispose() when the owner ends | dispose() clears Store-owned stream state and shared runtime resources. |
+| Consumer teardown | Unsubscribe each consumer when its owner ends, before whole-Store shutdown | Consumer ownership is separate from the Store lifetime in ../store/SKILL.md — **Lifecycle rules**. |
 
 ## Operational guardrails
 
 - Direct selector calls intentionally throw before `init()` and after `dispose()`; do not hide that error with fallback empty streams.
 - A direct selector call returns a Kefir observable. Manage observation/teardown using the consuming app's Kefir subscription pattern.
-- Same StreamingStore + selector + args direct calls reuse the cached Kefir Observable, but only call direct observable mode after `init()` or through a valid `.withStore(...)` binding.
+- Output reuse does not extend the valid invocation window; see `../selectors/SKILL.md` — **Selector caching** for the identity/cache contract.
 - `.withStore(...)` accepts another initialized StreamingStore; use it for tests/integration adapters that own their own initialized Store state.
-- `.select(...)` and `.effect(...)` are not streaming subscriptions. They are the pure read and saga read escape hatches for selector composition and saga reads.
-- Selector-channel helpers can consume StreamingStore selectors in sagas through
-  the shared `.select`/`.effect` read shape. Pass plain args to the helper args
-  tuple; do not treat direct Kefir Observable selector outputs as saga
-  subscriptions.
+- For non-subscription read forms, use `../selectors/SKILL.md` — **Call forms**. Selector-driven saga subscriptions instead follow `../../core/selector-channels/SKILL.md` — **Do** and **Implementation cues**, including the plain-argument tuple and saga-context state contract.
+
+## Consumer subscription ownership
+
+The process bootstrap in `../store/SKILL.md` — **Process bootstrap** initializes
+the Store before starting consumers. Each Kefir consumer retains its own
+subscription and stops it before that Store owner shuts down. For example, an
+app-owned `startConsumers` function can return the observer's cleanup:
+
+```ts
+function startConsumers() {
+  const subscription = selectTodoCount().observe(handleTodoCount);
+  return () => subscription.unsubscribe();
+}
+```
+
+Use the same ownership pattern for direct public diagnostic-stream observations;
+the logger's own lifecycle remains in `../../core/redux-action-logging/SKILL.md` —
+**Logger factory lifecycle** and **Store-owned logging streams**. Do not import internal emitters to subscribe.
 
 ## Verification cues
 

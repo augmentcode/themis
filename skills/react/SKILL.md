@@ -56,35 +56,31 @@ selector consumption. Generic Redux/redux-saga guidance remains in `../core/`.
 | Route | Use when |
 | --- | --- |
 | `./signals/SKILL.md` | General Preact Signals guidance for ReactStore apps: `ReadonlySignal<T>`, `.value`, `computed`, Babel transform/`useSignals()` tracking, direct JSX signal rendering, component-local signal hooks, and avoiding module-level shared signal state. |
-| `./store/SKILL.md` | Choosing/importing `ReactStore`, initialization/disposal, shared Store runtime behavior, or Store-family contrast. |
-| `./selectors/SKILL.md` | Authoring selectors whose direct calls return cached `ReadonlySignal<R>` outputs, preferring direct signals in React consumers, using `.useValue(...args)` only for hook/plain-value fallback paths, plus `.withStore`, `.select`, and saga-only `.effect`. |
+| `./store/SKILL.md` | Public `ReactStore` import and runtime API summary; app bootstrap mechanics live in component-integration. |
+| `./selectors/SKILL.md` | Authoring Store-bound selectors, pure composition, argument tracking/stability, and cached `ReadonlySignal<R>` outputs; consumer call modes live in selector-lifecycle. |
 | `./component-integration/SKILL.md` | Wiring `ReactStore` into JSX/TSX React apps, bootstrap/root init and disposal ownership, app saga startup through `reactStore.runSaga(sagaFn)`, React component reads through direct signals first, and Store-first dispatch. |
 | `./selector-lifecycle/SKILL.md` | Choosing React selector call modes across component render/custom hooks, direct signal-aware code, handlers/callbacks/tests, sagas, selector composition, and explicit `.withStore(...)` binding. |
 | `./selector-scheduling/SKILL.md` | React `ReadonlySignal`/`.useValue(...args)` scheduling guidance: same source + selector + args output reuse, Store-owned selector coalescing, `throttledSelectorFrequency`, package-private scheduler boundaries, and no manual debounce/audit-log misuse. |
 | `./migration/SKILL.md` | React migration/adoption work from local React state/context/hooks/effects/external stores to `ReactStore`, selectors, actions, reducers, sagas, signal-first component consumption, and cleanup. |
 
-First-time app setup starts at the canonical root setup skill: `../setup/SKILL.md`.
+First-time installation and family choice start at
+[Store-family decision gate](../setup/SKILL.md#store-family-decision-gate).
+Once React is selected, [Create and configure ReactStore](./component-integration/SKILL.md#create-and-configure-reactstore)
+owns runtime bootstrap. Adoption of existing state uses the migration
+[Adoption checkpoint](./migration/setup/SKILL.md#adoption-checkpoint), not another bootstrap procedure.
 
 ## Routing rules
 
 - Use `ReactStore` only from `@augmentcode/themis/react-store`.
 - Create production app-local React selectors through the configured
   `ReactStore` instance: `reactStore.createSelector(...)`.
-- Direct selector calls return `ReadonlySignal<R>` values and are the preferred
-  React component/custom-hook integration path when consumers can accept signals.
-- Components that read direct selector `.value` must rely on the Preact Signals
-  Babel transform or an explicit `useSignals()` runtime fallback; passing or
-  intentionally rendering signals in JSX is valid when the consumer is
-  signal-aware.
-- Use `.useValue(...args)` only when a React hook/plain value is necessary and adapting
-  the consumer to accept a signal is impractical.
-- Direct signal outputs and `.useValue(...args)` are throttled by
-  `throttledSelectorFrequency`.
-- Direct `ReadonlySignal` outputs are cached for the same ReactStore instance + selector + args; do not add memoize/cache/debounce/throttle wrappers for selector performance.
-- Selector trace output is a default-off diagnostic; pass
-  `{ traceSelectors: true }` only while diagnosing selector scheduling.
-- `.effect(...args)` stays saga-only; it is not a hook or render subscription.
-- `.select(state, ...args)` stays the pure selector path for tests/composition.
+- Signal-first consumers and necessary plain-value fallbacks follow
+  [Call-mode map](./selector-lifecycle/SKILL.md#call-mode-map); tracking and
+  wrong-shape boundaries follow [React signal consumption guardrails](./selector-lifecycle/SKILL.md#react-signal-consumption-guardrails).
+- Output reuse and avoiding extra memoization follow
+  [Selector caching](./selectors/SKILL.md#selector-caching).
+- Store-owned cadence and temporary trace options follow
+  [Store-first scheduling rule](./selector-scheduling/SKILL.md#store-first-scheduling-rule).
 - React component, selector lifecycle, selector scheduling, and migration work must
   route to the React leaves above as operational guidance for this app.
 
