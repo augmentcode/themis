@@ -44,7 +44,7 @@ shared by all three families and is disabled when omitted or set to `false`.
 
 ## Store-owned logging streams
 
-The Store exposes six read-only Kefir streams through `traceStreams`:
+The Store exposes a frozen `traceStreams` collection of six read-only Kefir streams:
 `selectorDetail`, `selectorSummary`, `selectorCadence`, `sagaMonitor`,
 `runtimeError`, and `reduxAction`. The collection exposes no emitters and does not
 permit consumers to publish events. Public `StoreTraceStreams` and
