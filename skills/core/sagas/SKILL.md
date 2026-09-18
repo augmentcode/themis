@@ -44,7 +44,7 @@ Use this skill when editing saga code or writing instructions for saga changes. 
 - Import the named selectors from the owning slice's `[slice]-selectors.ts` file; saga modules must not declare local `select*` functions/factories, even when they are not exported.
 - Subscribe with concrete action creators, action-creator arrays, or selector-channel helpers; never use `take('*')` or other wildcard takes.
 - Search before adding watchers: trigger action, worker name, registration name, and operation terms must have one canonical owner unless fan-out is intentional and documented.
-- Choose an explicit owner for app saga startup; follow [Application saga startup](./SKILL.md#application-saga-startup) and the linked lifecycle contract.
+- Choose an explicit owner for app saga startup; follow [Application saga startup](#application-saga-startup) and the linked lifecycle contract.
 - Close manually-created channels in `finally`.
 - Handle async action failures with `.failure(error)` and normalize non-`Error` throws.
 - Keep retried work idempotent when using `retryWithTimeout`.
@@ -71,7 +71,7 @@ Use this skill when editing saga code or writing instructions for saga changes. 
 - Do not add new wrapper-action debounce flows or recommend `debounceSaga`/`debounceWithKeySaga` for new work; those exports remain for compatibility only.
 - For transient failures, use `retryWithTimeout` and branch on all outcomes: `success`, `retries-exhausted`, and `timeout`.
 - For async generators, use `wrapStreamingGenerator` from saga code and handle stream errors locally at the call site if app reporting is needed.
-- For saga lifetime placement in components, services, or tests, follow [Application saga startup](./SKILL.md#application-saga-startup); per-owner cancellation and whole-Store teardown belong to [Store saga lifecycle](../saga-manager/SKILL.md#store-saga-lifecycle).
+- For saga lifetime placement in components, services, or tests, follow [Application saga startup](#application-saga-startup); per-owner cancellation and whole-Store teardown belong to [Store saga lifecycle](../saga-manager/SKILL.md#store-saga-lifecycle).
 - For saga monitoring, keep the normal constructor shape and pass `new Store(reducers, middleware, { throttledSelectorFrequency, sagaMonitor: true })` or the equivalent `ReactStore`/`StreamingStore` options object.
 - For saga manager crash records and cleanup, read [Core Patterns](../saga-manager/SKILL.md#core-patterns); for auto-restart and backoff, read [Start, stop, restart, and backoff mechanics](../saga-manager/SKILL.md#start-stop-restart-and-backoff-mechanics).
 

@@ -106,7 +106,7 @@ is `true`; omitted and `false` options do not publish action events or enable
 action console groups. Other diagnostic streams have independent options.
 
 For default/custom rendering, factory attachment, and cleanup, follow
-[Logger factory lifecycle](./SKILL.md#logger-factory-lifecycle).
+[Logger factory lifecycle](#logger-factory-lifecycle).
 
 Selector aggregation is independent of action logging. For `summaryEnabled`
 and collector allocation/publication, follow

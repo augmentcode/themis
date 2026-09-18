@@ -120,7 +120,7 @@ export const store = new Store({ triggers: noopReducer });
 export const store = new Store({});
 ```
 
-Source: [Saga-only slice (no state, no reducer)](./SKILL.md#saga-only-slice-no-state-no-reducer) · **Priority: MEDIUM**
+Source: [Saga-only slice (no state, no reducer)](#saga-only-slice-no-state-no-reducer) · **Priority: MEDIUM**
 
 ### ❌ Adding multiple slice or selectors owner files to one directory
 
@@ -160,7 +160,7 @@ export const updateTheme = createAction("userPreferences/updateTheme");
 export const store = new Store({ userPreferences: userPreferencesReducer });
 ```
 
-Source: [Naming conventions](./SKILL.md#naming-conventions) · **Priority: HIGH**
+Source: [Naming conventions](#naming-conventions) · **Priority: HIGH**
 
 ### ❌ Naming selectors without the `select` prefix
 
@@ -176,7 +176,7 @@ export const isLoading = store.createSelector(...);
 export const selectIsLoading = store.createSelector(...);
 ```
 
-Source: [Naming conventions](./SKILL.md#naming-conventions) · **Priority: MEDIUM**
+Source: [Naming conventions](#naming-conventions) · **Priority: MEDIUM**
 
 ### ❌ Defining state types inline in `{slice-name}-slice.ts`
 

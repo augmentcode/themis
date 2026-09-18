@@ -30,7 +30,7 @@ Before editing code or docs under this skill:
 - **SHOULD** stop and ask when rules conflict or scope is unclear.
 - **NEVER** claim completion when a required skill/doc was skipped or the handoff lacks compliance evidence.
 
-> These rules are the load-bearing contract for every slice, saga, and component in the package. The canonical policy is [Setup — core rules](./SKILL.md#setup--core-rules); architectural background lives in `@augmentcode/themis/docs/ARCHITECTURE.md` → Core Principles.
+> These rules are the load-bearing contract for every slice, saga, and component in the package. The canonical policy is [Setup — core rules](#setup--core-rules); architectural background lives in `@augmentcode/themis/docs/ARCHITECTURE.md` → Core Principles.
 
 ## Setup — core rules
 
@@ -166,7 +166,7 @@ export const featureReducer = createReducer<FeatureState>(initialState)
   }));
 ```
 
-Source: [When to use Redux vs component-local state](./SKILL.md#when-to-use-redux-vs-component-local-state), `@augmentcode/themis/README.md` · **Priority: CRITICAL**
+Source: [When to use Redux vs component-local state](#when-to-use-redux-vs-component-local-state), `@augmentcode/themis/README.md` · **Priority: CRITICAL**
 
 ### ❌ Using component effects for cross-component side effects
 
@@ -187,7 +187,7 @@ A saga does not inherently outlive a component. Choose its lifetime owner using
 [Store saga lifecycle](../saga-manager/SKILL.md#store-saga-lifecycle) for cancellation;
 the selected Store family supplies component/runtime lifecycle wiring.
 
-Source: [When to use Redux vs component-local state](./SKILL.md#when-to-use-redux-vs-component-local-state) · **Priority: HIGH**
+Source: [When to use Redux vs component-local state](#when-to-use-redux-vs-component-local-state) · **Priority: HIGH**
 
 ### ❌ Defining slice types inline in `-slice.ts`
 
@@ -207,7 +207,7 @@ export type FeatureState = { items: Collection<Item, 'id'> };
 import type { FeatureState } from './feature-types';
 ```
 
-Source: [Types live in `{slice-name}-types.ts`](./SKILL.md#types-live-in-slice-name-typests), [Setup — slice directory layout](../file-structure/SKILL.md#setup--slice-directory-layout) · **Priority: MEDIUM**
+Source: [Types live in `{slice-name}-types.ts`](#types-live-in-slice-name-typests), [Setup — slice directory layout](../file-structure/SKILL.md#setup--slice-directory-layout) · **Priority: MEDIUM**
 
 ### ❌ Leaving a pass-through wrapper after a refactor
 

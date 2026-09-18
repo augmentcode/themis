@@ -24,7 +24,7 @@ triggers:
 
 > Use native redux-saga `takeEvery(channel, worker)` for every-event `EventChannel<T>` consumption and `takeLatest(channel, worker)` when each new event should cancel the previous worker.
 
-Source: redux-saga channel watcher effects, [Native channel watchers](./SKILL.md#native-channel-watchers).
+Source: redux-saga channel watcher effects, [Native channel watchers](#native-channel-watchers).
 
 ## Imports
 

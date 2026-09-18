@@ -49,7 +49,7 @@ the selected Store family supplies framework-specific wiring.
 - Initialize the Store before starting app sagas. `Store.init()` wires the Redux store and middleware, creates the selected Store variant's selector resources, and starts the package-owned saga manager internally; it does not auto-start app sagas.
 - App sagas are started explicitly with `store.runSaga(sagaFn)` after initialization; Store derives a manager name from the saga function.
 - `store.runSaga(sagaFn)` dispatches `startSaga(name, sagaFn)` and returns a cancel function that dispatches `stopSaga(name)`; the manager listens for those lifecycle actions.
-- Retain each returned cancel function and invoke it when that lifetime owner ends. Shared-task reference counting is defined in [Start, stop, restart, and backoff mechanics](./SKILL.md#start-stop-restart-and-backoff-mechanics).
+- Retain each returned cancel function and invoke it when that lifetime owner ends. Shared-task reference counting is defined in [Start, stop, restart, and backoff mechanics](#start-stop-restart-and-backoff-mechanics).
 - `Store.dispose()` and the disposer returned by `Store.init()` tear down the initialized Store runtime and stop Store-owned saga tasks, including running app sagas forked by the manager.
 - Whole-Store teardown belongs only to the owner ending the entire Store context; it is not a substitute for an individual saga owner's cancel function.
 - The reserved manager name is `@internal_sagaManager`; do not register, run, or expose it as an app saga. App code must not import package-internal actions such as `addCrash` or `clearCrashes`.
@@ -78,7 +78,7 @@ the selected Store family supplies framework-specific wiring.
 
 - Multiple overlapping `store.runSaga(sagaFn)` calls for the same derived saga name and function share one running task and increment a reference counter.
 - The saga stops only after every returned cancel function has been invoked.
-- Full Store disposal is a separate lifecycle boundary: follow [Store saga lifecycle](./SKILL.md#store-saga-lifecycle), not disposal as a replacement for per-owner cancels.
+- Full Store disposal is a separate lifecycle boundary: follow [Store saga lifecycle](#store-saga-lifecycle), not disposal as a replacement for per-owner cancels.
 - If the managed saga throws an unhandled error, `autoRestart` records the crash, logs it, waits, and restarts the saga automatically.
 - `getBackOffDelay(restarts)` is `min(1000 * 2^restarts, 10 minutes)`: first restart waits 1s, then 2s, 4s, and so on up to the cap.
 - Restart pressure decays after stable runtime: before incrementing, the manager subtracts one restart count per full minute since the last start, bounded at zero.

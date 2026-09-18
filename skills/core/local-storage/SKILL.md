@@ -23,7 +23,7 @@ triggers:
 
 > Use a concrete app-local helper module such as `examples/utils/safe-local-storage-saga.ts` — never call `window.localStorage` directly in sagas or components, and do not import localStorage helpers from the package.
 
-Source: [API](./SKILL.md#api) and [Rules](./SKILL.md#rules), `examples/utils/safe-local-storage-saga.ts`.
+Source: [API](#api) and [Rules](#rules), `examples/utils/safe-local-storage-saga.ts`.
 
 ## API
 
@@ -145,7 +145,7 @@ yield* call([window.localStorage, "setItem"], key, value);
 yield* call(setLocalStorageItem, key, value);
 ```
 
-Source: [Rules](./SKILL.md#rules). Priority: **HIGH**.
+Source: [Rules](#rules). Priority: **HIGH**.
 
 ### ❌ Calling localStorage from a component
 
@@ -166,7 +166,7 @@ yield* takeEvery(setTheme, function* () {
 });
 ```
 
-Source: [Rules](./SKILL.md#rules). Priority: **HIGH**.
+Source: [Rules](#rules). Priority: **HIGH**.
 
 ### ❌ Assuming `JSON.parse` will never throw
 
@@ -189,7 +189,7 @@ try {
 return defaults;
 ```
 
-Source: [API](./SKILL.md#api) and [Core Patterns](./SKILL.md#core-patterns). Priority: **MEDIUM**.
+Source: [API](#api) and [Core Patterns](#core-patterns). Priority: **MEDIUM**.
 
 ## See also
 

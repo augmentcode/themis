@@ -19,7 +19,7 @@ triggers:
 ---
 # Import Boundaries
 
-> Source: [Setup — the package export surface](./SKILL.md#setup--the-package-export-surface); `package.json` exports map; public `@augmentcode/themis/svelte-store`; hidden root-entry implementation context; `@augmentcode/themis/docs/ARCHITECTURE.md` maintainer validation.
+> Source: [Setup — the package export surface](#setup--the-package-export-surface); `package.json` exports map; public `@augmentcode/themis/svelte-store`; hidden root-entry implementation context; `@augmentcode/themis/docs/ARCHITECTURE.md` maintainer validation.
 
 ## Setup — the package export surface
 
@@ -159,7 +159,7 @@ export function loadFromComponent() {
 }
 ```
 
-Source: [Components — forbidden](./SKILL.md#components--forbidden) · **Priority: HIGH**
+Source: [Components — forbidden](#components--forbidden) · **Priority: HIGH**
 
 ### ❌ Hiding dispatch inside service helpers
 
@@ -184,7 +184,7 @@ export function queueItem(store: Store, id: string) {
 }
 ```
 
-Source: [Components and component-level modules — allowed](./SKILL.md#components-and-component-level-modules--allowed), [Services and non-component TS](./SKILL.md#services-and-non-component-ts) · **Priority: MEDIUM**
+Source: [Components and component-level modules — allowed](#components-and-component-level-modules--allowed), [Services and non-component TS](#services-and-non-component-ts) · **Priority: MEDIUM**
 
 ### ❌ Importing from `typed-redux-saga` in a component file
 
@@ -209,7 +209,7 @@ export function handleClick() {
 }
 ```
 
-Source: [Components — forbidden](./SKILL.md#components--forbidden) (Components must never import saga files / redux-saga effects) · **Priority: HIGH**
+Source: [Components — forbidden](#components--forbidden) (Components must never import saga files / redux-saga effects) · **Priority: HIGH**
 
 ### Examples retained/added
 

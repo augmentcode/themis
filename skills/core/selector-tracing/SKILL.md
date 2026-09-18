@@ -97,7 +97,7 @@ When replacing console output with `loggerFactory` or wiring stream subscription
 cleanup, follow [Logger factory lifecycle](../redux-action-logging/SKILL.md#logger-factory-lifecycle).
 That section owns default/custom logger behavior, the factory example, and
 disposal/re-initialization; selector summary intervals remain covered below in
-[Aggregate summaries](./SKILL.md#aggregate-summaries).
+[Aggregate summaries](#aggregate-summaries).
 
 The legacy `store.traceSelectors()` compatibility method can activate the same
 event preset in any build when construction used omitted or `false` tracing
