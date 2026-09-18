@@ -249,6 +249,10 @@
       "import": "./eslint-plugins/store/reducer-side-effect/plugin.mjs",
       "default": "./eslint-plugins/store/reducer-side-effect/plugin.mjs"
     },
+    "./eslint-plugins/plugins/redundant-async-action-catch": {
+      "import": "./eslint-plugins/store/redundant-async-action-catch/plugin.mjs",
+      "default": "./eslint-plugins/store/redundant-async-action-catch/plugin.mjs"
+    },
     "./eslint-plugins/plugins/removed-middleware-source": {
       "import": "./eslint-plugins/core/removed-middleware-source/plugin.mjs",
       "default": "./eslint-plugins/core/removed-middleware-source/plugin.mjs"

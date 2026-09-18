@@ -46,10 +46,10 @@ Each root composes the lower layers (core, then store, then its domain rules); r
 | Root | Composition | Enabled rules | Use for |
 | --- | --- | --- | --- |
 | `core` | core only | 4 | Any JS/TS package (package/source hygiene only) |
-| `store` | core + store | 40 | Packages that define state/sagas but no UI |
-| `svelte` | core + store + svelte | 43 | Svelte consumer projects |
-| `react` | core + store + react | 44 | React consumer projects |
-| `streaming` | core + store | 40 | Node/server/worker consumers; gains streaming rules when they exist |
+| `store` | core + store | 42 | Packages that define state/sagas but no UI |
+| `svelte` | core + store + svelte | 45 | Svelte consumer projects |
+| `react` | core + store + react | 46 | React consumer projects |
+| `streaming` | core + store | 42 | Node/server/worker consumers; gains streaming rules when they exist |
 
 `plugins` is not a raw ESLint plugin object. It is a named map of per-rule flat-config entries for selected composition.
 
@@ -165,6 +165,30 @@ createAction("todos/addTodo");
 ```
 
 Remediate by creating action creators in the slice owner module. `createAsyncAction` is intentionally not covered by this placement gate until the architecture convention explicitly requires the same treatment.
+
+### `themis/redundant-async-action-catch`
+
+Themis already observes ignored async-action rejections. A defensive catch on the original action promise is redundant, and explicit awaiters still receive the original rejection.
+
+Invalid:
+
+```ts
+import { createAsyncAction } from "@augmentcode/themis/utils/store/create-action";
+const loadTodos = createAsyncAction("todos/load", "todos/loadStage");
+const action = loadTodos();
+action.promise.catch(() => undefined);
+```
+
+Valid:
+
+```ts
+store.dispatch(loadTodos()); // Fire and forget; no defensive catch needed.
+const result = await store.dispatch(loadTodos()); // Use try/catch for recovery.
+```
+
+The rule reports any catch callback on a proven original action promise, not just no-op callbacks. It follows runtime named/namespace imports from the public `create-action` subpath, local factory/creator/action/promise aliases, and direct creator invocations. Static string member names, optional chains, and TypeScript assertions are supported. Shadowed or reassigned bindings, type-only imports, unproven imported creators, arbitrary promise-bearing objects, and unrelated factories are not treated as Themis async actions. It does not resolve other modules or infer origins from structural types, and does not report catches on derived promises (for example, `action.promise.then(transform).catch(recover)`).
+
+This store-domain rule is enabled in the `store`, `svelte`, `react`, and `streaming` configs and architecture validation. No automatic fix is offered because removing a recovery callback can change application behavior; migrate meaningful recovery to `try/catch` around awaited dispatch.
 
 ### `themis/direct-local-storage-usage`
 
