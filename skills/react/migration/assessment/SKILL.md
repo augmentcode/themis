@@ -9,6 +9,7 @@ type: sub-skill
 requires:
   - react
   - react/migration
+  - core/core-policy
 triggers:
   - audit React state
   - classify React state
@@ -16,7 +17,7 @@ triggers:
 ---
 # React migration assessment
 
-Before editing, inventory current React state ownership and decide what moves to`ReactStore` versus what stays local.
+Before editing, inventory current React state ownership and decide what moves to `ReactStore` versus what stays local.
 
 ## Identify React state owners
 
@@ -31,19 +32,13 @@ Search for state and effect patterns in React files:
 
 ## Decision framework
 
-### Move to ReactStore
-
-- State read or written by multiple components or routes.
-- State that persists across navigation, reloads, or app sessions.
-- State involved in async operations, debouncing, timers, IPC, or server sync.
-- State that drives business logic, permissions, feature flags, or cross-featurecoordination.
-- Derivations duplicated across components/hooks.
-
-### Keep in React component state
-
-- Single-component hover/focus/open state.
-- Uncommitted form drafts that do not leave one component.
-- DOM measurement, uncontrolled input details, scroll position, and animationstate that only matters while one component is mounted.
+Classify each inventoried React owner using
+[When to use Redux vs component-local state](../../../core/core-policy/SKILL.md#when-to-use-redux-vs-component-local-state).
+For effects and shared derivations, apply
+[Setup — core rules](../../../core/core-policy/SKILL.md#setup--core-rules).
+This leaf owns React-pattern inventory and evidence, not a separate placement
+policy. Record the matched policy criterion and all consumers, including
+services/non-component code; do not infer ownership from the hook name alone.
 
 ## Assessment output
 
@@ -60,6 +55,7 @@ type ReactStateInventoryRecord = {
   derivedValues: string[];
   sideEffects: string[];
   consumers: string[];
+  policyReason: string;
   verdict: ReactMigrationVerdict;
   nextSkills: string[];
 };
@@ -71,6 +67,7 @@ export const cartInventory: ReactStateInventoryRecord = {
   derivedValues: ["itemCount", "subtotal"],
   sideEffects: ["localStorage sync"],
   consumers: ["CartSummary.tsx", "HeaderCartButton.tsx"],
+  policyReason: "Shared business state with persisted storage synchronization",
   verdict: "reactstore",
   nextSkills: ["setup", "writable-stores", "derived-stores", "side-effects", "component-migration"],
 };
@@ -90,8 +87,8 @@ export const hoverInventory = {
 
 ## Downstream routing
 
-- Mutable shared state → `react/migration/writable-stores`.
-- Shared derivations → `react/migration/derived-stores`.
-- Shared async/persistent effects → `react/migration/side-effects`.
-- JSX/TSX consumers → `react/migration/component-migration`.
-- Old owners/import paths → `react/migration/cleanup`.
+- Mutable shared state → `../writable-stores/SKILL.md`.
+- Shared derivations → `../derived-stores/SKILL.md`.
+- Shared async/persistent effects → `../side-effects/SKILL.md`.
+- JSX/TSX consumers → `../component-migration/SKILL.md`.
+- Old owners/import paths → `../cleanup/SKILL.md`.

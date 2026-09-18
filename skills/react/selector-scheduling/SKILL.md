@@ -31,12 +31,12 @@ configured `ReactStore` instance and tune selector coalescing only through
 
 ## Store-first scheduling rule
 
+Scheduling applies to signal-backed render consumers. Choose the consumer API
+using [Call-mode map](../selector-lifecycle/SKILL.md#call-mode-map); this leaf
+owns cadence, not component/hook/handler/saga boundary rules.
+
 - Create production selectors with the configured `ReactStore` instance:
   `reactStore.createSelector(...)`.
-- Direct selector calls return Preact React `ReadonlySignal<R>` values and are the
-  preferred React consumer integration path when callers can accept signals.
-- Use `selectFoo.useValue(...args)` in React components and custom hooks only when a
-  hook/plain value is necessary and a signal-aware rewrite is impractical.
 - Direct `ReadonlySignal` outputs are cached for the same ReactStore instance + selector + args, and direct
   signal outputs plus `.useValue(...args)` subscribe to the owning `ReactStore`'s
   Store-owned cadence, capped by `throttledSelectorFrequency`.
@@ -47,17 +47,16 @@ configured `ReactStore` instance and tune selector coalescing only through
   supported.
 - Selector trace output is disabled by default; pass `{ traceSelectors: true }`
   in the same final options object only for temporary diagnostics.
-- Use `.select(reactStore.state, ...args)` for one-shot handlers/tests and
-  `.effect(...args)` for sagas; those paths are not React render subscriptions.
+- Snapshot and saga reads do not use React render scheduling; follow
+  [React signal consumption guardrails](../selector-lifecycle/SKILL.md#react-signal-consumption-guardrails).
 
 ## Do not
 
 - Do not import selector scheduler helpers from package internals or source-shaped
   paths.
 - Do not wrap selector callbacks, selector signals, or `.useValue(...args)` results with ad hoc `memoize`, `cache`, debounce, `setTimeout`, `requestAnimationFrame`, streams, or proxy state just to reduce React renders.
-- Do not manually subscribe to selector outputs from React components; pass/read the
-  selector signal directly, or use `.useValue(...args)` only at necessary plain-value
-  boundaries.
+- Do not manually subscribe to selector outputs from React components; use the
+  consumer integration in [Call-mode map](../selector-lifecycle/SKILL.md#call-mode-map).
 - Do not rely on selector outputs as audit/event streams; they represent the
   latest derived state and may coalesce intermediate writes.
 - Do not replace this React signal scheduling model with unrelated selector
@@ -65,7 +64,7 @@ configured `ReactStore` instance and tune selector coalescing only through
 
 ## Examples
 
-### 1. Configure coalescing at the ReactStore owner
+### Configure coalescing at the ReactStore owner
 
 ```ts
 import { ReactStore } from "@augmentcode/themis/react-store";
@@ -78,7 +77,7 @@ export const reactStore = new ReactStore(
 );
 ```
 
-### 2. Define selectors through the configured Store
+### Define selectors through the configured Store
 
 ```ts
 import { reactStore } from "./react-store";
@@ -95,68 +94,13 @@ export const selectPointerLabel = reactStore.createSelector((state) => {
 });
 ```
 
-### 3. Direct signal output is already scheduled
+### Consumer integration
 
-```ts
-import { selectPointerLabel } from "./pointer-selectors";
+Direct signal outputs are already scheduled. Component/hook, handler/test, and
+saga examples belong to [Examples](../selector-lifecycle/SKILL.md#examples),
+including the distinction between render subscriptions and one-shot reads.
 
-const pointerLabelSignal = selectPointerLabel();
-
-export function readPointerLabelNow() {
-  return pointerLabelSignal.value;
-}
-```
-
-Use the direct form for React consumers that can accept a Preact React
-`ReadonlySignal<R>`; this is the preferred component integration path.
-
-### 4. Components and hooks prefer direct signals
-
-```tsx
-import { selectPointer, selectPointerLabel } from "./pointer-selectors";
-
-export function PointerBadge() {
-  const pointer = selectPointer();
-  const label = selectPointerLabel();
-  return <span title={`${pointer.value.x}:${pointer.value.y}`}>{label.value}</span>;
-}
-```
-
-Use `.useValue(...args)` here only if a third-party component or hook API requires
-plain values and cannot reasonably accept the signals.
-
-### 5. Event handlers use `.select(state)` for one-shot reads
-
-```tsx
-import { reactStore } from "./react-store";
-import { copyPointer } from "./pointer-slice";
-import { selectPointer } from "./pointer-selectors";
-
-export function handleCopyPointer() {
-  const pointer = selectPointer.select(reactStore.state);
-  reactStore.dispatch(copyPointer(pointer));
-}
-```
-
-### 6. Saga code uses `.effect()` rather than React scheduling
-
-```ts
-import { call, put, takeLatest } from "typed-redux-saga";
-import { pointerMoved, pointerPersisted } from "./pointer-slice";
-import { selectPointer } from "./pointer-selectors";
-
-declare const api: { savePointer(pointer: { x: number; y: number }): Promise<void> };
-
-export function* pointerSaga() {
-  yield* takeLatest(pointerMoved, function* persistPointer() {
-    const pointer = yield* selectPointer.effect();
-    yield* call(api.savePointer, pointer);
-    yield* put(pointerPersisted());
-  });
-}
-```
-
-### 7. ❌ Bad: manual debounce wrapper around selector output
+### ❌ Bad: manual debounce wrapper around selector output
 
 ```tsx
 // BAD: this adds stale local state on top of Store-owned selector coalescing.
@@ -174,7 +118,7 @@ export function useManuallyDebouncedPointer() {
 }
 ```
 
-### 8. ❌ Bad: treating selector outputs as event logs
+### ❌ Bad: treating selector outputs as event logs
 
 ```tsx
 // BAD: selector values are latest-state projections and can coalesce writes.
@@ -190,7 +134,7 @@ export function PointerAuditPanel({ audit }: { audit: Array<{ x: number; y: numb
 }
 ```
 
-### 9. Prefer actions or sagas when every event matters
+### Prefer actions or sagas when every event matters
 
 ```ts
 import { call, takeEvery } from "typed-redux-saga";
@@ -205,21 +149,14 @@ export function* pointerAuditSaga() {
 }
 ```
 
-## Cases covered
+## Verification cues
 
-| Case | Examples |
-| --- | --- |
-| ReactStore-owned scheduler configuration | 1 |
-| Store-bound selector definitions and composition | 2 |
-| Direct `ReadonlySignal<R>` outputs | 3 |
-| Component/custom-hook direct signal reads, with `.useValue(...args)` fallback | 4 |
-| Handler/test one-shot reads | 5 |
-| Saga read mode that bypasses React render scheduling | 6 |
-| Manual debounce/wrapper misuse | 7 |
-| Audit/event-log misuse and replacement | 8, 9 |
+- Cadence is configured at the Store, not with consumer wrappers.
+- Selector outputs are latest-state projections, not event logs.
+- Consumer examples follow [Verification cues](../selector-lifecycle/SKILL.md#verification-cues).
 
 ## See also
 
-- `react/selectors` — building `ReactStore` selectors.
-- `react/selector-lifecycle` — choosing direct signal, `.useValue`, `.select`, `.effect`, and `.withStore` call modes.
+- `../selectors/SKILL.md` — building `ReactStore` selectors.
+- `../selector-lifecycle/SKILL.md` — choosing direct signal, `.useValue`, `.select`, `.effect`, and `.withStore` call modes.
 - `@augmentcode/themis/docs/SELECTORS.md` — selector memoization and lifecycle rules.

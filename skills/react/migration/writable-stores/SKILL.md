@@ -8,6 +8,8 @@ type: sub-skill
 requires:
   - core/actions
   - core/reducers
+  - core/core-policy
+  - core/state-serialization
   - react/migration
 triggers:
   - migrate React local state
@@ -16,7 +18,10 @@ triggers:
 ---
 # React mutable state migration
 
-Shared mutable React state maps to serializable slice state, action creators, and pure reducers. Keep component-local ephemeral UI state in React.
+Shared mutable React state maps to slice state, actions, and reducers only after
+classification with [When to use Redux vs component-local state](../../../core/core-policy/SKILL.md#when-to-use-redux-vs-component-local-state).
+Keep the assessment's local-state verdicts; this leaf owns the React migration
+mapping, not the core state/action/reducer contracts.
 
 React source patterns include `useState`, `useReducer`, context provider state,
 custom hook state, and external mutable stores.
@@ -39,30 +44,34 @@ export function CounterProvider({ children }: { children: React.ReactNode }) {
 
 ## After: slice state, actions, reducer
 
-```ts
-import { createAction } from "@augmentcode/themis/utils/store/create-action";
-import { createReducer } from "@augmentcode/themis/utils/store/create-reducer";
+| React source in the example | Migrated owner |
+| --- | --- |
+| Provider `count` and `username` state | Canonical fields in the counter slice |
+| `setCount` / `setUsername` setters | Named actions carrying the new primitive value |
+| Functional `increment` setter | Event action handled by the counter reducer |
+| Context consumers | Store-bound selectors plus configured Store dispatch |
 
-type CounterState = { count: number; username: string };
-const initialState: CounterState = { count: 0, username: "" };
+Implement the mapped actions using [Examples](../../../core/actions/SKILL.md#examples)
+(no-payload events and tuple payloads), and implement the reducer using
+[Examples](../../../core/reducers/SKILL.md#examples) (handler chaining and
+same-reference no-ops). Do not create migration-local copies of those APIs.
+Then migrate JSX/TSX consumers with
+[After: direct selector signal plus Store dispatch](../component-migration/SKILL.md#after-direct-selector-signal-plus-store-dispatch).
 
-export const setCount = createAction<[value: number]>("counter/setCount");
-export const increment = createAction("counter/increment");
-export const setUsername = createAction<[value: string]>("counter/setUsername");
+## Core implementation contracts
 
-export const counterReducer = createReducer<CounterState>(initialState)
-  .with(setCount, (state, { payload: [count] }) => count === state.count ? state : { ...state, count })
-  .with(increment, (state) => ({ ...state, count: state.count + 1 }))
-  .with(setUsername, (state, { payload: [username] }) => ({ ...state, username }));
-```
-
-## Rules
-
-- Move shared, persisted, async-driven, or business state into slice state.
-- Keep reducers pure: no `fetch`, `localStorage`, timers, clocks, random IDs, or mutation.
-- Keep state serializable: no `Date`, `Map`, `Set`, class instances, functions, promises, or DOM objects.
-- Compute new state in reducers; React components dispatch action creators.
-- Preserve reference equality on no-op updates when practical to avoid needless selector invalidation.
+- State placement is decided by [When to use Redux vs component-local state](../../../core/core-policy/SKILL.md#when-to-use-redux-vs-component-local-state).
+- Pure immutable transitions and no-op identity follow [Do](../../../core/reducers/SKILL.md#do)
+  and [Don't](../../../core/reducers/SKILL.md#dont); components dispatch rather than owning the transition.
+- Every migrated field, including nested values and objects previously held by
+  React providers, must meet [Do](../../../core/state-serialization/SKILL.md#do)
+  and the complete [Don't](../../../core/state-serialization/SKILL.md#dont)
+  serialization exclusions. Do not substitute a shorter migration-specific list.
+- Add/update serialization tests for initial state and changed reducer paths
+  according to [Verification cues](../../../core/state-serialization/SKILL.md#verification-cues)
+  and [JSON round-trip regression test](../../../core/state-serialization/SKILL.md#json-round-trip-regression-test).
+  Verify reducer transitions and no-op identity with
+  [Verification cues](../../../core/reducers/SKILL.md#verification-cues).
 
 ## Component-local state remains local
 
@@ -77,15 +86,9 @@ export function ProductCard() {
 
 ## Bad: reducer side effect
 
-```ts
-// BAD: reducers must not persist or read external systems.
-export function badSaveSettings(state: { theme: string }, action: { payload: [string] }) {
-  localStorage.setItem("theme", action.payload[0]);
-  return { ...state, theme: action.payload[0] };
-}
-```
-
-Move the persistence into `react/migration/side-effects` saga guidance.
+Do not carry a provider's persistence into its replacement reducer. The forbidden
+operations remain in [Don't](../../../core/reducers/SKILL.md#dont); migrate that
+work separately via [Conversion recipes](../side-effects/SKILL.md#conversion-recipes).
 
 ## Cross-references
 

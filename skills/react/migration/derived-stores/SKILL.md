@@ -15,10 +15,9 @@ triggers:
 ---
 # React derived state migration
 
-Shared React derivations move to `reactStore.createSelector(...)`. Compose
-selectors with `.select(state, ...args)`, consume migrated values in components
-or custom hooks with direct selector signals first, use `.useValue(...args)` only for
-necessary plain-value fallback reads, and test pure selector logic with `.select`.
+Shared React derivations move to `reactStore.createSelector(...)`. This leaf
+maps old calculations to selector definitions; choose consumption and test APIs
+using [Call-mode map](../../selector-lifecycle/SKILL.md#call-mode-map).
 
 React sources include duplicated `useMemo`, derived custom-hook return values,
 context selector helpers, and render-time calculations reused across components.
@@ -55,6 +54,10 @@ export const selectCartTotal = reactStore.createSelector((state) => {
 
 ## Component and test consumption
 
+The migrated read below is signal-aware. Apply
+[React signal consumption guardrails](../../selector-lifecycle/SKILL.md#react-signal-consumption-guardrails)
+for `.value` tracking and any necessary plain-value fallback boundary.
+
 ```tsx
 import { selectCartTotal } from "../store/cart/cart-selectors";
 
@@ -86,11 +89,9 @@ export const selectTodoTitle = reactStore.createSelector((state, id: string) => 
 
 - One selector per shared derivation; keep selectors narrow and pure.
 - Compose upstream selectors with `.select(state, ...args)` inside selector bodies.
-- Components and custom hooks prefer direct signal calls; use `.useValue(...args)` only
-  when a plain-value boundary is necessary and a signal-aware rewrite is
-  impractical.
-- Handlers, tests, and selector unit tests use `.select(state, ...args)`.
-- Sagas use `yield* selectFoo.effect(...args)`.
+- Verify migrated consumer boundaries using
+  [Verification cues](../../selector-lifecycle/SKILL.md#verification-cues), not a
+  migration-specific call-mode policy.
 - Do not store selector outputs in reducers; reducers own base state only.
 
 ## Bad: direct signal form inside selector composition
@@ -104,6 +105,6 @@ export const selectBadTotal = reactStore.createSelector(() => {
 
 ## Cross-references
 
-- `../../selectors/SKILL.md` — selector creation and call forms.
+- `../../selectors/SKILL.md` — selector authoring and caching.
 - `../../selector-lifecycle/SKILL.md` — direct signal, `.useValue`, `.select`, `.effect`, and `.withStore` choices.
 - `../component-migration/SKILL.md` — component consumption after migration.

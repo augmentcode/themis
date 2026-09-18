@@ -6,6 +6,8 @@ description: >-
 type: sub-skill
 requires:
   - core/sagas
+  - core/core-policy
+  - react/component-integration
   - react/migration
 triggers:
   - migrate React useEffect
@@ -14,7 +16,10 @@ triggers:
 ---
 # React side-effect migration
 
-Shared, persistent, or async React side effects move to sagas. DOM-only effects that exist solely to manage one component's mounted DOM can remain local.
+Classify existing React effects with
+[When to use Redux vs component-local state](../../../core/core-policy/SKILL.md#when-to-use-redux-vs-component-local-state)
+and [Setup — core rules](../../../core/core-policy/SKILL.md#setup--core-rules)
+before migrating business work to sagas. Keep permitted DOM-local effects local.
 
 React sources include `useEffect` fetches, subscriptions, timers, debounces,
 storage sync, IPC/websocket listeners, and custom hooks that hide async work.
@@ -65,18 +70,13 @@ export function* usersSaga() {
 
 ## Start the saga from ReactStore setup
 
-```ts
-import { reactStore } from "../react-store";
-import { usersSaga } from "./users-saga";
-
-const disposeStore = reactStore.init();
-const cancelUsersSaga = reactStore.runSaga(usersSaga);
-
-export function disposeRuntime() {
-  cancelUsersSaga();
-  disposeStore();
-}
-```
+Attach each migrated app saga to the existing React bootstrap/root owner, not
+to a replacement business-effect hook. Follow
+[Start app sagas explicitly](../../component-integration/SKILL.md#start-app-sagas-explicitly)
+for post-init startup and cancellation, and
+[Dispose at the same owner boundary](../../component-integration/SKILL.md#dispose-at-the-same-owner-boundary)
+for teardown. Core [Application saga startup](../../../core/sagas/SKILL.md#application-saga-startup)
+supplies the framework-neutral contract; React integration owns its lifecycle placement.
 
 ## Conversion recipes
 
@@ -95,6 +95,7 @@ export function disposeRuntime() {
 - Use `takeLatest` for stale-response-prone fetch/search flows.
 - Use `takeEvery` when every action must be processed.
 - Use selector `.effect(...args)` in sagas when the saga needs current derived state.
+  Follow [Saga reads](../../selector-lifecycle/SKILL.md#saga-reads) for call-mode boundaries.
 - Do not keep both a migrated `useEffect` and a saga for the same trigger.
 - Do not use selector `.useValue(...args)` or direct React signals from saga code.
 
@@ -109,6 +110,6 @@ React.useEffect(() => {
 
 ## Cross-references
 
-- `../../../core/sagas/SKILL.md` — saga patterns and Store-first startup.
+- `../../../core/sagas/SKILL.md` — framework-neutral saga patterns.
 - `../../../core/selector-channels/SKILL.md` — reacting to selector value changes from sagas.
-- `../../selectors/SKILL.md` — `.effect(...args)` and non-React saga reads.
+- `../../selector-lifecycle/SKILL.md` — saga selector reads without React hooks/signals.

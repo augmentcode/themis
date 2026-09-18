@@ -7,6 +7,7 @@ description: >-
 type: lifecycle
 requires:
   - react
+  - core/core-policy
 sources:
   - ./assessment/SKILL.md
   - ./setup/SKILL.md
@@ -30,29 +31,23 @@ stores, component `useMemo` derivations, or `useEffect` side effects.
 
 ## React migration policy
 
-1. **ReactStore owns shared, persisted, or async-driven state.** Anything read or
-   written by multiple components, synced to storage/server/IPC, or coordinated
-   with async flows moves to actions, reducers, selectors, and sagas.
-2. **Component-local ephemeral UI state stays local.** Hover, focus, transient
-   form drafts, uncontrolled input details, scroll position, and single-component
-   toggles can remain in React component state.
-3. **Selectors own shared derivations.** Move duplicated `useMemo`, derived custom
-   hook return values, and context selector logic into `ReactStore.createSelector`.
-4. **Sagas own shared side effects.** Move persistent subscriptions, fetches,
-   debounces, timers, storage sync, and cross-feature effects out of components.
+Apply [When to use Redux vs component-local state](../../core/core-policy/SKILL.md#when-to-use-redux-vs-component-local-state)
+to each React owner, and [Setup — core rules](../../core/core-policy/SKILL.md#setup--core-rules)
+to derived-state and effect ownership. These are the canonical placement rules;
+this index owns migration sequencing, not a separate state policy. Record the
+React-specific evidence with [Decision framework](./assessment/SKILL.md#decision-framework).
 
-Migrate one state owner/slice at a time. Keep the app on the React Store family:
-`ReactStore`, direct Preact React selector signals as the preferred React consumer
-path, `.useValue(...args)` only for necessary hook/plain-value fallback paths, and
-`.select(state, ...args)` for composition and tests, and `.effect(...args)` for
-sagas.
+Migrate one state owner/slice at a time, keeping the app on `ReactStore`.
+Signal-first reads and necessary plain-value fallbacks follow
+[Call-mode map](../selector-lifecycle/SKILL.md#call-mode-map), including handler,
+test, composition, and saga boundaries.
 
 ## React migration leaf routes
 
 | Route | Use when |
 | --- | --- |
 | `./assessment/SKILL.md` | Inventory shared React local state, context/hooks, external stores, derivations, effects, and consumers. |
-| `./setup/SKILL.md` | Create and initialize the app-owned `ReactStore`, register reducers, and start app sagas. |
+| `./setup/SKILL.md` | Confirm migration readiness against canonical installation and React runtime owners; not greenfield bootstrap instructions. |
 | `./writable-stores/SKILL.md` | Move shared mutable React state into actions, reducers, and serializable slice state. |
 | `./derived-stores/SKILL.md` | Move shared derivations to `ReactStore` selectors and test them with `.select`. |
 | `./side-effects/SKILL.md` | Move shared, persistent, or async effects to sagas. |
@@ -61,20 +56,19 @@ sagas.
 
 ## Recommended order
 
-1. `assessment` — inventory React state owners, derivations, effects, and
+1. `./assessment/SKILL.md` — inventory React state owners, derivations, effects, and
    consumers; classify shared vs component-local.
-2. `setup` — choose `ReactStore`, create the app store, initialize/dispose at the
-   app owner, and start app sagas with `reactStore.runSaga(sagaFn)`.
-3. `writable-stores` — move shared mutable React state to serializable slice
+2. `./setup/SKILL.md` — complete the [Adoption checkpoint](./setup/SKILL.md#adoption-checkpoint).
+   For first-time installation/family choice, start at
+   [Store-family decision gate](../../setup/SKILL.md#store-family-decision-gate);
+   for runtime mechanics use [Create and configure ReactStore](../component-integration/SKILL.md#create-and-configure-reactstore).
+3. `./writable-stores/SKILL.md` — move shared mutable React state to serializable slice
    state, actions, and pure reducers.
-4. `derived-stores` — move shared derivations to selectors, compose with
-   `.select(state, ...args)`, consume in components with direct selector signals
-   first, and unit-test with `.select`.
-5. `side-effects` — move shared or async effects to sagas.
-6. `component-migration` — replace component/context/custom-hook reads with
-   direct selector signals where possible, `.useValue(...args)` only where plain values
-   are necessary, and Store-first dispatch.
-7. `cleanup` — remove old providers/hooks/state owner modules after verification.
+4. `./derived-stores/SKILL.md` — move shared derivations to selectors and test them.
+5. `./side-effects/SKILL.md` — migrate effects selected by core policy.
+6. `./component-migration/SKILL.md` — replace consumers using the canonical
+   [Call-mode map](../selector-lifecycle/SKILL.md#call-mode-map) and Store-first dispatch.
+7. `./cleanup/SKILL.md` — remove old providers/hooks/state owner modules after verification.
 
 ## Quick reference
 
@@ -82,12 +76,11 @@ sagas.
 | --- | --- |
 | Shared `useState` / `useReducer` state | Slice initial state + actions + reducer |
 | Context provider that stores business state | `ReactStore` reducer map + selectors/actions |
-| Custom hook exposing shared mutable state | Direct selector signals + action dispatch helpers; `.useValue(...args)` only for plain-value hook contracts |
+| Custom hook exposing shared mutable state | [Custom hook migration](./component-migration/SKILL.md#custom-hook-migration) + action dispatch |
 | External mutable store subscription | Reducer state + saga/channel integration as needed |
 | Repeated `useMemo`/derived hook value | `reactStore.createSelector(...)` |
-| `useEffect` fetch/timer/storage sync | Saga with `takeEvery`/`takeLatest`, `call`, `put`, `delay` |
-| Component render read | `selectFoo(...args)` signal first; `selectFoo.useValue(...args)` only for necessary plain values |
-| Handler/test/composition read | `selectFoo.select(reactStore.state, ...args)` |
+| `useEffect` business fetch/timer/storage sync | [Conversion recipes](./side-effects/SKILL.md#conversion-recipes) after policy classification |
+| Render/handler/test/composition read | [Call-mode map](../selector-lifecycle/SKILL.md#call-mode-map) |
 
 ## Orchestration example
 
@@ -123,10 +116,8 @@ const nextSteps: ReactMigrationStep[] = cartAssessment.verdict === "reactstore"
 
 - React examples import `ReactStore` from `@augmentcode/themis/react-store` and keep
   selectors Store-bound.
-- Components/custom hooks consume migrated shared state with direct selector signals
-  first; `.useValue(...args)` appears only for documented plain-value fallbacks.
-- Selectors compose and tests assert with `.select(state, ...args)`.
-- Sagas read migrated state with `.effect(...args)` and start via
-  `reactStore.runSaga(sagaFn)` after `init()`.
+- Consumer migration passes [Verification cues](../selector-lifecycle/SKILL.md#verification-cues).
+- Runtime readiness passes [Verification cues](./setup/SKILL.md#verification-cues),
+  including saga startup at the React app owner.
 - React migration instructions keep state ownership, selector consumption, and
   side-effect ownership explicit at each step.
