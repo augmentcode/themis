@@ -2,6 +2,7 @@ import {
   applyMiddleware,
   combineReducers,
   legacy_createStore as createStore,
+  type UnknownAction,
 } from 'redux';
 import Kefir, {
   type Emitter,
@@ -16,6 +17,8 @@ import {
   type NormalizedStoreOptions,
   type ReducersMap,
   type StoreOptions,
+  type StoreDispatch,
+  type StoreAsyncAction,
   type StoreMiddleware,
   type StoreReducerFunction,
   type StoreState,
@@ -67,6 +70,16 @@ import type {
 
 const MAX_SELECTOR_SOURCE_SNIPPET_LINES = 5;
 const MAX_SELECTOR_SOURCE_SNIPPET_LENGTH = 500;
+
+const isStoreAsyncAction = (action: UnknownAction): action is StoreAsyncAction<any, unknown> => (
+  typeof action.asyncActionType === 'string' &&
+  typeof action.success === 'function' &&
+  typeof action.failure === 'function' &&
+  typeof action.promise === 'object' &&
+  action.promise !== null &&
+  'then' in action.promise &&
+  typeof action.promise.then === 'function'
+);
 
 type StateDiff = Record<string, { prev: unknown; next: unknown }>;
 
@@ -306,6 +319,7 @@ export abstract class StoreRuntime<
   private readonly reduxLoggerMiddleware: StoreMiddleware | undefined;
   private tasksStarted: Task[] = [];
   private storeContext: ReduxStoreContext | undefined;
+  private storeDispatch: StoreDispatch | undefined;
   private selectorCadenceSource: SelectorCadenceSource | undefined;
   private cadencedStoreStateStream:
     | RuntimeStoreStateStream<StoreBoundState<TStateMap>>
@@ -606,13 +620,13 @@ export abstract class StoreRuntime<
     return this.storeContext.store.getState() as StoreBoundState<TStateMap>;
   }
 
-  get dispatch(): ReduxStoreContext['store']['dispatch'] {
-    if (!this.storeContext) {
+  get dispatch(): StoreDispatch {
+    if (!this.storeDispatch) {
       throw new Error(
         'Cannot access Store.dispatch before Store.init() has been called.'
       );
     }
-    return this.storeContext.store.dispatch;
+    return this.storeDispatch;
   }
 
   /**
@@ -642,6 +656,10 @@ export abstract class StoreRuntime<
       store,
     };
     this.storeContext = storeContext;
+    this.storeDispatch = ((action: UnknownAction) => {
+      const result = store.dispatch(action);
+      return isStoreAsyncAction(action) ? action.promise : result;
+    }) as StoreDispatch;
     this.cadencedStoreStateStream = createCadencedStoreStateStream<StoreBoundState<TStateMap>>(
       store,
       this.getOrCreateSelectorCadenceSource()
@@ -921,6 +939,7 @@ export abstract class StoreRuntime<
     this.disposeCadencedStoreStateStream();
     this.stopSagas();
     this.storeContext = undefined;
+    this.storeDispatch = undefined;
     this.disposeSelectorCadenceSource();
   }
 
