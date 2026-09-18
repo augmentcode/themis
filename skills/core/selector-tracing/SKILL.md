@@ -3,7 +3,7 @@ name: core/selector-tracing
 description: >-
   Diagnose Store-created selector performance from opt-in interval aggregates
   and privacy-safe lifetime summaries. Covers the flat traceSelectors contract,
-  execution, cache, invalidation, argument, result, cadence, and Redux action records,
+  execution, cache, invalidation, argument, result, and cadence records,
   bounded p95 interpretation, lifecycle, and production safety across all Store
   families.
 type: sub-skill
@@ -86,37 +86,18 @@ finite and non-negative; category and `summaryEnabled` fields must be boolean.
 
 ## 2a. Store-owned logging streams
 
-Every Store family exposes the same read-only `traceStreams` collection. The
-public `StoreTraceStreams` and `StoreLoggerFactory` types are available from
-`@augmentcode/themis/types` and re-exported by each Store-family entrypoint.
-The collection contains six Kefir observables: `selectorDetail`,
-`selectorSummary`, `selectorCadence`, `sagaMonitor`, `runtimeError`, and
-`reduxAction`. It does not expose emitters or permit consumers to publish events.
+Selector diagnostics use `traceStreams.selectorDetail`, `selectorSummary`, and
+`selectorCadence`; their events follow this skill's selector privacy contract.
+For the full stream collection, public types, and the separate `reduxAction`
+event enabled by `logReduxActions`, follow
+[Store-owned logging streams](../redux-action-logging/SKILL.md#store-owned-logging-streams).
+Action/state logging has different payload-safety rules from selector metadata.
 
-When `logReduxActions: true`, Store-owned Redux middleware produces one
-`reduxAction` event only after `next(action)` succeeds. The event contains the
-action plus previous/next state references and a `stateChanged` flag; it does not
-eagerly compute a diff. StoreRuntime's default logger renders that stream with
-the existing legend, grouped titles, action record, and lazy path-keyed state
-diff. A `loggerFactory` replaces the default logger while still receiving all
-six streams. Action and state payloads may contain application data; redact
-secrets before sharing them.
-
-With no `loggerFactory`, StoreRuntime attaches the default console logger and
-preserves the existing severity and `[themis]` prefixes. A custom factory
-receives only this Store instance's streams and may return one disposer, so
-custom logging does not duplicate default console output:
-
-```ts
-const loggerFactory: StoreLoggerFactory = (streams) => {
-  const subscription = streams.runtimeError.observe(reportRuntimeError);
-  return () => subscription.unsubscribe();
-};
-```
-
-The returned disposer runs during `store.dispose()` and before a successful
-re-initialization attaches the factory again. Dispose stream subscriptions and
-the Store initializer when the owning code path ends.
+When replacing console output with `loggerFactory` or wiring stream subscription
+cleanup, follow [Logger factory lifecycle](../redux-action-logging/SKILL.md#logger-factory-lifecycle).
+That section owns default/custom logger behavior, the factory example, and
+disposal/re-initialization; selector summary intervals remain covered below in
+[Aggregate summaries](./SKILL.md#4-aggregate-summaries).
 
 The legacy `store.traceSelectors()` compatibility method can activate the same
 event preset in any build when construction used omitted or `false` tracing
@@ -316,5 +297,6 @@ when the task also changed runtime code.
   reference.
 - `../debugging/SKILL.md` — Store lifecycle and runtime inspection boundaries.
 - `../testing/SKILL.md` — focused selector and Store verification guidance.
+- [Store-owned logging streams](../redux-action-logging/SKILL.md#store-owned-logging-streams) and [Logger factory lifecycle](../redux-action-logging/SKILL.md#logger-factory-lifecycle) — action events and logger ownership, separate from selector trace metadata.
 - The selected Store-family selector skill — family-specific call modes; keep
   one concrete Store family per app/code path.

@@ -5,7 +5,10 @@ description: >-
   middleware.run, runSaga, Effect creators, effect combinators, watcher helpers,
   channel support, buffers, Task/Channel/Buffer/SagaMonitor interfaces,
   cancellation, context, blocking vs non-blocking semantics, and testing helpers.
-type: core
+type: sub-skill
+requires:
+  - core
+  - core/sagas
 sources:
   - https://redux-saga.js.org/docs/api
 triggers:
@@ -22,7 +25,16 @@ triggers:
 
 > Source: official redux-saga API Reference, https://redux-saga.js.org/docs/api, retrieved 2026-05-15.
 
-Use this skill for generic redux-saga API behavior. When editing this repository's `themis` code, also follow the package-specific core saga skills in sibling `../*` skill folders, especially the `typed-redux-saga` `yield*` conventions and canonical watcher ownership rules.
+## Package guidance takes precedence
+
+Use this leaf only for generic upstream redux-saga API behavior; it is not a
+second core router. Read [Preflight](../SKILL.md#preflight), then follow
+[Do](../sagas/SKILL.md#do) and [Implementation cues](../sagas/SKILL.md#implementation-cues)
+for Themis `typed-redux-saga` / `yield*`, watcher ownership, and effect choices.
+For the configured Store's `store.runSaga` API rather than upstream `runSaga`,
+follow [Store saga lifecycle](../saga-manager/SKILL.md#store-saga-lifecycle).
+Upstream examples below do not authorize replacing Store-owned middleware or
+overriding those package-specific rules.
 
 ## Agent Preflight Compliance Contract
 

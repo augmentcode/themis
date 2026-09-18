@@ -2,8 +2,8 @@
 name: core/sagas
 description: >-
   Concise agent rules for typed-redux-saga work in this package. Use for saga
-  watchers/workers, canonical saga ownership, Store saga registration/startup,
-  Store-first saga startup, cancellation-friendly debounce, retryWithTimeout,
+  watchers/workers, canonical saga ownership, application saga startup placement,
+  cancellation-friendly debounce, retryWithTimeout,
   wrapStreamingGenerator, and routing to saga-manager crash/restart guidance. For conceptual API
   explanations and examples, link to @augmentcode/themis/docs/SAGAS.md instead of duplicating them.
 type: sub-skill
@@ -13,13 +13,12 @@ requires:
   - core/state-integrity
 triggers:
   - takeEvery saga
-  - store.runSaga
-  - saga manager
-  - saga crash
+  - application saga startup
   - debounce saga
   - retryWithTimeout
   - wrapStreamingGenerator
   - typed redux saga
+  - typed-redux-saga
 ---
 # Sagas — agent implementation rules
 
@@ -45,7 +44,7 @@ Use this skill when editing saga code or writing instructions for saga changes. 
 - Import the named selectors from the owning slice's `[slice]-selectors.ts` file; saga modules must not declare local `select*` functions/factories, even when they are not exported.
 - Subscribe with concrete action creators, action-creator arrays, or selector-channel helpers; never use `take('*')` or other wildcard takes.
 - Search before adding watchers: trigger action, worker name, registration name, and operation terms must have one canonical owner unless fan-out is intentional and documented.
-- Start app-owned sagas explicitly with `store.runSaga(sagaFn)` after `store.init()`.
+- Choose an explicit owner for app saga startup; follow [Application saga startup](./SKILL.md#application-saga-startup) and the linked lifecycle contract.
 - Close manually-created channels in `finally`.
 - Handle async action failures with `.failure(error)` and normalize non-`Error` throws.
 - Keep retried work idempotent when using `retryWithTimeout`.
@@ -59,9 +58,7 @@ Use this skill when editing saga code or writing instructions for saga changes. 
 - Do not declare or factory-construct `select*` selectors inside saga modules, even as module-private locals; move them to the owning `[slice]-selectors.ts` and import them.
 - Do not subscribe to every action with `take('*')`, `takeEvery('*', ...)`, or other wildcard patterns; it wakes the saga on every dispatch and is especially harmful during streaming flows where chunk actions fire continuously.
 - Do not add a parallel watcher for an action already owned by another saga.
-- Do not manually add or start `@internal_sagaManager`; it is package-owned and started by Store initialization.
-- Do not import package-internal saga-manager files/actions such as `addCrash` or `clearCrashes` from app code; route crash-storage/restart questions to `core/saga-manager`.
-- Do not assume `store.init()` auto-starts app sagas; start each app saga explicitly with `store.runSaga(sagaFn)`.
+- Do not treat initialization or manager internals as app saga registration; follow [Store saga lifecycle](../saga-manager/SKILL.md#store-saga-lifecycle) for startup and the public/internal boundary.
 - Do not leave channels, retries, or long-running loops without cancellation/error paths.
 - Do not introduce detached `spawn`; use attached `fork` so child work is cancelled when the parent fails or is cancelled.
 - Do not monkey-patch redux-saga globally or replace Store-owned saga middleware to observe effects; pass `{ sagaMonitor: true }` in Store options instead.
@@ -74,9 +71,23 @@ Use this skill when editing saga code or writing instructions for saga changes. 
 - Do not add new wrapper-action debounce flows or recommend `debounceSaga`/`debounceWithKeySaga` for new work; those exports remain for compatibility only.
 - For transient failures, use `retryWithTimeout` and branch on all outcomes: `success`, `retries-exhausted`, and `timeout`.
 - For async generators, use `wrapStreamingGenerator` from saga code and handle stream errors locally at the call site if app reporting is needed.
-- For saga lifetimes, call `store.runSaga(sagaFn)` from `onMount` when component/layout lifetime owns the work, or from services/tests when imperative control owns the returned cancel function. Use `store.dispose()` only for whole-Store teardown; it stops running saga tasks owned by the initialized Store context.
+- For saga lifetime placement in components, services, or tests, follow [Application saga startup](./SKILL.md#application-saga-startup); per-owner cancellation and whole-Store teardown belong to [Store saga lifecycle](../saga-manager/SKILL.md#store-saga-lifecycle).
 - For saga monitoring, keep the normal constructor shape and pass `new Store(reducers, middleware, { throttledSelectorFrequency, sagaMonitor: true })` or the equivalent `ReactStore`/`StreamingStore` options object.
-- For saga manager crash records, cleanup, serialized storage, auto-restart, or backoff behavior, use the dedicated `core/saga-manager` skill instead of expanding this general saga checklist.
+- For saga manager crash records and cleanup, read [Core Patterns](../saga-manager/SKILL.md#core-patterns); for auto-restart and backoff, read [Start, stop, restart, and backoff mechanics](../saga-manager/SKILL.md#start-stop-restart-and-backoff-mechanics).
+
+## Application saga startup
+
+Choose the lifetime owner before wiring app sagas: app-wide work belongs to the
+application root or service lifetime; component/layout work belongs to that
+component/layout lifetime; tests own their setup and cleanup explicitly. Use the
+selected Store family's lifecycle skill for its framework hook or runtime boundary,
+not a hook prescribed by core.
+
+Place explicit app saga startup beside that owner's initialization/cleanup wiring.
+Follow [Store saga lifecycle](../saga-manager/SKILL.md#store-saga-lifecycle) for
+initialization order, `store.runSaga(sagaFn)`, matching cancel functions, and the
+whole-Store disposal boundary. For slice modules and registration placement, use
+[Register a normal slice](../file-structure/SKILL.md#register-a-normal-slice).
 
 ## Examples
 
@@ -234,7 +245,7 @@ function* watchReady() {
 - Passing `myAction.type` to watcher effects; pass `myAction`.
 - Adding a second watcher or Store registration for an existing trigger/name.
 - Forgetting `finally` for `channel.close()`.
-- Treating saga-manager internals as app-owned sagas.
+- Treating saga-manager internals as app-owned sagas; check [Store saga lifecycle](../saga-manager/SKILL.md#store-saga-lifecycle).
 - Using `spawn` or wrapper-action debounce helpers for new saga work.
 - Declaring `select*` selectors locally inside a saga module instead of importing them from `[slice]-selectors.ts`.
 - Using `take('*')`, `takeEvery('*', ...)`, or similar wildcard patterns instead of concrete action creators or selector-channel helpers.
@@ -242,7 +253,7 @@ function* watchReady() {
 ## See also
 
 - `@augmentcode/themis/docs/SAGAS.md` — full saga concepts, APIs, and examples.
-- `core/saga-manager` — package-owned crash tracking, cleanup, serialized crash storage, `store.runSaga` lifecycle, restart, and backoff mechanics.
+- [Store saga lifecycle](../saga-manager/SKILL.md#store-saga-lifecycle) and [Core Patterns](../saga-manager/SKILL.md#core-patterns) — canonical lifecycle, crash storage/cleanup, restart, and backoff mechanics.
 - `core/selector-channels` — selector change watchers and selector-backed channels.
 - `core/wait-for` — one-shot selector predicate waits.
 - `core/channel-effects` — generic `EventChannel` consumers.
