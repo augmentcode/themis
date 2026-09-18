@@ -16,9 +16,9 @@ triggers:
   - Svelte readable
   - Svelte selector readable
   - Store component wiring
-  - selector lifecycle
+  - Svelte selector lifecycle
   - Svelte store migration
-  - component integration
+  - Svelte component integration
 ---
 
 # Svelte-readable routing index
@@ -78,12 +78,12 @@ Before editing code or docs under this skill:
 
 ## Always-on policy
 
-- Redux owns shared/domain state; Svelte stores (`*.store.svelte.ts`) are deprecated.
+- Redux owns shared/domain state; shared Svelte stores (`*.store.svelte.ts`) are deprecated. Ephemeral instance-local UI state remains local per `../core/core-policy/SKILL.md` → **Setup — core rules**.
 - A Svelte app uses `Store` and Svelte-readable selectors for its Store-backed
   component reads.
 - Redux state is canonical only: no derived fields, duplicated entity copies,
   parallel arrays/maps for the same records, or reducer-maintained selector outputs.
-- Components render and dispatch; reducers update state; sagas own side effects.
+- Components render and dispatch; reducers update state; sagas own domain side effects. DOM-local focus, scroll, measurements, and widget lifecycle stay in components per `../core/core-policy/SKILL.md` → **Setup — core rules**.
 - State must stay serializable; normalized object collections use `Collection<T, K>`.
 - Actions, selectors, and sagas each have one canonical owner/implementation; run
   the state/action/selector/saga preflight searches before adding another.
@@ -161,28 +161,14 @@ const componentRouting = {
 };
 ```
 
-### Store-first dispatch and state reads
+### Route Store-first dispatch and state reads
 
-```ts
-import { Store } from "@augmentcode/themis/svelte-store";
-import { renameTodo } from "./slices/todos/todos-actions";
-import { todosReducer } from "./slices/todos/todos-slice";
-import { selectTodo } from "./slices/todos/todos-selectors";
-import { todosSaga } from "./slices/todos/sagas/todos-saga";
-
-const store = new Store({ todos: todosReducer });
-const dispose = store.init();
-const cancelTodosSaga = store.runSaga(todosSaga);
-
-store.dispatch(renameTodo("todo-1", "Ship docs"));
-const selectedTodo = selectTodo.select(store.state, "todo-1");
-
-cancelTodosSaga();
-dispose();
-selectedTodo?.id satisfies string | undefined;
-```
-
-`Store` is the canonical Svelte-readable class from `@augmentcode/themis/svelte-store`.
+Use `./store/SKILL.md` → **Correct import and class choice**, **Lifecycle rules**,
+and **App saga lifetime** for construction, initialization, and cleanup. Use
+`./selector-lifecycle/SKILL.md` → **Call-mode map** for direct state reads and
+`./component-integration/SKILL.md` → **Template and handler wiring** for dispatch
+through the configured Store. This index routes those procedures instead of
+maintaining a second lifecycle implementation.
 
 ### Verification handoff evidence payload
 
@@ -227,7 +213,7 @@ const incompleteRouting = {
 | --- | --- | --- |
 | `../core/actions/SKILL.md` | Creating custom `createAction` or `createAsyncAction` actions. | `../core/actions/SKILL.md` |
 | `../core/reducers/SKILL.md` | Building immutable chained reducers and no-op reference equality behavior. | `../core/reducers/SKILL.md` |
-| `./selectors/SKILL.md` | Creating Store-bound selectors, cached Svelte readable direct outputs, collection utility reads, `.select`, or `.effect` usage. | `./selectors/SKILL.md` |
+| `./selectors/SKILL.md` | Authoring/composing Store-bound selectors, collection reads, cache contracts, and stable arguments. | `./selectors/SKILL.md` |
 
 ### Selector system
 
@@ -235,7 +221,7 @@ const incompleteRouting = {
 | --- | --- | --- |
 | `./selector-lifecycle/SKILL.md` | Choosing component-init, handler, or saga selector call modes; using Store-first dispatch. | `./selector-lifecycle/SKILL.md` |
 | `../core/selector-channels/SKILL.md` | Reacting to selector value changes from sagas or creating selector-backed channels. | `../core/selector-channels/SKILL.md` |
-| `./selector-scheduling/SKILL.md` | Recognizing cached readable output reuse and selector emission scheduling as internal details; do not import removed throttled-readable helpers. | `./selector-scheduling/SKILL.md` |
+| `./selector-scheduling/SKILL.md` | Tuning FPS/coalescing and preventing extra scheduler layers or event-log assumptions. | `./selector-scheduling/SKILL.md` |
 | `../core/wait-for/SKILL.md` | Suspending sagas until selector predicates pass or time out. | `../core/wait-for/SKILL.md` |
 
 ### Sagas and side effects
@@ -260,7 +246,7 @@ const incompleteRouting = {
 | Route | Use when | Path |
 | --- | --- | --- |
 | `./store/SKILL.md` | Choosing/importing `Store`, initialization/disposal, `useInitStore`/`useRunSaga` helpers, and shared Store runtime behavior. | `./store/SKILL.md` |
-| `./component-integration/SKILL.md` | Wiring Store initialization, component reads, Store dispatch, and template reactivity. | `./component-integration/SKILL.md` |
+| `./component-integration/SKILL.md` | Applying Store and selector lifecycle contracts to root layouts, templates, and handlers. | `./component-integration/SKILL.md` |
 
 ### Testing, debugging, and verification
 

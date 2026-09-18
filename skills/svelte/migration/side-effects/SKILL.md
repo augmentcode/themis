@@ -1,12 +1,13 @@
 ---
 name: svelte/migration/side-effects
 description: >-
-  Move store subscriptions, $effect blocks, async calls, fetches, timers, and
-  IPC listeners into sagas using takeEvery/takeLatest + call/put/delay. Covers
+  Move domain-owned subscriptions, $effect blocks, async calls, fetches, timers,
+  and IPC listeners into sagas; retain DOM-local component effects. Covers
   the fetch/localStorage/$effect to saga conversion and the "side effects in
   reducers" pitfall.
 type: sub-skill
 requires:
+  - core/core-policy
   - core/sagas
   - svelte/migration
 triggers:
@@ -17,7 +18,21 @@ triggers:
 ---
 # Migration — `$effect` / `fetch` / Subscriptions → Saga
 
-> Every side effect (localStorage, fetch, event listeners, timers, IPC) currently living inside a component, store, or reducer moves into a saga. Reducers remain pure.
+> Migrate domain/business effects to sagas after assessment. Reducers remain pure;
+> DOM-local component effects retain their component lifetime.
+
+## Effect ownership boundary
+
+Use `../../../core/core-policy/SKILL.md` → **Setup — core rules** and
+`../assessment/SKILL.md` → **Decision Framework** before applying a recipe.
+Domain persistence, network/IPC flows, subscriptions, and business timers belong
+in sagas. Focus, scroll, measurements, and third-party widget setup/cleanup tied
+to rendered DOM remain component-owned. Do not globalize those effects merely
+because they use `$effect`, `onMount`, listeners, or timers.
+
+Choose startup/cancellation ownership explicitly using `../../store/SKILL.md` →
+**App saga lifetime**. `store.init()` does not start app sagas; an `onMount`-started
+saga cancels on unmount and starts again on remount.
 
 ## Examples
 
@@ -162,6 +177,8 @@ reducerWith(saveSettings, (state, { payload: [settings] }) => {
 
 ## Conversion Recipes
 
+These recipes apply only to domain-owned work classified above.
+
 | Source pattern | Saga equivalent |
 | --- | --- |
 | $effect(() => { localStorage.setItem(...) }) | takeEvery(action, function* () { yield* call(appLocalSetLocalStorageItem, key, value) }) |
@@ -171,7 +188,7 @@ reducerWith(saveSettings, (state, { payload: [settings] }) => {
 | setTimeout(..., ms) | yield* delay(ms) |
 | setInterval(..., ms) | while (true) { yield* delay(ms); ... } (with saga cancellation) |
 | window.addEventListener(...) / IPC | createChannelFrom... + redux-saga takeEvery(channel, worker) (see core/channel-effects) |
-| onMount(() => { ... }) | Init saga that runs once on slice registration |
+| Domain startup formerly in onMount | Explicit mount-scoped `onMount(() => store.runSaga(sagaFn))`; see `../../store/SKILL.md` → **App saga lifetime** |
 
 ## Common Pitfalls
 
@@ -186,3 +203,4 @@ reducerWith(saveSettings, (state, { payload: [settings] }) => {
 - `../../../core/local-storage/SKILL.md` — safe localStorage helpers and persistence-saga pattern
 - `../../../core/channel-effects/SKILL.md` — generic EventChannel consumers for DOM / IPC / websocket listeners
 - `../../../core/selector-channels/SKILL.md` — reacting to selector value changes from sagas
+- `../../store/SKILL.md` — explicit saga startup and cancellation lifetime

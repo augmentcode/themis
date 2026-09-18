@@ -3,7 +3,7 @@ name: svelte/migration/cleanup
 description: >-
   Delete old .store.svelte.ts files, verify zero residual references remain,
   and apply the rollback strategy if a migrated slice regresses. Final step
-  per slice; also owns the risk-minimization checklist (one store per PR,
+  per slice; also owns the technical risk-minimization checklist (small increments,
   tests, manual UI verification).
 type: sub-skill
 requires:
@@ -16,7 +16,7 @@ triggers:
 ---
 # Migration — Cleanup and Rollback
 
-> Step 10 of the checklist, plus the rollback recipe. Run this once per slice, only after the new slice passes tests and the UI flows have been verified.
+> Final step of `../SKILL.md` → **Recommended Order**, plus the rollback recipe. Run this once per slice, only after the new slice passes tests and the UI flows have been verified.
 
 ## Remove Old Store Files
 
@@ -42,28 +42,33 @@ Verifier output must say either “no pass-through wrappers” or list each docu
 
 ## Rollback Strategy
 
-If a migration needs to be reverted:
+Keep migrations in small, independently verifiable technical increments. Retain
+the old store until the replacement is verified, and preserve a recoverable
+baseline through the active workflow before deleting it. Follow **Workflow
+ownership** below for any branch, commit, PR, or history operation.
 
-1. **Keep the old store file** in version control until the migration is verified
-2. **Migrate one store at a time** — never batch multiple stores in one commit
-3. **Use feature branches** — one branch per store migration
-4. **Test thoroughly** before deleting the old store
+## Workflow ownership
+
+Branching, commits, PR sizing, and rollback commands are governed by the active
+user/task/repository instructions. This skill does not require a branch, commit,
+or PR per store and does not authorize destructive history changes. Technical
+rollback scope remains the complete migrated owner and its consumers.
 
 ### Reverting a migration
 
-Rollback restores the old store file and affected components from git history, removes the new slice directory, removes the matching reducer constructor entry, and removes any matching `store.runSaga(sagaFn)` startup call from the app Store setup.
+When rollback is authorized, restore the old store and affected consumers from the approved baseline; remove the replacement slice, matching reducer constructor entry, and matching `store.runSaga(sagaFn)` startup call as one technical unit. Re-run affected tests and UI checks so there is only one active owner.
 
 ### Minimizing risk
 
 - **Run all existing tests** after each store migration
-- **Manually test affected UI flows** before committing
-- **Keep PRs small** — one store = one PR
+- **Manually test affected UI flows** before handoff
+- **Keep technical increments small**; use **Workflow ownership** for VCS policy
 - **Verify zero references** to the old store before deleting it: `grep -rn "{old-store}" src/ --include="*.ts" --include="*.svelte"`
 
 ## Final Checklist Per Slice
 
-- [ ] Reducer registered in `reducer.ts`
-- [ ] Saga registered in `sagas.ts`
+- [ ] Reducer registered in the configured Store constructor map
+- [ ] Any app saga explicitly started with owned cancellation, per `../../store/SKILL.md` → **App saga lifetime**
 - [ ] All consuming components updated (see `../component-migration/SKILL.md`)
 - [ ] All tests pass
 - [ ] Manual UI verification done on affected flows
@@ -71,7 +76,7 @@ Rollback restores the old store file and affected components from git history, r
 - [ ] `grep` confirms zero references to the old store path
 - [ ] Old module paths checked for one-line re-export/proxy/delegate leftovers
 - [ ] Any remaining compatibility shim documents the reason and sunset/removal condition
-- [ ] Commit message references the slice migrated (one store per PR)
+- [ ] Handoff identifies the migrated slice and follows **Workflow ownership**
 
 ## Examples in This Skill
 
