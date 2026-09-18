@@ -53,28 +53,20 @@ Use this root for Streaming-specific `themis` work and as the default package ro
 
 | Route | Use when |
 | --- | --- |
-| ./store/SKILL.md | Choosing/importing StreamingStore, initialization/disposal, and inherited Store runtime behavior. |
+| ./store/SKILL.md | Choosing/importing StreamingStore and owning construction, process bootstrap, initialization, and whole-Store disposal. |
 | ./selectors/SKILL.md | Authoring Store-bound selectors whose direct calls return cached Kefir Observable values, including observable selector arguments, .withStore, .select, and .effect. |
-| ./selector-lifecycle/SKILL.md | Deciding when streaming selectors may be invoked/observed and how init()/dispose() affect stream state. |
+| ./selector-lifecycle/SKILL.md | Direct-call validity, explicit Store binding, and consumer subscription timing/teardown; not Store construction or runtime disposal implementation. |
 
 First-time app setup starts at the canonical root setup skill: `../setup/SKILL.md`.
 
-## Routing rules
+## Operational guidance owners
 
-- Use `StreamingStore` only from `@augmentcode/themis/streaming-store`.
-- Treat this app/code path as Streaming-only; do not add alternate Store lifecycle setup to the same app.
-- Create production app-local streaming selectors through the configured `StreamingStore` instance: `streamStore.createSelector(...)`.
-- Direct selector calls return Kefir observables; use them through the consuming app's observable subscription pattern.
-- Direct Kefir `Observable` outputs are cached for the same StreamingStore instance + selector + args; prefer the same selector + args over manual stream passing where valid.
-- Streaming selector emissions use the configured Store `throttledSelectorFrequency` policy, defaulting to 64 FPS; rapid Store or observable argument bursts coalesce to the latest pending selector value.
-- Selector trace output is disabled by default; pass `{ traceSelectors: true }` in the final StreamingStore options object only for temporary diagnostics.
-- `StreamingStore.traceStreams` is the same frozen, read-only Kefir stream collection exposed by every Store family: `selectorDetail`, `selectorSummary`, `selectorCadence`, `sagaMonitor`, `runtimeError`, and `reduxAction`. Observe these public streams; never import or publish through internal emitters.
-- With `logReduxActions: true`, pure middleware publishes one immutable `reduxAction` event after successful `next(action)`; StoreRuntime's default logger renders the legacy grouped action/state output. The event retains action and state references, so redact sensitive values before sharing logs.
-- The built-in console logger is attached by default. Pass a typed `loggerFactory` in the final options object to receive all six streams and optionally return a disposer; custom factories replace, rather than augment, default console logging.
-- Set `traceSelectors: { summaryEnabled: true, summaryIntervalMs: ... }` to allocate and publish selector summaries. `summaryEnabled` is the sole summary switch; detailed selector flags remain independent.
-- `.select(state, ...args)` stays the pure selector path for tests/composition.
-- `.effect(...args)` stays the typed-redux-saga path for saga reads.
-- Core saga guidance, selector-channel helpers, `waitFor`, reducers, actions, and state policy remain in `../core/`.
+- For the public class import and process lifetime, read `./store/SKILL.md` — **Correct import and class choice**, **Lifecycle rules**, and **Process bootstrap**.
+- For Store-bound creation, observable arguments, direct/pure/saga call forms, scheduling, and output reuse, read `./selectors/SKILL.md` — **Authoring rules**, **Call forms**, **Selector caching**, and **Stable selector arguments**. This router does not duplicate the selector contract.
+- For invocation validity and observer cleanup, read `./selector-lifecycle/SKILL.md` — **Lifecycle map** and **Consumer subscription ownership**.
+- Streaming diagnostics use the shared contracts: `../core/selector-tracing/SKILL.md` — **Configure the Store**, **Aggregate summaries**, and **Store-family symmetry and lifecycle**. These own trace defaults/options, summary allocation, and selector-resource disposal.
+- For the public stream inventory/types, custom logger replacement and cleanup, Redux middleware event ordering, immutable payloads, rendering, and privacy, read `../core/redux-action-logging/SKILL.md` — **Store-owned logging streams**, **Logger factory lifecycle**, **Read one action's group**, and **Keep logging opt-in and temporary**.
+- For Redux/saga behavior rather than Kefir consumption, use `../core/SKILL.md` — **Core leaf routes**; selector-driven saga subscriptions specifically belong to `../core/selector-channels/SKILL.md` — **Do** and **Implementation cues**.
 
 ## Verification cues
 
