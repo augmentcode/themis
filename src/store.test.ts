@@ -913,6 +913,49 @@ describe('Store', () => {
       }
     });
 
+    it('does not inspect the async marker when no promise field exists', () => {
+      const readAsyncActionType = vi.fn(() => 'test/loadAsync');
+      const action = { type: 'TEST', get asyncActionType() { return readAsyncActionType(); } };
+      const dispose = store.init();
+
+      try {
+        expect(store.dispatch(action)).toBe(action);
+        expect(readAsyncActionType).not.toHaveBeenCalled();
+      } finally {
+        dispose();
+      }
+    });
+
+    it.each([
+      { label: 'a promise without action callbacks', promise: Promise.resolve('loaded') },
+      { label: 'an object without Promise methods', promise: {} },
+      { label: 'a null promise field', promise: null },
+      { label: 'an undefined promise field', promise: undefined },
+    ])('trusts a string async marker with $label', ({ promise }) => {
+      const action = { type: 'TEST', asyncActionType: 'test/loadAsync', promise };
+      const dispose = store.init();
+
+      try {
+        expect(store.dispatch(action)).toBe(promise);
+      } finally {
+        dispose();
+      }
+    });
+
+    it.each([undefined, null, 1, {}])(
+      'does not unwrap promise-bearing actions with a non-string async marker %s',
+      (asyncActionType) => {
+        const action = { type: 'TEST', asyncActionType, promise: Promise.resolve('ordinary') };
+        const dispose = store.init();
+
+        try {
+          expect(store.dispatch(action)).toBe(action);
+        } finally {
+          dispose();
+        }
+      }
+    );
+
     it('preserves synchronous middleware errors for async actions', () => {
       const load = createAsyncAction<string>('test/loadAsync', 'test/load');
       const error = new Error('dispatch failed');

@@ -71,15 +71,13 @@ import type {
 const MAX_SELECTOR_SOURCE_SNIPPET_LINES = 5;
 const MAX_SELECTOR_SOURCE_SNIPPET_LENGTH = 500;
 
-const isStoreAsyncAction = (action: UnknownAction): action is StoreAsyncAction<any, unknown> => (
-  typeof action.asyncActionType === 'string' &&
-  typeof action.success === 'function' &&
-  typeof action.failure === 'function' &&
-  typeof action.promise === 'object' &&
-  action.promise !== null &&
-  'then' in action.promise &&
-  typeof action.promise.then === 'function'
-);
+const isStoreAsyncAction = (action: UnknownAction): action is StoreAsyncAction<any, unknown> => {
+  if (!('promise' in action)) {
+    return false;
+  }
+
+  return typeof action.asyncActionType === 'string';
+};
 
 type StateDiff = Record<string, { prev: unknown; next: unknown }>;
 
