@@ -52,6 +52,7 @@ export const standaloneArchitectureRuleIds = [
   "source-shaped-package-import",
   "state-type-name",
   "store-constructor-saga-map",
+  "redundant-async-action-catch",
   "suspicious-state-field",
   "test-selector-select",
   "typed-saga-call-mock-guard",
@@ -68,6 +69,7 @@ export const architectureRuleDomains = {
     "removed-middleware-source",
   ],
   store: [
+    "redundant-async-action-catch",
     "duplicate-action-type",
     "duplicate-selector-export",
     "duplicate-selector-implementation",

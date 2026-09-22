@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0 - 2026-09-18
+
+- Observed ignored async-action rejections internally while preserving the original promise and rejection for explicit awaiters.
+- Returned the original typed async-action promise from Store, ReactStore, and StreamingStore dispatch, enabling `await store.dispatch(asyncAction(...))` without changing ordinary action dispatch behavior.
+- Added the provenance-aware `redundant-async-action-catch` ESLint rule to flag redundant catches on proven Themis async-action promises.
+- Updated reducer, saga, and action-skill documentation with preferred dispatch-await error handling and per-instance async-action completion guidance.
+- Consolidated core, React, Svelte, setup, and Streaming skill ownership and routing, corrected conflicting lifecycle and migration guidance, and preserved framework isolation.
+- Repaired skill references with canonical relative links and stable named anchors, replacing stale numbered citations and normalizing same-document links.
+
 ## 0.2.9 - 2026-09-17
 
 - Fixed selector-channel re-entrant updates so synchronous worker dispatches advance the previous payload baseline before emission, preventing duplicate or stale transitions.

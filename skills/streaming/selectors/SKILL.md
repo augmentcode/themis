@@ -34,8 +34,8 @@ lifecycle/setup guidance here.
 - Create selectors through the configured `StreamingStore` instance.
 - Keep this app on the Streaming Store family and keep alternate frontend patterns
   isolated to separate app/code paths.
-- Keep selector callbacks pure and derived-only; reducers must not store selector
-  outputs.
+- For pure derived callbacks and canonical state ownership, follow
+  `../../core/state-integrity/SKILL.md` — **MUST / NEVER rules**.
 - Compose selectors with `.select(state, ...args)` inside another selector.
 - Keep generic selector helper modules Store-parameterized: accept a configured
   store and call `store.createSelector(...)` at the integration boundary.
@@ -53,9 +53,11 @@ export const streamStore = new StreamingStore({ todos: todosReducer });
 export const selectTodoCount = streamStore.createSelector((state) => {
   return state.todos.collection.ids.length;
 });
-
-const todoCount$ = selectTodoCount();
 ```
+
+This module defines selectors without reading stream state. Before invoking
+them, follow `../selector-lifecycle/SKILL.md` — **Lifecycle map**; for observation
+and cleanup examples use **Consumer subscription ownership** in that same skill.
 
 ## Call forms
 
@@ -72,15 +74,15 @@ Streaming selector outputs are throttled by the owning Store's
 `throttledSelectorFrequency` option, defaulting to `64` FPS. The first selector
 value remains prompt; subsequent rapid Store updates or observable argument
 updates within a throttle interval are omitted/coalesced, and the latest pending
-value emits at the scheduled moment. Selector trace output is disabled by
-default; pass `{ traceSelectors: true }` in the final Store options object only
-for temporary diagnostics.
+value emits at the scheduled moment. For opt-in diagnostics and constructor
+options, read `../../core/selector-tracing/SKILL.md` — **Scope and safety rules**
+and **Configure the Store** rather than adding a Streaming-specific trace policy.
 
-Selector-channel helpers that consume `.select`/`.effect`-compatible selectors
-run in sagas and support `StreamingStore` selectors through the shared selector
-read shape. Pass plain stable selector arguments as the helper args tuple;
-selector-channel effects read Redux state from saga context and do not subscribe
-to direct Kefir `Observable` selector outputs.
+Selector-channel helpers use the shared selector read shape, not direct Kefir
+outputs. Their saga-context subscription behavior and plain stable argument
+tuples are owned by `../../core/selector-channels/SKILL.md` — **Do** and
+**Implementation cues**; one-shot waits belong to `../../core/wait-for/SKILL.md`
+— **Do**. Saga read conventions belong to `../../core/sagas/SKILL.md` — **Do**.
 
 ## Selector caching
 
@@ -139,6 +141,6 @@ export const selectTodo = streamStore.createSelector((state, id: string) => {
 
 ## See also
 
-- `streaming/store/SKILL.md` — Store class and import choice.
-- `streaming/selector-lifecycle/SKILL.md` — invocation and teardown timing.
-- `core/state-integrity/SKILL.md` — canonical derived-value ownership.
+- `../store/SKILL.md` — **Correct import and class choice**.
+- `../selector-lifecycle/SKILL.md` — **Lifecycle map** for invocation and teardown timing.
+- `../../core/state-integrity/SKILL.md` — **MUST / NEVER rules** for derived-value ownership.

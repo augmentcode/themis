@@ -6,7 +6,7 @@ description: >-
   plus a .register(builder) helper that chains both handlers onto a createReducer
   builder. The field parameter is constrained to keys whose value type is
   boolean. Use it instead of hand-writing setX / toggleX pairs. Public API:
-  @augmentcode/themis/utils/store/boolean-preference; related guidance: ../SKILL.md §11.
+  @augmentcode/themis/utils/store/boolean-preference; related guidance: #api.
 type: sub-skill
 library: themis
 requires:
@@ -25,7 +25,7 @@ triggers:
 
 > Helper for boolean preference fields. It emits a consistent set/toggle action pair and wires both reducer cases through .register(builder). Use it instead of hand-rolled setX / toggleX boilerplate so the actions stay namespaced and in lock-step.
 
-## 1. API
+## API
 
 From `@augmentcode/themis/utils/store/boolean-preference`:
 
@@ -194,7 +194,7 @@ const enabled = createBooleanPreference<SettingsState>({
 export const reducer = enabled.register(createReducer(initialState));
 ```
 
-Source: `../SKILL.md §11`.
+Source: [API](#api).
 
 ### Forgetting to call `.register` on the reducer builder
 
@@ -218,7 +218,7 @@ const reducer = enabled.register(createReducer(initialState));
 reducer(undefined, enabled.setAction(true)); // { enabled: true }
 ```
 
-Source: `../SKILL.md §11`.
+Source: [API](#api).
 
 ### Pointing `field` at a non-boolean key
 

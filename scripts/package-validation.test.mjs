@@ -279,7 +279,7 @@ describe("package metadata", () => {
       react: [...storeRootRuleIds, ...architectureRuleDomains.react],
       streaming: storeRootRuleIds,
     };
-    const expectedRootRuleCounts = { core: 4, store: 41, svelte: 44, react: 45, streaming: 41 };
+    const expectedRootRuleCounts = { core: 4, store: 42, svelte: 45, react: 46, streaming: 42 };
 
     expect(Object.keys(architectureRootModule).sort()).toEqual(["core", "plugins", "react", "store", "streaming", "svelte"]);
     expect(architectureRootModule.full).toBeUndefined();
@@ -1092,6 +1092,32 @@ describe("package metadata", () => {
     expect(selectedRuleIdsFromConfig(svelte)).toContain("selector-argument-stability");
     expect(selectedRuleIdsFromConfig(react)).toContain("selector-argument-stability");
     expect(selectedRuleIdsFromConfig(streaming)).toContain("selector-argument-stability");
+  });
+
+  it.each([
+    ["Babel", architectureValidationLanguageOptions],
+    ["TypeScript ESLint", { parser: typescriptEslintParser }],
+  ])("proves async-action catch provenance without reporting unrelated promises with %s", async (_name, languageOptions) => {
+    const ruleId = "redundant-async-action-catch";
+    const [valid, invalid] = await Promise.all(["valid", "invalid"].map((name) =>
+      readFile(new URL(`../eslint-plugins/store/${ruleId}/fixtures/${name}.ts`, import.meta.url), "utf8")
+    ));
+    const plugin = architectureRulePlugins[ruleId];
+    expect(lintArchitectureRule(ruleId, plugin, valid, "src/todos-slice.ts", languageOptions)).toEqual([]);
+    const messages = lintArchitectureRule(ruleId, plugin, invalid, "src/todos-slice.ts", languageOptions);
+    expect(messages.map(({ line }) => line)).toEqual([5, 7, 8, 12, 13, 16, 17, 18, 19, 21]);
+    for (const message of messages) {
+      expect(message.ruleId).toBe(namespacedRuleId(ruleId));
+      expect(message.message).toContain("Themis already observes ignored rejections");
+      expect(message.message).toContain("await store.dispatch(action)");
+      expect(message.fix).toBeUndefined();
+    }
+    for (const root of [store, svelte, react, streaming]) expect(selectedRuleIdsFromConfig(root)).toContain(ruleId);
+    expect(selectedRuleIdsFromConfig(core)).not.toContain(ruleId);
+    const standalone = await import("@augmentcode/themis/eslint-plugins/plugins/redundant-async-action-catch");
+    const collection = await import("@augmentcode/themis/eslint-plugins/plugins");
+    expect(standalone.default).toBe(plugin);
+    expect(collection.redundantAsyncActionCatchPlugin).toBe(plugin);
   });
 
   it("keeps custom ESLint rule messages concise while preserving detailed metadata", () => {

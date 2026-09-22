@@ -1,0 +1,21 @@
+import { createAsyncAction as createRequest } from "@augmentcode/themis/utils/store/create-action";
+import * as actions from "@augmentcode/themis/utils/store/create-action";
+
+const loadTodos = createRequest("todos/load", "todos/loadStage");
+loadTodos().promise.catch(() => undefined);
+const action = loadTodos();
+action.promise.catch(() => {});
+action.promise.catch(reportError);
+const creatorAlias = loadTodos;
+const actionAlias = creatorAlias();
+const promiseAlias = actionAlias.promise;
+promiseAlias.catch(() => undefined);
+createRequest("todos/loadMore", "todos/loadMoreStage")().promise.catch(() => undefined);
+const factoryAlias = actions.createAsyncAction;
+const refresh = factoryAlias("todos/refresh", "todos/refreshStage");
+refresh()["promise"]["catch"](() => undefined);
+(action as unknown as AsyncAction).promise!.catch(() => undefined);
+action?.promise?.catch?.(() => undefined);
+actions["createAsyncAction"]("todos/clear", "todos/clearStage")()[`promise`][`catch`](() => undefined);
+let stableAction = loadTodos();
+stableAction.promise.catch(() => undefined);

@@ -4,7 +4,7 @@ description: >-
   Opt-in Redux action logging for Store, ReactStore, and StreamingStore. Covers
   the construction-time logReduxActions option, grouped console records,
   presentation styles, immutable `reduxAction` stream events, unchanged-state
-  output, and lazy path-keyed changes.
+  output, lazy path-keyed changes, and shared traceStreams/loggerFactory lifecycle.
 type: sub-skill
 requires:
   - core
@@ -13,6 +13,8 @@ triggers:
   - logReduxActions
   - redux dispatch logging
   - action state diff
+  - Store loggerFactory
+  - Store traceStreams
 ---
 # Redux action logging
 
@@ -40,12 +42,25 @@ Use the constructor corresponding to the app's Store family; do not combine
 Svelte, React, and Streaming lifecycle patterns in one app. The option is
 shared by all three families and is disabled when omitted or set to `false`.
 
-The Store exposes six read-only Kefir streams through `traceStreams`:
+## Store-owned logging streams
+
+The Store exposes a frozen `traceStreams` collection of six read-only Kefir streams:
 `selectorDetail`, `selectorSummary`, `selectorCadence`, `sagaMonitor`,
-`runtimeError`, and `reduxAction`. `reduxAction` is produced by pure middleware:
+`runtimeError`, and `reduxAction`. The collection exposes no emitters and does not
+permit consumers to publish events. Public `StoreTraceStreams` and
+`StoreLoggerFactory` types are available from `@augmentcode/themis/types` and
+re-exported by each Store-family entrypoint.
+
+When `logReduxActions: true`, `reduxAction` is produced by pure middleware:
 it calls `next(action)` before publishing one shallow-immutable event with the
 action, previous/next state references, and `stateChanged`. Errors and return
 values from `next` are preserved, and failed dispatches do not publish an event.
+The event does not eagerly compute a state diff; default rendering computes it
+lazily as described in **Read one action's group** below. Action/state payloads
+may contain application data; redact secrets and sensitive values before sharing.
+
+Selector metadata has a separate privacy contract; follow
+[Scope and safety rules](../selector-tracing/SKILL.md#scope-and-safety-rules).
 
 ## 2. Read one action's group
 
@@ -85,21 +100,17 @@ changes from the group title alone.
 ## 3. Keep logging opt-in and temporary
 
 There is no dev-mode switch, localStorage toggle, global debug-console toggle,
-or runtime enable/disable API for this logger. The pure logger middleware and
-the default StoreRuntime rendering are installed only when the normalized
-constructor option is `true`; omitted and `false` options do not publish action
-events or attach the default logger.
+or runtime enable/disable API for action logging. The pure logger middleware and
+default action rendering are enabled only when the normalized constructor option
+is `true`; omitted and `false` options do not publish action events or enable
+action console groups. Other diagnostic streams have independent options.
 
-Pass a typed `loggerFactory` to replace default console rendering. It receives
-the same six read-only streams and may return a disposer; it does not also
-attach the built-in legend or Redux console groups. The factory is attached at
-initialization, disposed with the Store, and reattached on a later successful
-initialization.
+For default/custom rendering, factory attachment, and cleanup, follow
+[Logger factory lifecycle](#logger-factory-lifecycle).
 
-Selector aggregation is independent of action logging: `summaryEnabled: true`
-is the sole switch that allocates and periodically publishes selector summaries.
-Detailed selector categories may be enabled without allocating a summary
-collector, and action events never change that behavior.
+Selector aggregation is independent of action logging. For `summaryEnabled`
+and collector allocation/publication, follow
+[Aggregate summaries](../selector-tracing/SKILL.md#aggregate-summaries).
 
 To disable logging, omit the option or set `logReduxActions: false` **and
 construct a new Store instance**. Changing an options object, calling `init()`
@@ -108,6 +119,31 @@ middleware pipeline.
 
 After reproducing the issue, dispose the diagnostic Store through its normal
 family lifecycle and remove the temporary `true` option from application code.
+
+## Logger factory lifecycle
+
+With no `loggerFactory`, StoreRuntime attaches its default console logger,
+preserving severity and `[themis]` diagnostic prefixes; enabled action logging
+uses the legend/groups described in **Read one action's group** above.
+
+Pass a typed `loggerFactory` to replace default console rendering. It receives
+only this Store instance's six read-only streams and may return one disposer;
+it does not also attach the built-in legend or default console output.
+
+```ts
+import type { StoreLoggerFactory } from '@augmentcode/themis/types';
+
+const loggerFactory: StoreLoggerFactory = (streams) => {
+  const subscription = streams.runtimeError.observe(reportRuntimeError);
+  return () => subscription.unsubscribe();
+};
+```
+
+Pass the factory in the third Store constructor options object. The factory
+attaches during initialization; its disposer runs during `store.dispose()` and
+before a later successful initialization attaches it again. Dispose custom stream
+subscriptions in that callback and retain the Store initializer's disposer for
+the end of the owning Store lifetime.
 
 ## 4. Common mistakes
 

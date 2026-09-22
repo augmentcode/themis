@@ -427,16 +427,16 @@ Wrap individual workers in try/catch:
 function* handleFetchItems(action: ReturnType<typeof fetchItems>) {
   try {
     const items = yield* call(api.fetchItems, action.payload[0]);
-    yield* put(fetchItems.success({ items }));
+    yield* put(action.success({ items }));
   } catch (error) {
-    yield* put(fetchItems.failure(error instanceof Error ? error : new Error(String(error))));
+    yield* put(action.failure(error instanceof Error ? error : new Error(String(error))));
   }
 }
 ```
 
 ### Async Action Error Flow
 
-With `createAsyncAction`, use `.success` and `.failure` sub-actions:
+With `createAsyncAction`, use the request's per-instance `action.success(...)` and `action.failure(...)` sub-actions. They settle that request's original promise with the response or original error, and dispatching the sub-action updates reducers. The creator's static `fetchItems.success(...)` and `fetchItems.failure(...)` produce lifecycle actions but do not settle a particular request's promise; use those static creators as reducer patterns, not to complete a request in its worker.
 
 ```typescript
 export function* mySaga() {
@@ -450,6 +450,21 @@ export function* mySaga() {
   });
 }
 ```
+
+Themis internally observes ignored async-action rejections, so fire-and-forget dispatch does not need `action.promise.catch(...)` to prevent unhandled-rejection events. This does not swallow errors for explicit awaiters: `await action.promise` and `await store.dispatch(action)` still receive the original rejection. The `themis/redundant-async-action-catch` ESLint rule reports catch calls on original action promises when their Themis provenance is statically known, including defensive `action.promise.catch(() => undefined)` calls.
+
+Outside the saga, callers that need the result or recovery should use `try/catch` around `await store.dispatch(asyncAction(...))`. With an initialized Themis store and the request watcher running:
+
+```typescript
+try {
+  const result = await store.dispatch(fetchItems("active"));
+  console.log(result);
+} catch (error) {
+  console.error("Unable to fetch items", error);
+}
+```
+
+Dispatch returns the request's original, typed promise. If the caller does not need the result, `store.dispatch(fetchItems("active"))` is sufficient; the saga's success/failure flow remains unchanged. See [Awaiting Results and Handling Failures](./REDUCERS.md#awaiting-results-and-handling-failures).
 
 ### Channel Cleanup
 

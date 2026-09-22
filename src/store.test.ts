@@ -3,6 +3,9 @@ import { setContext } from 'svelte';
 import { writable } from 'svelte/store';
 import createSagaMiddleware from 'redux-saga';
 import { Store } from './svelte-store';
+import { ReactStore } from './react-store';
+import { StreamingStore } from './streaming-store';
+import { createAsyncAction } from './utils/store/create-action';
 import { getStoreContext } from './utils/runtime-svelte/utils';
 import { registerGlobalDevTools } from './global-dev-tools';
 import {
@@ -14,7 +17,7 @@ import { storeUtilityReducer } from './slices/store-utility/store-utility-slice'
 import { sagaManager } from './slices/saga-manager/sagas/manager';
 import { deriveSagaName } from './utils/sagas/derive-saga-name';
 import { DEFAULT_THROTTLED_SELECTOR_FREQUENCY } from './store-options';
-import type { ReducersMap } from './types';
+import type { ReducersMap, StoreMiddleware } from './types';
 
 vi.mock('svelte', () => ({
   setContext: vi.fn(),
@@ -822,10 +825,148 @@ describe('Store', () => {
   });
 
   describe('dispatch', () => {
-    it('returns the initialized Redux store dispatch function', () => {
+    it('returns a stable dispatch function that preserves ordinary actions', () => {
       store.init();
+      const { dispatch } = store;
+      const action = { type: 'TEST', payload: 1 };
 
-      expect(store.dispatch({ type: 'TEST' })).toEqual({ type: 'TEST' });
+      expect(store.dispatch).toBe(dispatch);
+      expect(dispatch(action)).toBe(action);
+    });
+
+    it.each([Store, ReactStore, StreamingStore])(
+      'returns the original async promise after dispatch through %s middleware and reducers',
+      async (StoreClass) => {
+        const load = createAsyncAction<string>('test/loadAsync', 'test/load');
+        const action = load();
+        const actions: unknown[] = [];
+        const nextResults: unknown[] = [];
+        const middleware: StoreMiddleware = () => (next) => (received) => {
+          actions.push(received);
+          nextResults.push(next(received));
+          return 'middleware result';
+        };
+        const reducer = vi.fn((state = {}) => state);
+        const mappedStore = new StoreClass({ test: reducer }, middleware);
+        const dispose = mappedStore.init();
+        reducer.mockClear();
+
+        try {
+          const result = mappedStore.dispatch(action);
+
+          expect(actions).toEqual([action]);
+          expect(nextResults).toEqual([action]);
+          expect(reducer).toHaveBeenCalledExactlyOnceWith({}, action);
+          expect(result).toBe(action.promise);
+          mappedStore.dispatch(action.success('loaded'));
+          await expect(result).resolves.toBe('loaded');
+        } finally {
+          dispose();
+        }
+      }
+    );
+
+    it.each([Store, ReactStore, StreamingStore])(
+      'preserves the original rejection when awaiting dispatch through %s',
+      async (StoreClass) => {
+        const load = createAsyncAction<string>('test/loadAsync', 'test/load');
+        const action = load();
+        const error = new Error('load failed');
+        const mappedStore = new StoreClass();
+        const dispose = mappedStore.init();
+
+        try {
+          const result = mappedStore.dispatch(action);
+          mappedStore.dispatch(action.failure(error));
+
+          expect(result).toBe(action.promise);
+          await expect(result).rejects.toBe(error);
+        } finally {
+          dispose();
+        }
+      }
+    );
+
+    it('preserves middleware return values for ordinary actions', () => {
+      const middlewareResult = { handled: true };
+      store.addMiddleware(() => (next) => (action) => {
+        next(action);
+        return middlewareResult;
+      });
+      const dispose = store.init();
+
+      try {
+        expect(store.dispatch({ type: 'TEST' })).toBe(middlewareResult);
+      } finally {
+        dispose();
+      }
+    });
+
+    it('does not unwrap unrelated promise-bearing actions', () => {
+      const action = { type: 'TEST', promise: Promise.resolve('ordinary') };
+      const dispose = store.init();
+
+      try {
+        expect(store.dispatch(action)).toBe(action);
+      } finally {
+        dispose();
+      }
+    });
+
+    it('does not inspect the async marker when no promise field exists', () => {
+      const readAsyncActionType = vi.fn(() => 'test/loadAsync');
+      const action = { type: 'TEST', get asyncActionType() { return readAsyncActionType(); } };
+      const dispose = store.init();
+
+      try {
+        expect(store.dispatch(action)).toBe(action);
+        expect(readAsyncActionType).not.toHaveBeenCalled();
+      } finally {
+        dispose();
+      }
+    });
+
+    it.each([
+      { label: 'a promise without action callbacks', promise: Promise.resolve('loaded') },
+      { label: 'an object without Promise methods', promise: {} },
+      { label: 'a null promise field', promise: null },
+      { label: 'an undefined promise field', promise: undefined },
+    ])('trusts a string async marker with $label', ({ promise }) => {
+      const action = { type: 'TEST', asyncActionType: 'test/loadAsync', promise };
+      const dispose = store.init();
+
+      try {
+        expect(store.dispatch(action)).toBe(promise);
+      } finally {
+        dispose();
+      }
+    });
+
+    it.each([undefined, null, 1, {}])(
+      'does not unwrap promise-bearing actions with a non-string async marker %s',
+      (asyncActionType) => {
+        const action = { type: 'TEST', asyncActionType, promise: Promise.resolve('ordinary') };
+        const dispose = store.init();
+
+        try {
+          expect(store.dispatch(action)).toBe(action);
+        } finally {
+          dispose();
+        }
+      }
+    );
+
+    it('preserves synchronous middleware errors for async actions', () => {
+      const load = createAsyncAction<string>('test/loadAsync', 'test/load');
+      const error = new Error('dispatch failed');
+      store.addMiddleware(() => () => () => { throw error; });
+      const dispose = store.init();
+
+      try {
+        expect(() => store.dispatch(load())).toThrow(error);
+      } finally {
+        dispose();
+      }
     });
 
     it('throws if init() has not been called', () => {

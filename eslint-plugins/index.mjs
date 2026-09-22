@@ -27,6 +27,7 @@ const svelteStoreIgnores = [
 ];
 
 const ruleDefinitions = {
+  "redundant-async-action-catch": { files: sourceFiles },
   "duplicate-action-type": { files: sourceFiles },
   "duplicate-selector-export": { files: sourceFiles },
   "duplicate-selector-implementation": { files: sourceFiles },

@@ -9,7 +9,7 @@ description: >-
   .isDone). Reducer tests are pure — assert reference equality on no-op
   actions. State-integrity verification must prove derived values live in
   selectors and action/selector/saga owners are not duplicated. Source:
-  @augmentcode/themis/docs/TESTING.md, ../SKILL.md §14.
+  @augmentcode/themis/docs/TESTING.md, #layer-rules.
 type: sub-skill
 library: themis
 requires:
@@ -27,7 +27,7 @@ triggers:
 ---
 # Testing — reducer, selector, and saga checks
 
-> Operational testing checklist. Human-facing examples: `@augmentcode/themis/docs/TESTING.md`. Saga effect details: `../sagas/SKILL.md`. Source: `../SKILL.md` §14.
+> Operational testing checklist. Human-facing examples: `@augmentcode/themis/docs/TESTING.md`. Saga effect details: `../sagas/SKILL.md`. Canonical checklist: [Layer rules](#layer-rules) and [Saga test setup cues](#saga-test-setup-cues).
 
 ## Use when
 

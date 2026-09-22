@@ -16,6 +16,10 @@ sources:
   - ../selectors/SKILL.md
 triggers:
   - React selector lifecycle
+  - selector .useValue
+  - selector .withStore
+  - selector .select
+  - selector .effect
   - selector .useValue lifecycle
   - direct signal read
   - useSignals selector
@@ -30,7 +34,10 @@ consumer integration path when callers can pass, read, or render signals. Use
 `.useValue(...args)` only when a hook/plain value is necessary and adapting the
 consumer to accept signals is impractical.
 
-Use this lifecycle for apps that chose the React Store family.
+Use this lifecycle for apps that chose the React Store family. This is the
+canonical owner of the React selector call-mode matrix and consumer boundaries;
+selector definitions and argument evaluation belong to
+[Selector argument API](../selectors/SKILL.md#selector-argument-api).
 
 ## Call-mode map
 
@@ -50,6 +57,8 @@ Use this lifecycle for apps that chose the React Store family.
   signal integration.
 - Ensure React component `.value` reads are tracked by the Preact Signals Babel
   transform or by an explicit `useSignals()` fallback in the reading component.
+  Configuration and transform limitations are in
+  [React tracking requirement](../signals/SKILL.md#react-tracking-requirement).
 - Use `.useValue(...args)` in React components or custom hooks only when a plain value
   or hook-shaped API is required and a signal-aware rewrite is impractical.
 - Use `.select(reactStore.state, ...args)` in handlers and tests when a plain
@@ -70,8 +79,9 @@ Use this lifecycle for apps that chose the React Store family.
   is not a replacement for `.select(state, ...args)` in handlers/tests/sagas.
 - `.select(state, ...args)` and `.effect(...args)` take plain selector arguments,
   not signal wrappers.
-- Selector-channel helpers use the Redux store from saga context; they do not
-  subscribe to direct `ReadonlySignal` selector outputs.
+- Selector-channel helpers use the Redux store's `getState()` / `subscribe()`
+  from saga context with plain stable argument tuples; they do not subscribe to
+  direct `ReadonlySignal` selector outputs.
 
 ## Don't
 
@@ -83,7 +93,7 @@ Use this lifecycle for apps that chose the React Store family.
 
 ## Examples
 
-### 1. React component read with direct signals
+### React component read with direct signals
 
 ```tsx
 import { selectTodoById } from "../store/todos/todos-selectors";
@@ -101,7 +111,7 @@ export function TodoTitle({ id }: { id: string }) {
 }
 ```
 
-### 2. Fallback hook/plain-value read with `.useValue(...args)`
+### Fallback hook/plain-value read
 
 ```tsx
 export function useCanEditTodo(id: string) {
@@ -114,7 +124,7 @@ export function useCanEditTodo(id: string) {
 Use this fallback only when the hook contract must return a plain boolean and
 rewriting callers to accept the underlying signals would be too invasive.
 
-### 3. Direct signal call for signal-aware code
+### Direct signal call for signal-aware code
 
 ```ts
 const todoSignal = selectTodoById("todo-1");
@@ -124,7 +134,7 @@ console.log(todoSignal.value?.title);
 Use the direct form when the caller can accept a `ReadonlySignal<R>`; for pure
 selector composition, prefer `.select(state, ...args)`.
 
-### 4. Handler/test one-shot read with `.select(state, ...args)`
+### Handler and test one-shot reads
 
 ```tsx
 import { reactStore } from "../store/react-store";
@@ -136,7 +146,7 @@ function onDelete(id: string) {
 }
 ```
 
-### 5. Compose selectors with `.select(state, ...args)`
+### Compose selectors
 
 ```ts
 export const selectVisibleTodos = reactStore.createSelector((state) => {
@@ -146,7 +156,7 @@ export const selectVisibleTodos = reactStore.createSelector((state) => {
 });
 ```
 
-### 6. Saga read with `.effect(...args)`
+### Saga reads
 
 ```ts
 import { put } from "typed-redux-saga";
@@ -160,7 +170,7 @@ export function* saveCurrentTodoWorker() {
 Do not pass the selector object itself to saga `select`; use `.effect(...args)` or
 `.select(state, ...args)` intentionally.
 
-### 7. Explicit binding with `.withStore(...)`
+### Explicit Store binding
 
 ```ts
 import type { ReactStore } from "@augmentcode/themis/react-store";
@@ -206,8 +216,8 @@ for `ReactStore`, that result is a Preact React `ReadonlySignal<R>`.
 
 ## See also
 
-- `react/component-integration/SKILL.md` — app bootstrap, Store lifecycle, saga
+- `../component-integration/SKILL.md` — app bootstrap, Store lifecycle, saga
   startup, component dispatch, and handler examples.
-- `react/selectors/SKILL.md` — authoring ReactStore selectors.
-- `react/store/SKILL.md` — `ReactStore` import and initialization rules.
+- `../selectors/SKILL.md` — authoring ReactStore selectors.
+- `../store/SKILL.md` — `ReactStore` import and initialization rules.
 - `@augmentcode/themis/docs/SELECTORS.md` — human reference for selector call forms.

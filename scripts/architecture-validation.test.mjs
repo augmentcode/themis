@@ -55,6 +55,30 @@ describe("architecture validation gate", () => {
     expect(result.files).toHaveLength(3);
   });
 
+  it("checks redundant async-action catches only for proven Themis promises", async () => {
+    const ruleId = architectureRules.redundantAsyncActionCatch;
+    const [valid, invalid] = await Promise.all([readRuleFixture(ruleId, "valid"), readRuleFixture(ruleId, "invalid")]);
+    const root = await createFixture({ "src/valid-slice.ts": valid, "src/invalid-slice.ts": invalid });
+    const result = await validateArchitecture({ root, paths: ["src"] });
+    const diagnostics = result.diagnostics.filter((diagnostic) => diagnostic.rule === ruleId);
+    expect(diagnostics).toHaveLength(10);
+    expect(diagnostics.every(({ file }) => file === "src/invalid-slice.ts")).toBe(true);
+    expect(diagnostics.every(({ message }) => message.includes("await store.dispatch(action)"))).toBe(true);
+    expect(result.diagnostics.some(({ rule }) => rule === "parse-error")).toBe(false);
+  });
+
+  it("supports reviewed async-action catch suppressions", async () => {
+    const root = await createFixture({
+      "src/todos-slice.ts": `
+        import { createAsyncAction } from "@augmentcode/themis/utils/store/create-action";
+        const load = createAsyncAction("todos/load", "todos/stage");
+        // eslint-disable-next-line architecture/redundant-async-action-catch -- migration recovery path
+        load().promise.catch(reportError);
+      `,
+    });
+    expect((await validateArchitecture({ root, paths: ["src"] })).diagnostics).toEqual([]);
+  });
+
   it("createAction placement accepts slice owners and reports non-slice modules", async () => {
     const root = await createFixture({
       "src/todos-slice.ts": `

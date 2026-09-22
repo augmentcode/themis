@@ -13,14 +13,13 @@ requires:
   - svelte
   - svelte/selectors
 triggers:
-  - selector call mode
-  - outside component crash
-  - Store dispatch
-  - select in handler
+  - Svelte selector call mode
+  - Svelte outside component crash
+  - Svelte select in handler
 ---
 # Selector Lifecycle — call-mode guardrails
 
-> Operational checklist for avoiding `lifecycle_outside_component`. Human reference and examples: `@augmentcode/themis/docs/SELECTORS.md` → Using Selectors and Selector Lifecycle Rules. Source: `../SKILL.md` §4, §7.
+> Canonical call-site checklist for avoiding `lifecycle_outside_component`. Human reference and examples: `@augmentcode/themis/docs/SELECTORS.md` → Using Selectors and Selector Lifecycle Rules. Authoring/cache contracts: `../selectors/SKILL.md` → **Selector caching**. Store setup: `../store/SKILL.md` → **Lifecycle rules**.
 
 ## Use when
 
@@ -35,17 +34,17 @@ Use this lifecycle for apps that chose the Svelte Store family.
 | Context | Correct call | Why |
 | --- | --- | --- |
 | Component init/top-level `<script>` | `const value$ = selectFoo(args)` | Uses Svelte context and returns a readable. |
-| Template | Use the captured readable as `$value$` | Avoids creating new readables during render. |
+| Template | Use the captured readable as `$value$` | Keeps context-dependent calls at component init and renders the value, not the readable object. |
 | Event handler/callback/async/test | `selectFoo.select(state, args)` | No Svelte context required. |
 | Saga | `yield* selectFoo.effect(args)` | Emits the package's typed saga select effect. |
 | Selector composition | `otherSelector.select(state, args)` | Reuses state already in scope. |
-| Non-context readable | `selectFoo.withStore(store)(args)` | Binds explicitly to a store. |
+| Non-context readable | `selectFoo.withStore(store)(args)` | Binds explicitly to an initialized Store; the subscriber owns unsubscribe cleanup. |
 
 ## Do
 
 - Capture selector readables during component initialization and dispatch through the configured Store instance.
 - Use `.select(store.state, ...)` with the existing initialized `Store` instance captured outside the handler for one-shot reads when no state argument is already available.
-- Use `.effect()` in sagas instead of passing selector objects to `select`; use selector-channel helpers with plain args when a saga needs to react to selector value changes.
+- Use `.effect()` in sagas instead of passing selector objects to `select`; use selector-channel helpers with plain args when a saga needs to respond to selector value changes.
 - Use `.select(state)` when composing selectors or testing them.
 
 ## Don't
@@ -106,17 +105,13 @@ function* saveCurrentItemWorker() {
 }
 ```
 
-### 5. Compose selectors with .select(state)
+### Composition handoff
 
-```ts
-export const selectVisibleItems = store.createSelector((state) => {
-  const items = selectItems.select(state);
-  const filter = selectItemFilter.select(state);
-  return items.filter((item) => item.status === filter.status);
-});
-```
+Composition uses `.select(state)` on the state already in scope. For the actual
+selector definitions, use `../selectors/SKILL.md` → **Compose selectors with .select(state), not readable calls**;
+do not create a readable subscription inside a selector callback.
 
-### 6. Bind explicitly with .withStore when no Svelte context is available
+### Bind explicitly with .withStore when no Svelte context is available
 
 ```ts
 import type { Store } from "@augmentcode/themis/svelte-store";
@@ -125,6 +120,10 @@ export function createItemReadable(store: Store, itemId: string) {
   return selectItem.withStore(store)(itemId);
 }
 ```
+
+The supplied Store must already be initialized. If you subscribe manually,
+retain and call the unsubscribe function when the owner ends; component `$value$`
+bindings handle their own subscription cleanup.
 
 ### 7. ❌ Bad: creating readables after component initialization
 
@@ -146,7 +145,7 @@ async function onSaveLaterSafely(itemId: string) {
 ## Pitfalls
 
 - `selectFoo()` depends on `getContext()`, so create selector readables during component initialization. Dispatch does not need a context helper; use the configured Store instance.
-- A selector readable call in a template expression still violates lifecycle guidance even though same source + selector + args reuse the cached readable; capture it once at component init and render the captured `$value$`.
+- A selector readable call in a template expression still violates lifecycle guidance even though the same Store + selector + args reuse the cached readable; capture it once at component init and render the captured `$value$`. Cache behavior is owned by `../selectors/SKILL.md` → **Selector caching**.
 - `.select(state)` returns a value; `selectFoo()` returns a readable. Mixing them often produces wrong-shape bugs before it crashes.
 
 ## Verification cues
@@ -158,7 +157,7 @@ async function onSaveLaterSafely(itemId: string) {
 ## See also
 
 - `@augmentcode/themis/docs/SELECTORS.md` — examples for each selector call form.
-- `svelte/selectors/SKILL.md` — selector authoring and composition.
-- `svelte/component-integration/SKILL.md` — component store/dispatch wiring.
-- `core/selector-channels/SKILL.md` — selector reads from sagas.
-- `core/wait-for/SKILL.md` — saga waiting on selector predicates.
+- `../selectors/SKILL.md` — selector authoring and composition.
+- `../component-integration/SKILL.md` — component store/dispatch wiring.
+- `../../core/selector-channels/SKILL.md` — selector reads from sagas.
+- `../../core/wait-for/SKILL.md` — saga waiting on selector predicates.

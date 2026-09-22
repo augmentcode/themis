@@ -27,6 +27,7 @@ import { plugin as reactComponentLifecycleBoundaryPlugin } from "../react/react-
 import { plugin as reactForbiddenComponentImportPlugin } from "../react/react-forbidden-component-import/plugin.mjs";
 import { plugin as reactPreferDirectSelectorPlugin } from "../react/react-prefer-direct-selector/plugin.mjs";
 import { plugin as reducerSideEffectPlugin } from "../store/reducer-side-effect/plugin.mjs";
+import { plugin as redundantAsyncActionCatchPlugin } from "../store/redundant-async-action-catch/plugin.mjs";
 import { plugin as removedMiddlewareSourcePlugin } from "../core/removed-middleware-source/plugin.mjs";
 import { plugin as sagaLocalSelectorPlugin } from "../store/saga-local-selector/plugin.mjs";
 import { plugin as sagaWatcherActionTypePlugin } from "../store/saga-watcher-action-type/plugin.mjs";
@@ -77,6 +78,7 @@ export {
   reactForbiddenComponentImportPlugin,
   reactPreferDirectSelectorPlugin,
   reducerSideEffectPlugin,
+  redundantAsyncActionCatchPlugin,
   removedMiddlewareSourcePlugin,
   sagaLocalSelectorPlugin,
   sagaWatcherActionTypePlugin,
@@ -147,6 +149,7 @@ export const stateCollectionReducerRulePlugins = {
 };
 
 export const sagaSelectorChannelRulePlugins = {
+  "redundant-async-action-catch": redundantAsyncActionCatchPlugin,
   "saga-watcher-action-type": sagaWatcherActionTypePlugin,
   "inline-saga-selector": inlineSagaSelectorPlugin,
   "saga-local-selector": sagaLocalSelectorPlugin,
@@ -174,6 +177,7 @@ export const coreRulePlugins = {
 };
 
 export const storeRulePlugins = {
+  "redundant-async-action-catch": redundantAsyncActionCatchPlugin,
   "duplicate-action-type": duplicateActionTypePlugin,
   "duplicate-selector-export": duplicateSelectorExportPlugin,
   "duplicate-selector-implementation": duplicateSelectorImplementationPlugin,

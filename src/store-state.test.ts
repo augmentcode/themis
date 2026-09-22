@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { Store as ReduxStore, UnknownAction } from 'redux';
 import type { Observable as KefirObservable } from 'kefir';
 import type { ReadonlySignal } from '@preact/signals-react';
 import { createReducer } from '@augmentcode/themis/utils/store/create-reducer';
-import type { StoreInstanceState, StoreOptions, StoreState } from '@augmentcode/themis/types';
+import { createAction, createAsyncAction } from '@augmentcode/themis/utils/store/create-action';
+import type { StoreDispatch, StoreInstanceState, StoreOptions, StoreState } from '@augmentcode/themis/types';
 import { Store } from './svelte-store';
 import { StreamingStore } from './streaming-store';
 import { ReactStore } from './react-store';
@@ -75,8 +75,33 @@ type _ReactStoreStateMatchesStore = Assert<IsEqual<StoreState<typeof reactStoreW
 type StoreWithCounterStateGetter = typeof storeWithCounter.state;
 type _StoreStateGetterPreservesCounterState = Assert<IsEqual<StoreWithCounterStateGetter, StoreWithCounterState>>;
 type StoreWithCounterDispatchGetter = typeof storeWithCounter.dispatch;
-type _StoreDispatchGetterMatchesReduxDispatch = Assert<IsEqual<StoreWithCounterDispatchGetter, ReduxStore<StoreState, UnknownAction>['dispatch']>>;
+type _StoreDispatchGetterMatchesStoreDispatch = Assert<IsEqual<StoreWithCounterDispatchGetter, StoreDispatch>>;
 if (false) {
+  const loadCounter = createAsyncAction<[number], CounterState>('counter/loadAsync', 'counter/load');
+  const request = loadCounter(1);
+  const result = storeWithCounter.dispatch(request);
+  const streamingResult = streamingStoreWithCounter.dispatch(request);
+  const reactResult = reactStoreWithCounter.dispatch(request);
+  type _DispatchReturnsTypedPromise = Assert<IsEqual<typeof result, Promise<CounterState>>>;
+  type _AwaitedDispatchReturnsResponse = Assert<IsEqual<Awaited<typeof result>, CounterState>>;
+  type _StreamingDispatchReturnsTypedPromise = Assert<IsEqual<typeof streamingResult, Promise<CounterState>>>;
+  type _ReactDispatchReturnsTypedPromise = Assert<IsEqual<typeof reactResult, Promise<CounterState>>>;
+  const setCounter = createAction<[number]>('counter/set');
+  const ordinaryAction = setCounter(1);
+  const ordinaryResult = storeWithCounter.dispatch(ordinaryAction);
+  type _OrdinaryDispatchReturnsAction = Assert<IsEqual<typeof ordinaryResult, typeof ordinaryAction>>;
+  const plainAction = { type: 'counter/plain', value: 1 };
+  const plainResult = storeWithCounter.dispatch(plainAction);
+  type _PlainDispatchReturnsAction = Assert<IsEqual<typeof plainResult, typeof plainAction>>;
+  const unrelatedAction = { type: 'counter/unrelated', promise: Promise.resolve(1) };
+  const unrelatedResult = storeWithCounter.dispatch(unrelatedAction);
+  type _UnrelatedPromiseActionReturnsAction = Assert<IsEqual<typeof unrelatedResult, typeof unrelatedAction>>;
+  // @ts-expect-error async dispatch returns the response promise, not the action.
+  const wrongAction: typeof request = result;
+  // @ts-expect-error async dispatch preserves the response type.
+  const wrongResponse: Promise<string> = result;
+  // @ts-expect-error dispatch still requires an action type.
+  storeWithCounter.dispatch({ payload: 1 });
   storeWithCounter.runSaga(counterSaga);
   // @ts-expect-error runSaga accepts a saga function, not a saga name string.
   storeWithCounter.runSaga('counterSaga');

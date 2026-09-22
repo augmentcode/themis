@@ -30,8 +30,9 @@ triggers:
 # React/Preact signals — tracking and consumption
 
 Use this skill for React apps that chose `ReactStore` and Preact Signals. It
-owns general signal consumption guidance; `../selectors/SKILL.md` owns
-ReactStore selector call modes that produce or consume those signals.
+owns general signal tracking and component-local signals;
+[Call-mode map](../selector-lifecycle/SKILL.md#call-mode-map) owns ReactStore
+selector consumption choices, while `../selectors/SKILL.md` owns authoring.
 
 This skill covers React signal consumption only. Keep selector outputs and
 component-local signals within the React tracking mechanisms described below.
@@ -100,36 +101,21 @@ Rules:
 
 ## ReactStore selector signal consumption
 
-```tsx
-import type { ReadonlySignal } from "@preact/signals-react";
-import { selectTodoById } from "../store/todos/todos-selectors";
+ReactStore selectors produce read-only signals that use the tracking mechanisms
+above. For component/prop examples and necessary plain-value fallbacks, follow
+[React signal consumption guardrails](../selector-lifecycle/SKILL.md#react-signal-consumption-guardrails)
+and [Examples](../selector-lifecycle/SKILL.md#examples); this skill does not
+define a second selector call-mode policy.
 
-type Todo = { title: string } | undefined;
-
-function TodoTitleText({ todo }: { todo: ReadonlySignal<Todo> }) {
-  return <span>{todo.value?.title ?? "Untitled"}</span>;
-}
-
-export function TodoTitle({ id }: { id: string }) {
-  const todo = selectTodoById(id);
-  return <TodoTitleText todo={todo} />;
-}
-```
-
-The direct call is preferred because `selectTodoById(id)` returns a
-`ReadonlySignal<Todo>`. The `.value` read must be tracked by the Babel transform
-or explicit `useSignals()` in the reading component.
-
-### Direct JSX signal rendering
+## Direct JSX signal rendering
 
 ```tsx
-import { computed } from "@preact/signals-react";
-import { selectTodoById } from "../store/todos/todos-selectors";
+import { useComputed, useSignal } from "@preact/signals-react";
 
-export function TodoTitle({ id }: { id: string }) {
-  const todo = selectTodoById(id);
-  const title = computed(() => todo.value?.title ?? "Untitled");
-  return <>{title}</>;
+export function DraftLength() {
+  const draft = useSignal("");
+  const label = useComputed(() => `${draft.value.length} characters`);
+  return <><input onChange={(event) => draft.value = event.currentTarget.value} />{label}</>;
 }
 ```
 
@@ -138,18 +124,8 @@ a signal as text. For props, conditions, array/object operations, or values sent
 to non-signal-aware APIs, read `.value` in a tracked component or use a
 documented plain-value fallback.
 
-### Plain-value fallback boundary
-
-```tsx
-export function LegacyTodoTitle({ id }: { id: string }) {
-  const todo = selectTodoById.useValue(id);
-  return <LegacyTitle title={todo?.title ?? "Untitled"} />;
-}
-```
-
-Use `.useValue(...args)` only in React components/custom hooks when a third-party
-component, legacy API, or hook contract must receive a plain `R`. Do not make it
-the default render path just to avoid passing `ReadonlySignal<T>`.
+Selector-specific fallback choices are in
+[Fallback hook/plain-value read](../selector-lifecycle/SKILL.md#fallback-hookplain-value-read).
 
 ## Do / don't
 
@@ -165,9 +141,8 @@ Do:
 
 Don't:
 
-- Do not treat a direct selector result as a plain array/object/string/boolean;
-  use `.value`, direct JSX signal rendering, or `.useValue(...args)` at a real
-  fallback boundary.
+- For selector results, apply the signal/plain-value boundaries in
+  [Pitfalls](../selector-lifecycle/SKILL.md#pitfalls).
 - Do not destructure, map, compare, or serialize a signal object as if it were
   the selected value.
 - Do not replace ReactStore selectors with module-level shared signals for app
@@ -177,8 +152,7 @@ Don't:
 
 - Component examples that read `.value` mention Babel transform or explicit
   `useSignals()` tracking.
-- Direct selector calls are documented as returning `ReadonlySignal<R>` and are
-  preferred for signal-aware React consumers.
-- `.useValue(...args)` examples are clearly fallback boundaries.
+- Selector-specific examples follow
+  [Verification cues](../selector-lifecycle/SKILL.md#verification-cues).
 - React signal guidance remains scoped to ReactStore selector outputs and
   component-local signal state.

@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import process from "node:process";
+import { describe, expect, it, vi } from "vitest";
 import { createAction, createAsyncAction } from "./create-action";
 
 describe("createAction", () => {
@@ -70,6 +71,26 @@ describe("createAsyncAction", () => {
       },
     });
     await rejection;
+  });
+
+  it("observes ignored rejections without changing the original promise", async () => {
+    const loadUser = createAsyncAction<string>("user/loadAsync", "user/load");
+    const request = loadUser();
+    const promise = request.promise;
+    const error = new Error("ignored failure");
+    const onUnhandledRejection = vi.fn();
+    process.on("unhandledRejection", onUnhandledRejection);
+
+    try {
+      request.failure(error);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(onUnhandledRejection).not.toHaveBeenCalled();
+      expect(request.promise).toBe(promise);
+      await expect(promise).rejects.toBe(error);
+    } finally {
+      process.off("unhandledRejection", onUnhandledRejection);
+    }
   });
 
   it("exposes static success and failure action creators", () => {
