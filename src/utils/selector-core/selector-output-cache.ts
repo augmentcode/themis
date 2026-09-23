@@ -17,7 +17,13 @@ type SelectorOutputCacheNode = {
   primitiveChildren?: Map<PrimitiveCacheKey, SelectorOutputCacheNode>;
   hasValue?: true;
   value?: unknown;
+  // Upper bound: weak-key GC can remove entries without an explicit eviction.
+  cachedEntryCount?: number;
+  operationCount?: number;
 };
+
+// Transient only. Never attach traversal paths to a node or a release callback.
+type SelectorOutputCachePath = { node: SelectorOutputCacheNode; key: unknown }[];
 
 type SelectorOutputCacheTraceState = {
   observableCacheRequestCount: number;
@@ -72,6 +78,24 @@ const traceStateByStateSource = new WeakMap<
   WeakMap<SelectorOutputCacheKey, SelectorOutputCacheTraceState>
 >();
 
+const prunePath = (path: SelectorOutputCachePath): void => {
+  for (let i = path.length - 1; i > 0; i -= 1) {
+    const { node, key } = path[i];
+    if (node.cachedEntryCount || node.operationCount) break;
+
+    const parent = path[i - 1].node;
+    if (isWeakCacheKey(key)) {
+      if (parent.weakChildren?.get(key) === node) parent.weakChildren.delete(key);
+    } else {
+      const children = parent.primitiveChildren;
+      if (children?.get(key as PrimitiveCacheKey) === node) {
+        children.delete(key as PrimitiveCacheKey);
+        if (children.size === 0) parent.primitiveChildren = undefined;
+      }
+    }
+  }
+};
+
 export const evictSelectorOutputsForStateSource = (stateSource: object): void => {
   root.weakChildren?.delete(stateSource);
   traceStateByStateSource.delete(stateSource);
@@ -89,11 +113,13 @@ export const evictSelectorOutput = (
   current = current.weakChildren?.get(selectorFunc);
   if (!current) return;
 
+  const path: SelectorOutputCachePath = [{ node: current, key: undefined }];
   for (const arg of selectorArgs) {
     current = isWeakCacheKey(arg)
       ? current.weakChildren?.get(arg)
       : current.primitiveChildren?.get(arg as PrimitiveCacheKey);
     if (!current) return;
+    path.push({ node: current, key: arg });
   }
 
   if (!current.hasValue || (expectedOutput !== undefined && current.value !== expectedOutput)) {
@@ -102,6 +128,23 @@ export const evictSelectorOutput = (
 
   current.hasValue = undefined;
   current.value = undefined;
+  for (const { node } of path) node.cachedEntryCount = (node.cachedEntryCount ?? 0) - 1;
+  prunePath(path);
+};
+
+// Keep the release closure out of getOrCreate's traversal/ancestor lexical scope.
+const createOutput = <OUTPUT>(
+  stateSource: object,
+  selectorFunc: SelectorOutputCacheKey,
+  selectorArgs: readonly unknown[],
+  factory: SelectorOutputFactory<OUTPUT>
+): OUTPUT => {
+  let value: OUTPUT;
+  const releaseInactiveOutput = () => {
+    evictSelectorOutput(stateSource, selectorFunc, selectorArgs, value);
+  };
+  value = factory(releaseInactiveOutput);
+  return value;
 };
 
 const getTraceState = (
@@ -162,29 +205,39 @@ export const getOrCreate = <OUTPUT>(
   let current = getChild(root, stateSource);
   current = getChild(current, selectorFunc);
 
+  const path: SelectorOutputCachePath = [{ node: current, key: undefined }];
   for (const arg of selectorArgs) {
     current = getChild(current, arg);
+    path.push({ node: current, key: arg });
   }
 
-  if (current.hasValue) {
-    if (traceState) {
-      traceState.outputCacheHitCount += 1;
+  for (const { node } of path) node.operationCount = (node.operationCount ?? 0) + 1;
+  try {
+    if (current.hasValue) {
+      if (traceState) {
+        traceState.outputCacheHitCount += 1;
+      }
+      reportCacheTrace(selectorFunc, options, traceState, "hit");
+      // A synchronous reporter can release/replace this very leaf, or dispose its source.
+      return current.value as OUTPUT;
     }
-    reportCacheTrace(selectorFunc, options, traceState, "hit");
-    return current.value as OUTPUT;
-  }
 
-  let value: OUTPUT;
-  const releaseInactiveOutput = () => {
-    evictSelectorOutput(stateSource, selectorFunc, selectorArgs, value);
-  };
-  value = factory(releaseInactiveOutput);
-  current.value = value;
-  current.hasValue = true;
-  if (traceState) {
-    traceState.observableCacheCachedCount += 1;
-    traceState.outputCacheMissCount += 1;
+    const value = createOutput(stateSource, selectorFunc, selectorArgs, factory);
+    // A nested factory may already have installed a value; outer overwrite is one entry.
+    if (!current.hasValue) {
+      for (const { node } of path) node.cachedEntryCount = (node.cachedEntryCount ?? 0) + 1;
+    }
+    current.value = value;
+    current.hasValue = true;
+    if (traceState) {
+      traceState.observableCacheCachedCount += 1;
+      traceState.outputCacheMissCount += 1;
+    }
+    reportCacheTrace(selectorFunc, options, traceState, "miss");
+    return value;
+  } finally {
+    // Return expressions above are evaluated before unpinning, including hit leaf reads.
+    for (const { node } of path) node.operationCount! -= 1;
+    prunePath(path);
   }
-  reportCacheTrace(selectorFunc, options, traceState, "miss");
-  return value;
 };

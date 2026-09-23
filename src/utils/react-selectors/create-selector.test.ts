@@ -304,4 +304,348 @@ describe("react createSelector", () => {
     expect(fresh.value).toBe(10);
     expect(selectScaled(3)).not.toBe(concurrent);
   });
+
+  describe("watcher lifecycle contract", () => {
+    const cleanups: Array<() => void> = [];
+    const watch = (output: ReadonlySignal<number>, values: number[] = []) => {
+      const stop = output.subscribe((value) => values.push(value));
+      cleanups.push(stop);
+      return stop;
+    };
+    const fixture = (hooks: { watched?: () => void; unwatched?: () => void } = {}) => {
+      const state = signal<CounterState>(withUtility({ counter: { count: 1 } }));
+      const watched = vi.fn(hooks.watched);
+      const unwatched = vi.fn(hooks.unwatched);
+      const factor = signal(2, { watched, unwatched });
+      const subscribe = factor.subscribe.bind(factor);
+      const stopped = vi.fn();
+      // Count real subscriptions, not just shared-source activation transitions.
+      const started = vi.spyOn(factor, "subscribe").mockImplementation((listener) => {
+        const stop = subscribe(listener);
+        return () => {
+          stopped();
+          stop();
+        };
+      });
+      const store = createMockStoreBinding(state);
+      const select = createSelector(store, (value, multiplier: number) => value.counter.count * multiplier);
+      return { state, factor, get: () => select(factor), started, stopped, watched, unwatched };
+    };
+
+    afterEach(() => {
+      cleanups.splice(0).reverse().forEach((stop) => stop());
+      vi.restoreAllMocks();
+    });
+
+    it("starts once for the first watcher and stops only after the final watcher", () => {
+      const c = fixture();
+      const output = c.get();
+      expect(c.started).not.toHaveBeenCalled();
+      const first: number[] = [], second: number[] = [];
+      const stopFirst = watch(output, first);
+      const stopSecond = watch(output, second);
+      expect(c.started).toHaveBeenCalledTimes(1);
+      expect(c.watched).toHaveBeenCalledTimes(1);
+      expect(c.get()).toBe(output);
+
+      stopFirst();
+      expect(c.stopped).not.toHaveBeenCalled();
+      expect(c.unwatched).not.toHaveBeenCalled();
+      expect(c.get()).toBe(output);
+      c.factor.value = 3;
+      expect(first).toEqual([2]);
+      expect(second).toEqual([2, 3]);
+
+      stopSecond();
+      expect(c.stopped).toHaveBeenCalledTimes(1);
+      expect(c.unwatched).toHaveBeenCalledTimes(1);
+      expect(c.get()).not.toBe(output);
+      stopSecond();
+      expect(c.stopped).toHaveBeenCalledTimes(1);
+    });
+
+    it("repeatedly reactivates an old output with the latest snapshot and no duplicate subscription", () => {
+      const c = fixture();
+      const old = c.get();
+      watch(old)();
+      const replacement = c.get();
+      expect(replacement).not.toBe(old);
+
+      for (let cycle = 1; cycle <= 3; cycle += 1) {
+        c.state.value = withUtility({ counter: { count: cycle + 1 } });
+        c.factor.value = cycle + 2;
+        const values: number[] = [];
+        const stop = watch(old, values);
+        const stopAdditional = watch(old);
+        expect(values).toEqual([(cycle + 1) * (cycle + 2)]);
+        expect(c.started).toHaveBeenCalledTimes(cycle + 1);
+        expect(c.stopped).toHaveBeenCalledTimes(cycle);
+        stop();
+        expect(c.stopped).toHaveBeenCalledTimes(cycle);
+        stopAdditional();
+        expect(c.stopped).toHaveBeenCalledTimes(cycle + 1);
+        expect(c.watched).toHaveBeenCalledTimes(cycle + 1);
+        expect(c.unwatched).toHaveBeenCalledTimes(cycle + 1);
+        expect(c.get()).toBe(replacement);
+      }
+    });
+
+    it("keeps a distinct active replacement subscribed through stale old-output cleanup", () => {
+      const c = fixture();
+      const old = c.get();
+      watch(old)();
+      const replacement = c.get();
+      const values: number[] = [];
+      const stopReplacement = watch(replacement, values);
+      const stopOld = watch(old);
+      expect(c.started).toHaveBeenCalledTimes(3);
+      expect(c.stopped).toHaveBeenCalledTimes(1);
+
+      stopOld();
+      expect(c.stopped).toHaveBeenCalledTimes(2);
+      expect(c.unwatched).toHaveBeenCalledTimes(1);
+      expect(c.get()).toBe(replacement);
+      c.factor.value = 5;
+      expect(values).toEqual([2, 5]);
+      stopReplacement();
+      expect(c.stopped).toHaveBeenCalledTimes(3);
+      expect(c.unwatched).toHaveBeenCalledTimes(2);
+    });
+
+    it("allows a synchronous upstream activation callback to add and remove another watcher", () => {
+      const nested: number[] = [];
+      let output: ReadonlySignal<number>;
+      const c = fixture({ watched: () => {
+        expect(c.get()).toBe(output);
+        watch(output, nested)();
+      } });
+      output = c.get();
+      const values: number[] = [];
+      const stop = watch(output, values);
+      expect(nested).toEqual([2]);
+      expect(values).toEqual([2]);
+      expect(c.started).toHaveBeenCalledTimes(1);
+      expect(c.stopped).not.toHaveBeenCalled();
+      expect(c.watched).toHaveBeenCalledTimes(1);
+      expect(c.get()).toBe(output);
+      c.factor.value = 4;
+      expect(values).toEqual([2, 4]);
+      expect(nested).toEqual([2]);
+      stop();
+      expect(c.stopped).toHaveBeenCalledTimes(1);
+      expect(c.unwatched).toHaveBeenCalledTimes(1);
+    });
+
+    it("refreshes the inactive snapshot after synchronous upstream teardown changes", () => {
+      const c = fixture({ unwatched: () => {
+        c.state.value = withUtility({ counter: { count: 3 } });
+        c.factor.value = 4;
+      } });
+      const output = c.get();
+      const values: number[] = [];
+      watch(output, values)();
+      expect(values).toEqual([2]);
+      expect(output.value).toBe(12);
+      expect(c.started).toHaveBeenCalledTimes(1);
+      expect(c.stopped).toHaveBeenCalledTimes(1);
+      expect(c.get()).not.toBe(output);
+      const resumed: number[] = [];
+      watch(output, resumed)();
+      expect(resumed).toEqual([12]);
+      expect(c.started).toHaveBeenCalledTimes(2);
+      expect(c.stopped).toHaveBeenCalledTimes(2);
+    });
+
+    it("preserves a watcher added synchronously by an upstream teardown callback", () => {
+      let output: ReadonlySignal<number>;
+      let stopReentrant: (() => void) | undefined;
+      const resumed: number[] = [];
+      const c = fixture({ unwatched: () => {
+        if (!stopReentrant) stopReentrant = watch(output, resumed);
+      } });
+      output = c.get();
+      watch(output)();
+      expect(resumed).toEqual([2]);
+      expect(c.started).toHaveBeenCalledTimes(2);
+      expect(c.stopped).toHaveBeenCalledTimes(1);
+      expect.soft(c.get()).toBe(output);
+      c.factor.value = 3;
+      expect.soft(resumed).toEqual([2, 3]);
+      stopReentrant!();
+      expect.soft(c.stopped).toHaveBeenCalledTimes(2);
+      expect(c.get()).not.toBe(output);
+    });
+
+    it.each([false, true])("handles reactivation and immediate re-stop during teardown, renew=%s", (renew) => {
+      let output: ReadonlySignal<number>;
+      let stopRenewed: (() => void) | undefined;
+      let reentered = false;
+      const temporary: number[] = [], renewed: number[] = [];
+      const c = fixture({ unwatched: () => {
+        if (reentered) return;
+        reentered = true;
+        watch(output, temporary)();
+        if (renew) stopRenewed = watch(output, renewed);
+        c.factor.value = 4;
+      } });
+      output = c.get();
+      watch(output)();
+      expect(temporary).toEqual([2]);
+      expect(output.value).toBe(4);
+      // A watcher stopped inside teardown must not open an upstream subscription.
+      expect(c.started).toHaveBeenCalledTimes(renew ? 2 : 1);
+      expect(c.stopped).toHaveBeenCalledTimes(1);
+      expect(c.watched).toHaveBeenCalledTimes(renew ? 2 : 1);
+      expect(c.unwatched).toHaveBeenCalledTimes(1);
+
+      if (renew) {
+        expect(c.get()).toBe(output);
+        expect(renewed).toEqual([2, 4]);
+        c.factor.value = 5;
+        expect(renewed).toEqual([2, 4, 5]);
+        stopRenewed!();
+        expect(c.stopped).toHaveBeenCalledTimes(2);
+        expect(c.unwatched).toHaveBeenCalledTimes(2);
+      }
+      expect(c.get()).not.toBe(output);
+      const latest: number[] = [];
+      watch(output, latest)();
+      expect(latest).toEqual([renew ? 5 : 4]);
+      expect(c.started).toHaveBeenCalledTimes(renew ? 3 : 2);
+      expect(c.stopped).toHaveBeenCalledTimes(renew ? 3 : 2);
+    });
+
+    it("owns each renewed subscription across repeated synchronous teardown reactivation", () => {
+      let output: ReadonlySignal<number>;
+      let stop: () => void;
+      let renewals = 0;
+      const resumed: number[][] = [];
+      const c = fixture({ unwatched: () => {
+        if (renewals === 3) return;
+        renewals += 1;
+        const values: number[] = [];
+        resumed.push(values);
+        stop = watch(output, values);
+      } });
+      output = c.get();
+      stop = watch(output);
+
+      for (let cycle = 1; cycle <= 3; cycle += 1) {
+        stop();
+        expect(c.started).toHaveBeenCalledTimes(cycle + 1);
+        expect(c.stopped).toHaveBeenCalledTimes(cycle);
+        expect(c.get()).toBe(output);
+        c.factor.value = cycle + 2;
+        expect(resumed[cycle - 1]).toEqual([cycle + 1, cycle + 2]);
+      }
+      stop();
+      expect(c.started).toHaveBeenCalledTimes(4);
+      expect(c.stopped).toHaveBeenCalledTimes(4);
+      expect(c.watched).toHaveBeenCalledTimes(4);
+      expect(c.unwatched).toHaveBeenCalledTimes(4);
+      expect(c.get()).not.toBe(output);
+    });
+
+    it.each([false, true])("cleans up a renewed watcher stopped during upstream activation, replace=%s", (replace) => {
+      let output: ReadonlySignal<number>;
+      let stopRenewed: (() => void) | undefined;
+      let stopReplacement: (() => void) | undefined;
+      let stoppedDuringActivation = false;
+      let renewed = false;
+      const values: number[] = [], replacement: number[] = [];
+      const c = fixture({
+        watched: () => {
+          if (!stopRenewed || stoppedDuringActivation) return;
+          stoppedDuringActivation = true;
+          stopRenewed();
+          if (replace) stopReplacement = watch(output, replacement);
+        },
+        unwatched: () => {
+          if (renewed) return;
+          renewed = true;
+          stopRenewed = watch(output, values);
+        },
+      });
+      output = c.get();
+      watch(output)();
+      expect(values).toEqual([2]);
+      expect(c.started).toHaveBeenCalledTimes(replace ? 3 : 2);
+      expect(c.stopped).toHaveBeenCalledTimes(2);
+      expect(c.watched).toHaveBeenCalledTimes(replace ? 3 : 2);
+      expect(c.unwatched).toHaveBeenCalledTimes(2);
+      if (replace) expect(c.get()).toBe(output);
+      c.factor.value = 3;
+      expect(values).toEqual([2]);
+      if (replace) {
+        expect(replacement).toEqual([2, 3]);
+        stopReplacement!();
+      }
+      expect(c.stopped).toHaveBeenCalledTimes(replace ? 3 : 2);
+      expect(c.unwatched).toHaveBeenCalledTimes(replace ? 3 : 2);
+      expect(c.get()).not.toBe(output);
+    });
+
+    it("preserves a renewed watcher when upstream teardown throws", () => {
+      let output: ReadonlySignal<number>;
+      let stopRenewed: (() => void) | undefined;
+      let renewed = false;
+      const values: number[] = [];
+      const failure = new Error("upstream teardown failure");
+      const c = fixture({ unwatched: () => {
+        if (renewed) return;
+        renewed = true;
+        stopRenewed = watch(output, values);
+        throw failure;
+      } });
+      output = c.get();
+      const stopFirst = watch(output);
+      let caught: unknown;
+      try {
+        stopFirst();
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBe(failure);
+      c.factor.value = 3;
+      expect.soft(values).toEqual([2, 3]);
+      expect.soft(output.value).toBe(3);
+      expect.soft(c.started).toHaveBeenCalledTimes(2);
+      expect(c.stopped).toHaveBeenCalledTimes(1);
+      expect(c.get()).toBe(output);
+      stopRenewed!();
+      expect.soft(c.stopped).toHaveBeenCalledTimes(2);
+      expect(c.get()).not.toBe(output);
+    });
+
+    it("does not refresh or evict after upstream teardown throws without renewal", () => {
+      let failed = false;
+      const failure = new Error("upstream teardown failure");
+      const c = fixture({ unwatched: () => {
+        if (failed) return;
+        failed = true;
+        c.state.value = withUtility({ counter: { count: 3 } });
+        c.factor.value = 4;
+        throw failure;
+      } });
+      const output = c.get();
+      const stop = watch(output);
+      let caught: unknown;
+      try {
+        stop();
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBe(failure);
+      expect(output.value).toBe(2);
+      expect(c.get()).toBe(output);
+      expect(c.started).toHaveBeenCalledTimes(1);
+      expect(c.stopped).toHaveBeenCalledTimes(1);
+      const values: number[] = [];
+      watch(output, values)();
+      expect(values).toEqual([12]);
+      expect(c.started).toHaveBeenCalledTimes(2);
+      expect(c.stopped).toHaveBeenCalledTimes(2);
+      expect(c.get()).not.toBe(output);
+    });
+  });
 });

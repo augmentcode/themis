@@ -54,8 +54,8 @@ const kefirSelectorPropertyToSignal = <R>(
   selected: KefirSelectorProperty<R>,
   onInactive?: () => void
 ): ReadonlySignal<R> => {
-  let activeWatchers = 0;
-  let subscription: Subscription | null = null;
+  let activation: { subscription?: Subscription } | null = null;
+  let isTransitioning = false;
 
   const updateSnapshotIfAvailable = () => {
     try {
@@ -65,27 +65,60 @@ const kefirSelectorPropertyToSignal = <R>(
     }
   };
 
+  const subscribeIfActive = () => {
+    const current = activation;
+    if (!current || current.subscription || isTransitioning) return;
+
+    isTransitioning = true;
+    try {
+      current.subscription = selected.property.observe((value) => {
+        if (output.value !== value) {
+          output.value = value;
+        }
+      });
+    } finally {
+      isTransitioning = false;
+    }
+    // A synchronous callback may stop or replace this activation before
+    // observe returns its handle. That handle still belongs to this activation.
+    if (activation !== current) unsubscribe(current.subscription);
+  };
+
+  const unsubscribe = (subscription?: Subscription) => {
+    if (isTransitioning) return;
+
+    // Kefir cleanup can reenter watched/unwatched. Finish the old transition
+    // before observing again, so its cleanup cannot discard the new handle.
+    isTransitioning = true;
+    try {
+      subscription?.unsubscribe();
+      updateSnapshotIfAvailable();
+    } catch (error) {
+      isTransitioning = false;
+      try {
+        // Teardown may have queued a renewal before throwing.
+        subscribeIfActive();
+      } catch {
+        // Keep the original teardown error if renewal also fails.
+      }
+      throw error;
+    } finally {
+      isTransitioning = false;
+    }
+    if (activation) subscribeIfActive();
+    else onInactive?.();
+  };
+
   const output: Signal<R> = signal(selected.getSnapshot(), {
     watched() {
-      const wasInactive = activeWatchers === 0;
-      activeWatchers += 1;
-      if (wasInactive) {
-        updateSnapshotIfAvailable();
-        subscription = selected.property.observe((value) => {
-          if (output.value !== value) {
-            output.value = value;
-          }
-        });
-      }
+      activation = {};
+      updateSnapshotIfAvailable();
+      subscribeIfActive();
     },
     unwatched() {
-      activeWatchers = Math.max(0, activeWatchers - 1);
-      if (activeWatchers === 0) {
-        subscription?.unsubscribe();
-        subscription = null;
-        updateSnapshotIfAvailable();
-        onInactive?.();
-      }
+      const previous = activation;
+      activation = null;
+      unsubscribe(previous?.subscription);
     },
   });
 
