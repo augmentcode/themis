@@ -48,28 +48,14 @@ selector definitions and argument evaluation belong to
 | Saga | yield* selectFoo.effect(...args) | typed-redux-saga select effect | Reads via redux-saga state selection, not React signals or hooks. |
 | Explicit binding | selectFoo.withStore(reactStore)(...args) | Preact React ReadonlySignal<R> | Binds to an explicit ReactStore instead of the selector's original store. |
 
-## Do
-
-- Prefer direct selector calls in React components, custom hooks, and helper
-  components that can pass/read `ReadonlySignal<R>` values through the Preact React
-  signal integration.
-- Ensure React component `.value` reads are tracked by the Preact Signals Babel
-  transform or by an explicit `useSignals()` fallback in the reading component.
-  Configuration and transform limitations are in
-  [React tracking requirement](../signals/SKILL.md#react-tracking-requirement).
-- Use `.useValue(...args)` in React components or custom hooks only when a plain value
-  or hook-shaped API is required and a signal-aware rewrite is impractical.
-- Use `.select(reactStore.state, ...args)` in handlers and tests when a plain
-  snapshot value is needed.
-- Use `.select(state, ...args)` inside selector callbacks to compose selectors.
-- Use `.effect(...args)` in sagas, and pass ReactStore selectors with plain args to selector-channel helpers when a saga needs to react to selector value changes.
-- Use `.withStore(...)` only when you intentionally need to bind the selector to an
-  explicit `ReactStore`.
-
 ## React signal consumption guardrails
 
 - Direct selector calls create `ReadonlySignal<R>` values; pass them to
   signal-aware children or read `.value` in tracked React components.
+- Track component `.value` reads with the Preact Signals Babel transform or an
+  explicit `useSignals()` fallback in the reading component. Configuration and
+  transform limitations belong to
+  [React tracking requirement](../signals/SKILL.md#react-tracking-requirement).
 - Direct JSX signal rendering is valid when the JSX text position intentionally
   accepts a signal. For props, conditions, arrays, and objects, read `.value` or
   use a plain-value fallback boundary.
@@ -79,15 +65,10 @@ selector definitions and argument evaluation belong to
   not signal wrappers.
 - Selector-channel helpers use the Redux store's `getState()` / `subscribe()`
   from saga context with plain stable argument tuples; they do not subscribe to
-  direct `ReadonlySignal` selector outputs.
-
-## Don't
-
-- Do not call `.useValue(...args)` outside React components or custom hooks.
-- Do not call direct signal form inside pure selector composition; use
-  `.select(state, ...args)` instead.
-- Do not create direct signals just to perform one-shot handler/test reads.
-- Do not apply non-React selector lifecycle rules to a React app.
+  direct `ReadonlySignal` selector outputs. Use these helpers with ReactStore
+  selectors when a saga must react to value changes, rather than read once.
+- Bind with `.withStore(...)` only when an explicit alternate `ReactStore` is
+  intended. Do not apply non-React selector lifecycle rules to a React app.
 
 ## Examples
 
@@ -121,16 +102,6 @@ export function useCanEditTodo(id: string) {
 
 Use this fallback only when the hook contract must return a plain boolean and
 rewriting callers to accept the underlying signals would be too invasive.
-
-### Direct signal call for signal-aware code
-
-```ts
-const todoSignal = selectTodoById("todo-1");
-console.log(todoSignal.value?.title);
-```
-
-Use the direct form when the caller can accept a `ReadonlySignal<R>`; for pure
-selector composition, prefer `.select(state, ...args)`.
 
 ### Handler and test one-shot reads
 
@@ -171,13 +142,7 @@ Do not pass the selector object itself to saga `select`; use `.effect(...args)` 
 ### Explicit Store binding
 
 ```ts
-import type { ReactStore } from "@augmentcode/themis/react-store";
-
-export function bindTodoSelector(store: ReactStore) {
-  return selectTodoById.withStore(store);
-}
-
-const selectTodoFromPreviewStore = bindTodoSelector(previewStore);
+const selectTodoFromPreviewStore = selectTodoById.withStore(previewStore);
 const previewTodoSignal = selectTodoFromPreviewStore("todo-1");
 ```
 
@@ -191,14 +156,13 @@ for `ReactStore`, that result is a Preact React `ReadonlySignal<R>`.
   component/custom-hook boundary.
 - Direct calls return signal objects, not plain values. Passing a direct signal
   result into pure reducers/selectors or comparing it as a plain value creates
-  wrong-shape bugs.
+  wrong-shape bugs. Compose with `.select(state, ...args)` instead; do not create
+  direct signals for one-shot handler/test reads.
 - React components that read `signal.value` without the Babel transform or an
   explicit `useSignals()` fallback may fail to re-render when the signal changes.
 - `.select(state, ...args)` is pure and synchronous but not reactive. Components
   that need updates should prefer direct selector signals, falling back to
   `.useValue(...args)` only for necessary plain-value boundaries.
-- React selector lifecycle is driven by component/custom-hook boundaries and the
-  explicit `.select`, `.effect`, and `.withStore` call modes above.
 
 ## Verification cues
 

@@ -67,39 +67,20 @@ boundary before rendering components that call direct signal selectors or
 `.useValue(...args)` fallbacks. The returned disposer is equivalent to
 `reactStore.dispose()`.
 
-```tsx
-// src/main.tsx
-import React from "react";
-import { createRoot } from "react-dom/client";
-import { App } from "./App";
-import { reactStore } from "./store/react-store";
-
-const root = createRoot(document.getElementById("root")!);
-const disposeStore = reactStore.init();
-
-root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
-
-if (import.meta.hot) {
-  import.meta.hot.dispose(() => {
-    root.unmount();
-    disposeStore();
-  });
-}
-```
-
 Pass preloaded state to `reactStore.init(preloadedState)` when the app needs
 hydration. Initialize before selector reads because direct selector calls need the
 active Store-owned state stream and throw before `init()` and after `dispose()`.
 
 ## Dispose at the same owner boundary
 
-The owner that calls `reactStore.init()` owns teardown. In browser apps this is usually the bootstrap file or test harness; in embedded/micro-frontend apps it may be the host's mount/unmount adapter.
+The owner that calls `reactStore.init()` owns teardown: usually the browser
+bootstrap or test harness, or an embedded/micro-frontend mount adapter.
 
 ```tsx
+import { createRoot } from "react-dom/client";
+import { App } from "./App";
+import { reactStore } from "./store/react-store";
+
 export function mountReactApp(container: HTMLElement) {
   const root = createRoot(container);
   const disposeStore = reactStore.init();
@@ -113,6 +94,9 @@ export function mountReactApp(container: HTMLElement) {
 }
 ```
 
+The browser bootstrap can call this adapter and register its returned cleanup
+with `import.meta.hot.dispose(...)` for HMR. Unmount React before disposing the store.
+
 Do not hide `init()` in a child component `useEffect` if descendants render
 selectors immediately; effects run after render, too late for direct signal
 selectors or `.useValue(...args)` fallbacks that need the initialized store.
@@ -124,16 +108,14 @@ sagas. Start each app saga explicitly after initialization and keep the returned
 cancel function when the saga has a shorter lifetime than the whole store.
 
 ```ts
-// src/main.tsx
-import { reactStore } from "./store/react-store";
 import { todosSaga } from "./store/todos/sagas/todos-saga";
 
-const disposeStore = reactStore.init();
+// After the owner's init(), not a second initialization:
 const cancelTodosSaga = reactStore.runSaga(todosSaga);
 
-export function disposeAppRuntime() {
+// Call at this saga's owner boundary, before whole-store disposal.
+export function stopTodosRuntime() {
   cancelTodosSaga();
-  disposeStore();
 }
 ```
 
@@ -179,29 +161,14 @@ an existing effect; startup stays at the app owner described above.
 
 ### Initializing in an effect after children render
 
-```tsx
-// ❌ WRONG: children can call selectors before init has run.
-function AppRoot() {
-  React.useEffect(() => reactStore.init(), []);
-  return <App />;
-}
-```
-
-Initialize at the bootstrap/root owner before rendering selector users, or render
-no selector-using children until after explicit initialization has completed.
+`useEffect(() => reactStore.init(), [])` is too late if children read selectors
+during render. Initialize at bootstrap, or withhold selector-using children
+until explicit initialization completes.
 
 ### Creating stores in components or hooks
 
-```tsx
-// ❌ WRONG: a new runtime can be created every render/mount.
-function TodoScreen() {
-  const localStore = new ReactStore({ todos: todosReducer });
-  const todos = localStore.createSelector((state) => state.todos.ids)();
-  return <TodoList ids={todos.value} />;
-}
-```
-
-Create/configure the store once in an app module or explicit mount adapter.
+`new ReactStore(...)` in a component/hook can create a runtime every render or
+mount. Create/configure it once in an app module or explicit mount adapter.
 
 ### Treating direct selector signals as plain values
 

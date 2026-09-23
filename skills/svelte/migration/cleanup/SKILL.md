@@ -77,77 +77,9 @@ When rollback is authorized, restore the old store and affected consumers from t
 - [ ] Any remaining compatibility shim documents the reason and sunset/removal condition
 - [ ] Handoff identifies the migrated slice and follows **Workflow ownership**
 
-## Examples in This Skill
-
-- Added: zero-reference cleanup evidence; import replacement map; deletion readiness guard; documented compatibility shim; bad deletion with remaining consumers; final per-slice cleanup report.
-- Retained: none (this cleanup skill previously had no JS/TS examples).
-
 ## Cleanup Examples
 
-### 1. Record zero-reference search evidence
-
-```typescript
-type ReferenceSearch = {
-  query: string;
-  matches: string[];
-};
-
-export const oldCartStoreSearches: ReferenceSearch[] = [
-  { query: "cart.store.svelte", matches: [] },
-  { query: "from.*stores/cart", matches: [] },
-];
-
-export const canDeleteOldCartStore = oldCartStoreSearches.every((search) => search.matches.length === 0);
-```
-
-### 2. Track old imports replaced by new owners
-
-```typescript
-type ImportReplacement = {
-  consumer: string;
-  removedImport: string;
-  addedImports: string[];
-};
-
-export const cartImportReplacements: ImportReplacement[] = [
-  {
-    consumer: "src/routes/cart/CartSummary.svelte",
-    removedImport: "$lib/stores/cart.store.svelte",
-    addedImports: [
-      "$lib/store/slices/cart/cart-selectors",
-      "$lib/store/slices/cart/cart-slice",
-      "$lib/store/store",
-    ],
-  },
-];
-```
-
-### 3. Gate deletion on tests, UI checks, and zero references
-
-```typescript
-type CleanupReadiness = {
-  testsPass: boolean;
-  manualFlowsPass: boolean;
-  remainingReferences: number;
-  passThroughWrappers: string[];
-};
-
-function isCleanupReady(readiness: CleanupReadiness): boolean {
-  return readiness.testsPass
-    && readiness.manualFlowsPass
-    && readiness.remainingReferences === 0
-    && readiness.passThroughWrappers.length === 0;
-}
-
-export const cartCleanupReady = isCleanupReady({
-  testsPass: true,
-  manualFlowsPass: true,
-  remainingReferences: 0,
-  passThroughWrappers: [],
-});
-```
-
-### 4. Document a temporary compatibility shim when one is required
+### Document a temporary compatibility shim
 
 ```typescript
 /**
@@ -158,50 +90,33 @@ export const cartCleanupReady = isCleanupReady({
 export { selectCartTotal } from "$lib/store/slices/cart/cart-selectors";
 ```
 
-### 5. ❌ Bad: delete while consumers still import the old store
+### Record per-slice cleanup evidence
+
+Record actual search queries/results, consumer import replacements, tests, UI
+flows, and wrapper/shim findings together. This example is a report shape, not
+proof of a run: only delete when tests/UI pass and old-path searches are empty.
+If `Header.svelte` or `Checkout.svelte` still imports the old store, deletion is
+unsafe regardless of whether the replacement itself passes tests.
 
 ```typescript
-// ❌ BAD: this plan deletes an old store even though consumers still import it.
-type BadCleanupPlan = {
-  oldStorePath: string;
-  consumersStillImportingOldPath: string[];
-  deleteOldStoreNow: boolean;
-};
-
-export const badCleanupPlan: BadCleanupPlan = {
-  oldStorePath: "src/lib/stores/cart.store.svelte.ts",
-  consumersStillImportingOldPath: ["Header.svelte", "Checkout.svelte"],
-  deleteOldStoreNow: true,
-};
-```
-
-### 6. Produce final per-slice cleanup evidence
-
-```typescript
-type SliceCleanupReport = {
-  slice: string;
-  removedStoreFiles: string[];
-  remainingOldPathMatches: string[];
-  documentedShims: Array<{ path: string; removalCondition: string }>;
-  verification: string[];
-};
-
-export const cartCleanupReport: SliceCleanupReport = {
+export const cartCleanupReport = {
   slice: "cart",
   removedStoreFiles: ["src/lib/stores/cart.store.svelte.ts"],
-  remainingOldPathMatches: [],
+  searches: [
+    { query: "cart.store.svelte", matches: [] },
+    { query: "from.*stores/cart", matches: [] },
+  ],
+  importReplacements: [{
+    consumer: "src/routes/cart/CartSummary.svelte",
+    removedImport: "$lib/stores/cart.store.svelte",
+    addedImports: [
+      "$lib/store/slices/cart/cart-selectors",
+      "$lib/store/slices/cart/cart-slice",
+      "$lib/store/store",
+    ],
+  }],
+  passThroughWrappers: [],
   documentedShims: [],
   verification: ["cart reducer tests", "cart saga tests", "cart checkout manual flow"],
 };
 ```
-
-## Cases Covered
-
-| Case | Example |
-| --- | --- |
-| Zero-reference proof | Record zero-reference search evidence |
-| Consumer import migration | Track old imports replaced by new owners |
-| Deletion readiness | Gate deletion on tests, UI checks, and zero references |
-| Compatibility shim exception | Document a temporary compatibility shim when one is required |
-| Unsafe cleanup | Bad: delete while consumers still import the old store |
-| Final handoff evidence | Produce final per-slice cleanup evidence |
