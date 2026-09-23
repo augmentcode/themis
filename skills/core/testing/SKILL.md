@@ -60,26 +60,6 @@ triggers:
 - Do not omit no-op reference checks for reducers or collection updates that should preserve identity.
 - Do not leave one-line re-export/proxy wrapper files after refactors unless an adjacent compatibility comment documents the consumer, release window, and removal condition.
 
-## Example list
-
-1. Good: `typed-redux-saga` Vitest mock with the required tuple-aware `call` guard.
-2. Good: reducer tests for handled actions, async failure, and no-op reference equality.
-3. Good: selector tests that assert derived output through `.select(state, ...args)`.
-4. Good: `expectSaga` integration test that provides selector effects and API calls.
-5. Good: `testSaga` stepwise root-saga watcher assertion.
-6. Bad: realistic tests that assert stored derived state, call readable selector mode, and miss selector-effect providers.
-
-## Cases covered
-
-| Case | Example |
-| --- | --- |
-| Saga test setup maps typed effects to `redux-saga/effects` and keeps `[context, method]` calls working. | 1 |
-| Reducer tests prove handled branches and same-reference no-op behavior. | 2 |
-| Selector tests cover derived values through public `.select` instead of reducer-owned derived fields. | 3 |
-| Saga integration tests provide `selector.effect()` and API effects before asserting `put`s. | 4 |
-| Stepwise saga tests are reserved for order-sensitive watcher/root-saga checks. | 5 |
-| Bad examples teach non-trivial review failures that compile but can produce misleading tests. | 6 |
-
 ## Examples
 
 ### 1. Mock `typed-redux-saga` with a tuple-aware `call` guard
@@ -181,27 +161,6 @@ describe("todosRootSaga", () => {
       .next()
       .isDone();
   });
-});
-```
-
-### 6. ❌ Bad: misleading selector and saga assertions
-
-```ts
-import { expect, it } from "vitest";
-import { expectSaga } from "redux-saga-test-plan";
-import * as matchers from "redux-saga-test-plan/matchers";
-
-// BAD: this test passes syntax checks but validates duplicated derived state, invokes readable mode,
-// and forgets to provide the selector effect that the worker reads before calling the API.
-it("claims the todo flow works", () => {
-  const nextState = todosReducer(state, setFilter("open"));
-  expect(nextState.visibleTodos).toEqual([todo]);
-  expect(selectVisibleTodos()).toEqual([todo]);
-
-  return expectSaga(loadTodosWorker, loadTodos("open"))
-    .provide([[matchers.call.fn(fetchTodos), []]])
-    .put(loadTodos.success([]))
-    .silentRun();
 });
 ```
 

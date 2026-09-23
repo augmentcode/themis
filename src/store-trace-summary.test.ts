@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ReactStore } from './react-store';
 import { Store } from './svelte-store';
 import { StreamingStore } from './streaming-store';
-import type { SelectorTraceSummary } from './types';
+import type { SelectorTraceSummary, StoreOptions } from './types';
 
 vi.mock('./utils/runtime-svelte/utils', () => ({
   getStoreContext: vi.fn(() => undefined),
@@ -219,23 +219,49 @@ describe('selector trace summaries', () => {
     );
   });
 
-  it('does not allocate summary aggregation when summaries are disabled', () => {
+  it.each<StoreOptions['traceSelectors']>([
+    undefined,
+    false,
+    true,
+    { traceExecution: true },
+    { traceExecution: true, summaryEnabled: false, summaryIntervalMs: 25 },
+  ])('does not aggregate without summaryEnabled: %j', (traceSelectors) => {
     vi.useFakeTimers();
-    const store = new Store(
-      { counter: counterReducer },
-      undefined,
-      { traceSelectors: { traceExecution: true } }
-    );
-    const dispose = store.init();
+    const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const options = { traceSelectors, loggerFactory: () => undefined };
 
-    expect(store.getSelectorTraceSummary()).toEqual([]);
-    expect(Object.isFrozen(store.getSelectorTraceSummary())).toBe(true);
-    expect((store as any).selectorTraceSummaryCollector).toBeUndefined();
-    expect((store as any).selectorTraceSummaryInterval).toBeUndefined();
-    dispose();
+    for (const store of [
+      new Store({ counter: counterReducer }, undefined, options),
+      new ReactStore({ counter: counterReducer }, undefined, options),
+      new StreamingStore({ counter: counterReducer }, undefined, options),
+    ]) {
+      const summaries: unknown[] = [];
+      const subscription = store.traceStreams.selectorSummary.observe((summary) => {
+        summaries.push(summary);
+      });
+      const dispose = store.init();
+      store.getSelectorTraceReporter<CounterState, number>()?.({
+        selectorFunc,
+        recomputationCount: 1,
+        executionDurationMs: 2,
+        invalidationReason: 'first-execution',
+        resultOutcome: 'initial',
+      });
+      vi.advanceTimersByTime(1000);
+
+      expect(store.getSelectorTraceSummary()).toEqual([]);
+      expect(Object.isFrozen(store.getSelectorTraceSummary())).toBe(true);
+      expect((store as any).selectorTraceSummaryCollector).toBeUndefined();
+      expect((store as any).selectorTraceSummaryInterval).toBeUndefined();
+      expect(vi.getTimerCount()).toBe(0);
+      expect(summaries).toEqual([]);
+      expect(consoleInfo).not.toHaveBeenCalled();
+      dispose();
+      subscription.unsubscribe();
+    }
   });
 
-  it('defers all selector categories into one non-empty period aggregate', () => {
+  it('emits one non-empty period aggregate even with a custom logger', () => {
     vi.useFakeTimers();
     const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined);
     const store = new Store(undefined, undefined, {
