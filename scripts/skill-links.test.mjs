@@ -286,6 +286,20 @@ describe("skill documentation references", () => {
 });
 
 describe("skill section references", () => {
+  it.each([
+    ["react/selector-lifecycle", ["Do", "Don't"]],
+    ["core/redux-saga", ["Common mistakes"]],
+    ["core/selector-tracing", ["Common mistakes"]],
+  ])("keeps explicit guardrail sections with actionable lists in %s", async (path, headings) => {
+    const content = await readFile(new URL(`${path}/SKILL.md`, skillsRoot), "utf8");
+    const sections = markdownProse(content).replace(/\r\n/g, "\n").split(/^## /m);
+    for (const heading of headings) {
+      const section = sections.find((text) => text.startsWith(`${heading}\n`));
+      expect(section, `${path}: ${heading}`).toBeDefined();
+      expect(section?.split("\n").slice(1).join("\n")).toMatch(/^- \S/m);
+    }
+  });
+
   it.each(["\n", "\r\n"])("finds formatted, Unicode, and duplicate ATX heading anchors with %j", (newline) => {
     const content = [
       "---", "description: >-", "  # Not a heading", "---",

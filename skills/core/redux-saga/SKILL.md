@@ -53,7 +53,9 @@ Before editing code or docs that use this skill:
 
 In themis app setup, the concrete Store owns saga middleware creation. Use this low-level API reference to understand redux-saga behavior, but configure Store-owned monitoring by passing `{ sagaMonitor: true }` in the third `Store`/`ReactStore`/`StreamingStore` constructor options argument instead of replacing the middleware. Omitted or `false` saga monitoring remains disabled.
 
-`middleware.run(saga, ...args)` must be called after the saga middleware is mounted on the store. It returns a `Task` descriptor and drives yielded plain Effect objects until the generator returns, throws, or is cancelled.
+`middleware.run(saga, ...args)` returns a `Task` descriptor and drives yielded
+plain Effect objects until the generator returns, throws, or is cancelled.
+See [Common mistakes](#common-mistakes) for startup and cleanup requirements.
 
 ## Core patterns
 
@@ -66,11 +68,12 @@ Use `take(pattern)` for one action, `takeMaybe(pattern)` when the saga must rece
 wildcards; Themis code must instead use concrete action creators/arrays or
 selector channels as required by [Do](../sagas/SKILL.md#do).
 
-`takeEvery`, `takeLatest`, `takeLeading`, `throttle`, and `debounce` also accept a `Channel` in place of a pattern. This is native redux-saga behavior; do not create wrapper utilities unless they add cleanup, typing, or domain value beyond the API.
+`takeEvery`, `takeLatest`, `takeLeading`, `throttle`, and `debounce` also accept a
+`Channel` in place of a pattern; see [Common mistakes](#common-mistakes) before adding wrappers.
 
 ### 2. Blocking and non-blocking effects
 
-`call`, `apply`, and `cps` are blocking; `fork` and `spawn` start work without blocking the parent. `fork` is attached to the parent: parent completion waits for children, child errors bubble upward, and cancellation propagates downward. `spawn` is detached and does not share parent completion, error, or cancellation flow. In this repository, agents must use attached `fork`, not detached `spawn`, so child tasks remain cancellable and failures remain visible to the parent lifecycle.
+`call`, `apply`, and `cps` are blocking; `fork` and `spawn` start work without blocking the parent. `fork` is attached to the parent: parent completion waits for children, child errors bubble upward, and cancellation propagates downward. `spawn` is detached and does not share parent completion, error, or cancellation flow.
 
 ```typescript
 import { call, cancel, cancelled, fork, join } from "redux-saga/effects";
@@ -101,7 +104,10 @@ Use `put(action)` for scheduled dispatch, `putResolve(action)` when dispatch ret
 
 ### 4. Channels, buffers, and cleanup
 
-Use `actionChannel(pattern, buffer?)` to queue matching store actions while a worker is blocked. Use `channel(buffer?)` for task-to-task messages and `eventChannel` to bridge external event sources; the `subscribe` function must return an unsubscribe function. Close channels in `finally`, and use `flush(channel)` to recover buffered messages during cleanup.
+Use `actionChannel(pattern, buffer?)` to queue matching store actions while a
+worker is blocked, `channel(buffer?)` for task-to-task messages, and `eventChannel`
+to bridge external sources. Use `flush(channel)` to recover buffered messages;
+follow [Common mistakes](#common-mistakes) for unsubscribe/close ownership.
 
 Buffer choices: `buffers.none()`, `fixed(limit)`, `expanding(initialSize)`, `dropping(limit)`, and `sliding(limit)`. The default `channel()` buffer queues up to 10 messages FIFO.
 
@@ -109,7 +115,10 @@ Buffer choices: `buffers.none()`, `fixed(limit)`, `expanding(initialSize)`, `dro
 
 Use `race` when the first completion wins; losing effects are automatically cancelled. Use `all` to run effects in parallel and wait for all successes, or throw when any effect rejects.
 
-`throttle(ms, patternOrChannel, saga, ...args)` uses a sliding buffer of one recent message while suppressing new starts during the window. Upstream redux-saga also exposes a native `debounce(ms, patternOrChannel, saga, ...args)` helper that waits until messages settle before forking the worker, but agents must not use it for `themis` implementation examples. Repository debounce must be written explicitly with `takeLatest` or `takeLeading` plus `delay` so cancellation semantics are visible in the worker.
+`throttle(ms, patternOrChannel, saga, ...args)` uses a sliding buffer of one recent
+message while suppressing new starts during the window. Upstream's native
+`debounce(ms, patternOrChannel, saga, ...args)` waits until messages settle before
+forking the worker; Themis restrictions are in [Common mistakes](#common-mistakes).
 
 ## Interface quick reference
 
@@ -159,6 +168,21 @@ await task.toPromise();
 - `cloneableGenerator(generatorFunc)` from `@redux-saga/testing-utils` creates cloneable generator instances for branch testing without replaying setup yields.
 - `createMockTask()` from `@redux-saga/testing-utils` returns a mock `Task` for testing `fork`, `join`, and `cancel` flows.
 - Prefer effect-level assertions for small generators and integration-style saga tests for cancellation, channel cleanup, and watcher concurrency.
+
+## Common mistakes
+
+- Do not call `middleware.run` before mounting saga middleware on the Redux store;
+  mount first, then start the root saga.
+- Do not treat `take` and `takeMaybe` as equivalent on `END`: `take` auto-terminates;
+  use `takeMaybe` when the saga must handle the closed-input sentinel itself.
+- Do not introduce detached `spawn` in this repository; use attached `fork` so
+  parent cancellation reaches children and child failures remain visible.
+- Do not leave external subscriptions or owned channels open: `eventChannel`
+  subscribe functions must return unsubscribe callbacks; close owned channels in `finally`.
+- Do not wrap native channel-aware watchers without added value; use their channel
+  overloads unless a wrapper provides documented cleanup, typing, or domain behavior.
+- Do not use native `debounce` in Themis examples or add wrapper-action debounce
+  utilities; watch the real action with `takeLatest`/`takeLeading` and `delay` in the worker.
 
 ## See also
 

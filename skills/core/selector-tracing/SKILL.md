@@ -163,18 +163,32 @@ Do not mix family-specific lifecycle patterns in one app.
 
 Initialize before direct reactive selector calls; retain/call the `store.init()`
 disposer when finished. Equivalent `store.dispose()` evicts direct outputs,
-stops intervals, disposes cadence, and stops sagas. Do not diagnose missing
-pre-init/post-disposal records as tracing failures; use `.select(...)` for
-explicit state reads where required by the family lifecycle.
+stops intervals, disposes cadence, and stops sagas.
 
 ## Default-off production behavior and privacy
 
 Production supports explicit categories, legacy activation, and summaries just
 like development; omission/`false` remain silent. Keep tracing off in normal
-builds and remove temporary configuration afterward. Never enrich reports with
-argument/result/state values; see [Scope and safety rules](#scope-and-safety-rules).
-Do not add manual memoization/debounce/throttle layers before diagnosing the
-Store-owned cache and cadence.
+builds and remove temporary configuration afterward. The same
+[Scope and safety rules](#scope-and-safety-rules) apply in every build.
+
+## Common mistakes
+
+- Do not expect `true` or category flags alone to collect aggregates or start a
+  timer; explicitly set `summaryEnabled: true` and initialize the Store.
+- Do not use nested/array options or unknown properties; use the flat
+  [configuration](#configure-the-store) with finite, non-negative numeric fields.
+- Do not treat row thresholds as global collection filters; another category can
+  qualify a period row, and lifetime samples remain collected.
+- Do not equate output-cache hits with callback recomputations, period console
+  deltas with lifetime stream snapshots, or bounded-window p95 with exact lifetime latency.
+- Do not call reactive selectors before init/after disposal or diagnose missing
+  records then as tracing failures; use `.select(...)` for explicit state reads
+  where the family lifecycle requires it.
+- Do not add manual memoization/debounce/throttle layers before diagnosing the
+  Store-owned cache and cadence.
+- Never enrich traces with argument/result/state values; report only source
+  identity, counts, durations, cache metrics, and fixed labels.
 
 ## Concise troubleshooting workflow
 
