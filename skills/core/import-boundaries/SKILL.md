@@ -47,7 +47,7 @@ Migration note: replace flat package-root examples, removed utilities-subpackage
 
 ### Components — forbidden
 
-- ❌ Saga files (`sagas/*.ts`) — never import saga source into a component
+- ❌ Saga files (`sagas/*.ts`) in ordinary components/handlers — dispatch the owning action instead. Only the explicit [bootstrap/lifetime owner](#bootstrap-and-lifetime-owner-exception) may import the saga it starts and stops.
 - ❌ Operation/utility modules that dispatch internally
 - ❌ Reducer internals or store init/setup modules
 - ❌ Collection utils directly (access collections through selectors)
@@ -55,7 +55,29 @@ Migration note: replace flat package-root examples, removed utilities-subpackage
 
 ### Services and non-component TS
 
-Services may import actions, selectors, and the app's existing initialized `Store` instance captured outside callbacks. They may **not** import sagas directly — call `store.dispatch(triggeringAction())` instead.
+Services may import actions, selectors, and the app's existing initialized `Store` instance captured outside callbacks. Ordinary service operations may **not** import or call sagas directly — call `store.dispatch(triggeringAction())` instead. A service that is the explicit lifetime owner has only the startup exception below.
+
+### Bootstrap and lifetime-owner exception
+
+The designated bootstrap, layout/component, or service lifetime owner may import the configured Store and the saga function it passes to `store.runSaga(saga)`. Initialize the Store before starting the saga, retain the matching stop handle, and stop it at that same boundary. This is lifecycle wiring, not permission to invoke/step the generator, use saga effects in components, or move business logic into handlers. Do not add a second hidden owner for an already-owned saga.
+
+For an owner that also owns Store initialization/disposal (adapt the boundary to the selected family):
+
+```ts
+import { store } from "$lib/store";
+import { jobsSaga } from "$lib/store/slices/jobs/sagas/jobs-saga";
+
+export function startJobsOwner() {
+  const disposeStore = store.init();
+  const stopJobs = store.runSaga(jobsSaga);
+  return () => {
+    stopJobs();
+    disposeStore();
+  };
+}
+```
+
+If a longer-lived parent already owns the initialized Store, retain/call only the saga stop handle; do not initialize or dispose the parent's Store. Ordinary UI events still import actions and use `store.dispatch(action())`. Follow the chosen family's lifecycle leaf and [Store saga lifecycle](../saga-manager/SKILL.md#store-saga-lifecycle).
 
 ### Sagas
 
@@ -127,9 +149,11 @@ export function* jobsSaga() {
 
 ### ❌ Importing saga files from components
 
-Importing saga source bloats the component bundle; invoking or stepping its
-generator bypasses `Store.runSaga` lifecycle. Import the triggering action from
-its owning slice and call `store.dispatch(fetchItems())` instead.
+Outside the explicit bootstrap/lifetime-owner exception, importing saga source
+crosses the component boundary; invoking or stepping its generator bypasses
+`Store.runSaga` lifecycle. Import the triggering action from its owning slice and
+call `store.dispatch(fetchItems())` instead. The startup exception does not permit
+business-saga calls or effect imports in event handlers.
 
 Source: [Components — forbidden](#components--forbidden) · **Priority: HIGH**
 
@@ -150,7 +174,7 @@ Calling `put(triggerEffect())` in a handler just creates an unexecuted descripto
 call `store.dispatch(triggerEffect())` instead. Effect imports also bloat the
 client bundle and drag saga mocks (`core/testing`) into non-saga tests.
 
-Source: [Components — forbidden](#components--forbidden) (Components must never import saga files / redux-saga effects) · **Priority: HIGH**
+Source: [Components — forbidden](#components--forbidden) (No saga effects in components; saga-function imports only at the explicit lifetime owner) · **Priority: HIGH**
 
 ## See also
 

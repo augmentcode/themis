@@ -109,7 +109,18 @@ worker is blocked, `channel(buffer?)` for task-to-task messages, and `eventChann
 to bridge external sources. Use `flush(channel)` to recover buffered messages;
 follow [Common mistakes](#common-mistakes) for unsubscribe/close ownership.
 
-Buffer choices: `buffers.none()`, `fixed(limit)`, `expanding(initialSize)`, `dropping(limit)`, and `sliding(limit)`. The default `channel()` buffer queues up to 10 messages FIFO.
+Buffer choices: `buffers.none()`, `fixed(limit)`, `expanding(initialSize)`, `dropping(limit)`, and `sliding(limit)`. The default `channel()` uses an expanding FIFO buffer: ten is its initial capacity, not a maximum. Choose an explicit bounded buffer when backlog memory must be limited; that choice also determines overflow behavior.
+
+```typescript
+import { buffers, channel } from "redux-saga";
+
+const defaultQueue = channel<number>(); // expands: retains all 25 queued messages
+const recentQueue = channel<number>(buffers.sliding(10)); // keeps the latest ten
+const firstQueue = channel<number>(buffers.dropping(10)); // drops new arrivals when full
+const strictQueue = channel<number>(buffers.fixed(10)); // throws on the eleventh put
+```
+
+These examples assume no pending taker. `eventChannel` is different: it defaults to no buffer, so pass one explicitly if events must wait for a consumer. Close owned queues when their lifetime ends.
 
 ### 5. Concurrency combinators and helpers
 
@@ -179,6 +190,7 @@ await task.toPromise();
   parent cancellation reaches children and child failures remain visible.
 - Do not leave external subscriptions or owned channels open: `eventChannel`
   subscribe functions must return unsubscribe callbacks; close owned channels in `finally`.
+- Do not rely on `channel()` to bound a backlog; its default buffer expands. Choose and test an explicit overflow policy.
 - Do not wrap native channel-aware watchers without added value; use their channel
   overloads unless a wrapper provides documented cleanup, typing, or domain behavior.
 - Do not use native `debounce` in Themis examples or add wrapper-action debounce

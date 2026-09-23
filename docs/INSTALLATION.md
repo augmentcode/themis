@@ -34,7 +34,7 @@ Every selected bundle:
 - copies the selected packaged AI skill bundle into the consuming project root at `.agents/skills/themis/`, with skill folders directly underneath (root `SKILL.md`, `setup/`, `core/`, `react/`, `svelte/`, `streaming/`);
 - keeps `.agents/skills/themis/` as the only copied and manifest-owned skill tree, then creates or reuses `.claude/skills/themis` as a directory symlink (relative on POSIX, junction on Windows) resolving to that canonical tree;
 - never overwrites an existing file, directory, or foreign link at `.claude/skills/themis`; it preserves the collision and logs a warning while continuing the canonical install;
-- if a previous install's `installed-skills.yml` manifest exists there, first removes every file that manifest lists and prunes empty directories, so each install fully refreshes the previous package install (user-authored files not listed in the manifest are preserved);
+- if a previous install's `installed-skills.yml` manifest exists there, removes its listed files that are absent from the next selected bundle and prunes empty directories; selected files are copied or updated only when their contents differ;
 - writes a fresh `.agents/skills/themis/installed-skills.yml` manifest recording the package name, package version, install target, install timestamp, and the full list of installed relative file paths (the manifest itself is excluded from the list);
 - removes package-owned skill copies left directly under the legacy flat `.agents/skills/` location as a one-time migration for existing consumers;
 - preserves unrelated project or third-party skills under `.agents/skills/`;
@@ -70,7 +70,23 @@ npx themis cleanup-skills
 | `npx themis install-skills:core` | root `SKILL.md`, `setup`, and `core` |
 | `npx themis install-skills` or `npx themis install-skills:all` | the complete all-skills bundle |
 
-Each install command refreshes the selected package-owned bundle in `.agents/skills/themis/`, writes a fresh `installed-skills.yml` manifest, and reports copied, updated, unchanged, stale-removed, and Claude-link status. Repeating an unchanged command is a no-op for files and reuses a correct compatibility link. User-authored files not listed in the manifest, unrelated skills outside that directory, and non-selected package families are preserved. A collision at `.claude/skills/themis` is preserved with a warning; the canonical `.agents/skills/themis` install still proceeds.
+Each install command replaces the previous manifest-owned bundle with the selected bundle in `.agents/skills/themis/`, writes a fresh `installed-skills.yml` manifest, and reports copied, updated, unchanged, stale-removed, and Claude-link status. Repeating an unchanged command leaves skill contents untouched and reuses a correct compatibility link, but still rewrites the manifest/timestamp. Previously installed package-owned families **are removed** when no longer selected. Files outside the manifest and selected destination paths, such as user notes and unrelated skills, are preserved. A local edit to a manifest-owned file does not change its ownership: it can be removed when stale or overwritten when selected. Selected destination paths can also be overwritten even without a prior manifest entry; keep custom guidance in separate files. A collision at `.claude/skills/themis` is preserved with a warning; the canonical `.agents/skills/themis` install still proceeds.
+
+### Narrowing an existing bundle
+
+For example, intentionally switching an all-family install to shared Core only:
+
+```bash
+npx themis install-skills:all
+npx themis install-skills:core
+```
+
+The second command removes the prior manifest's React, Svelte and Streaming
+skill files, while retaining unchanged root/setup/Core skill files. An unlisted
+`react/my-notes.md` remains, as does an unrelated `.agents/skills/custom/SKILL.md`.
+This is a bundle replacement, not an additive installation of Core alongside
+previous families. Choose the bundle before refreshing and keep local notes out
+of package-owned destinations.
 
 If npm package invocation appears to do nothing, verify `./node_modules/.bin/themis` exists in the consuming app and run `./node_modules/.bin/themis help` directly. If that file is missing, the package is not installed or the package manager has not linked its bin in that app; reinstall or repair the local package install before retrying. In this repository's source checkout, `npx`/`npm exec` package-name invocations are not a valid smoke test because the package bin is not linked automatically; use `node scripts/cli.mjs help` for source-checkout validation.
 
@@ -83,7 +99,7 @@ npx themis help
 node -e "const fs=require('node:fs'); for (const p of ['.agents/skills/themis/SKILL.md','.agents/skills/themis/installed-skills.yml','.claude/skills/themis']) console.log(p, fs.realpathSync(p))"
 ```
 
-Run the same selected install command whenever the package or desired bundle changes. The manifest-driven refresh removes stale package-owned files from the previous install while preserving files not listed in that manifest.
+Run the same selected install command whenever the package or desired bundle changes. The manifest-driven refresh removes stale package-owned files from the previous install; selected destinations are refreshed and other unlisted files are preserved as described above.
 
 npm 7+ does not run dependency uninstall lifecycle scripts, so uninstalling the package does not automatically remove copied skill files. Run cleanup first, then uninstall:
 
