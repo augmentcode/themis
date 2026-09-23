@@ -105,7 +105,9 @@ export function handleLogout() {
 
 Do not move the readable call into a callback while converting a consumer.
 Use `../../selector-lifecycle/SKILL.md` → **Call-mode map** and **Pitfalls** for
-the one-shot replacement and the `lifecycle_outside_component` explanation.
+the one-shot replacement and subscription-ownership policy. Store-bound direct
+selectors do not call `getContext()`; context helpers and `Store.init()` have
+separate component-initialization requirements.
 
 ### 7. ❌ Bad: duplicate old-store ownership after Redux dispatch
 
@@ -150,5 +152,5 @@ export function goodSingleOwnerWrite() {
   Store dispatch and `$selectorResult$` templates
 - `../../store/SKILL.md` → **Lifecycle rules** — Store initialization/disposal
 - `../../selector-lifecycle/SKILL.md` — three call modes
-  and the init-time rule that causes the crash above
+  and component-init placement versus actual context-helper restrictions
 

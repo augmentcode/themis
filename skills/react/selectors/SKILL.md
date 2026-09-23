@@ -57,13 +57,16 @@ below describes how signal-aware entry points evaluate their inputs.
 
 Selector arguments may be plain values or Preact React `ReadonlySignal` values
 for direct calls, `.useValue(...args)`, and `.withStore(...)(...args)`. Signal
-arguments are unwrapped by reading `.value` inside the computed selector, so the
-derived selector signal updates when either Store state or signal arguments
-change. `.select(state, ...args)` and `.effect(...args)` are plain synchronous or
+arguments are unwrapped through `.value` and their subscriptions feed the
+selector's argument inputs, so the derived signal updates when Store state or
+signal arguments change. `.select(state, ...args)` and `.effect(...args)` are plain synchronous or
 saga paths; pass plain argument values there instead of signal wrappers.
 
-Signal emissions use the owning Store cadence; configuration and temporary
-trace options belong to [Store-first scheduling rule](../selector-scheduling/SKILL.md#store-first-scheduling-rule).
+Store-state changes reach active selector signals on the owning Store cadence;
+signal-argument changes can recompute and emit changed results immediately,
+downstream of that cadence. Initial snapshots are prompt. The frequency option
+is not an overall output-rate cap. Configuration and temporary trace options
+belong to [Store-first scheduling rule](../selector-scheduling/SKILL.md#store-first-scheduling-rule).
 Saga and selector-channel reads do not subscribe to React signals; follow
 [React signal consumption guardrails](../selector-lifecycle/SKILL.md#react-signal-consumption-guardrails)
 for that boundary.
@@ -71,7 +74,7 @@ for that boundary.
 ## Selector caching
 
 - Store-created selectors have internal selector-result caching/memoization.
-- Direct React `ReadonlySignal` outputs are cached per ReactStore instance + selector + arguments; repeated `selectFoo(args)` calls for the same store reuse the same `ReadonlySignal`.
+- Direct React `ReadonlySignal` outputs are cached per ReactStore instance + selector + arguments. Never-observed outputs and concurrent live consumers reuse the same signal. Removing one of several consumers retains it; removing the final observed consumer evicts that output even if JavaScript references remain. The next identical call creates a new signal. Store disposal evicts all its outputs; cache counts are not active-consumer counts.
 - Do not wrap selector callbacks, direct signal calls, or `.useValue(...args)` calls in extra `memoize`, `cache`, manual cache maps, debounce, or throttle layers solely for performance.
 - Prefer the same Store-bound selector + same arguments over props drilling when
   the receiving consumer can call it in a valid context; choose that context's

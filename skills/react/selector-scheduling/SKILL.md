@@ -35,9 +35,14 @@ owns cadence, not component/hook/handler/saga boundary rules.
 
 - Create production selectors with the configured `ReactStore` instance:
   `reactStore.createSelector(...)`.
-- Direct `ReadonlySignal` outputs are cached for the same ReactStore instance + selector + args, and direct
-  signal outputs plus `.useValue(...args)` subscribe to the owning `ReactStore`'s
-  Store-owned cadence, capped by `throttledSelectorFrequency`.
+- Direct `ReadonlySignal` outputs and `.useValue(...args)` use the owning
+  `ReactStore`'s cadenced state stream. The state tick rate is capped by
+  `throttledSelectorFrequency`; signal-argument changes can emit changed results
+  immediately and are not capped by that option. The initial snapshot is prompt;
+  later Store writes coalesce at the next scheduled tick.
+- Same-Store/selector/args outputs share the retained cache entry, including
+  never-observed outputs. Final-consumer cleanup evicts it; follow
+  [Selector caching](../selectors/SKILL.md#selector-caching) for identity boundaries.
 - Tune coalescing only with the final constructor options argument, for example
   `new ReactStore(reducers, middleware, { throttledSelectorFrequency })`.
 - Omit `throttledSelectorFrequency` for the default `64` FPS. Explicit values
@@ -47,6 +52,9 @@ owns cadence, not component/hook/handler/saga boundary rules.
   in the same final options object only for temporary diagnostics.
 - Snapshot and saga reads do not use React render scheduling; follow
   [React signal consumption guardrails](../selector-lifecycle/SKILL.md#react-signal-consumption-guardrails).
+- There is no separately named public fast-selector API. `.select(store.state, ...plainArgs)`
+  and saga `.effect(...plainArgs)` are one-shot uncadenced reads, not alternate
+  render subscriptions; selector-channel sagas subscribe to Redux, not this cadence.
 
 ## Do not
 
@@ -94,7 +102,7 @@ export const selectPointerLabel = reactStore.createSelector((state) => {
 
 ### Consumer integration
 
-Direct signal outputs are already scheduled. Component/hook, handler/test, and
+Direct signal outputs already schedule Store-state changes, not argument changes. Component/hook, handler/test, and
 saga examples belong to [Examples](../selector-lifecycle/SKILL.md#examples),
 including the distinction between render subscriptions and one-shot reads.
 

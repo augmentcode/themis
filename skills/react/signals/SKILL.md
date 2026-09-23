@@ -82,7 +82,9 @@ import { useComputed, useSignal, useSignalEffect } from "@preact/signals-react";
 export function DraftTitle() {
   const draft = useSignal("");
   const remaining = useComputed(() => 80 - draft.value.length);
-  useSignalEffect(() => document.title = `${remaining.value} left`);
+  useSignalEffect(() => {
+    document.title = `${remaining.value} left`;
+  });
   return <input value={draft.value} onInput={(event) => draft.value = event.currentTarget.value} />;
 }
 ```

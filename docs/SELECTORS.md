@@ -24,7 +24,7 @@
 Selectors are pure functions that extract and derive data from the Redux store. In production app code, create app-local selectors from the configured `Store` instance with `store.createSelector(...)`. The Store-bound helper delegates to the lower-level selector utility while typing the callback `state` as `StoreInstanceState<typeof store>` (`StoreState<typeof store>` remains supported). That concrete state resolves reducer domains to app state types (for example, `counter: CounterState` and `todos: TodosState`) instead of exposing reducer call signatures or helper members. Selectors provide:
 
 - **Automatic memoization** — Proxy-based tracking of accessed state paths; only recomputes when those paths change.
-- **Cached direct outputs** — Repeated direct calls with the same state source, Store-created selector, and arguments reuse the same Svelte readable, React `ReadonlySignal`, or Kefir Observable output.
+- **Cached direct outputs** — Repeated direct calls with the same Store object, Store-created selector, and arguments reuse the retained Svelte readable, React `ReadonlySignal`, or Kefir Observable output. Final-consumer cleanup and Store disposal are identity boundaries, not permanent cache guarantees.
 - **Multiple usage modes** — Svelte reactive stores, React signals/component reads, Kefir streams, saga effects, and direct state reads.
 - **Type safety** — Full TypeScript inference for arguments and return types.
 - **Composability** — Selectors can call other selectors via `.select()`.
@@ -114,7 +114,13 @@ export const selectCompletedCount = store.createSelector((state) => {
 
 Selectors provide multiple methods for different contexts. `Store.createSelector` uses the package's Svelte-readable selector model; `ReactStore.createSelector` uses the React signal selector model and returns Preact React signals from direct calls; `StreamingStore.createSelector` uses the streaming selector model and returns Kefir streams from direct calls. Choose the Store class instead of constructor injection for selector behavior.
 
-Direct Svelte readable, React `ReadonlySignal`, and Kefir Observable outputs are cached by source + Store-created selector + arguments. For StreamingStore, the source is the Kefir state observable. Prefer calling the same Store-bound selector with the same stable args where the consumer has a valid direct-call context, instead of props drilling or manually passing derived streams solely to avoid selector calls. Keep lifecycle rules: Svelte direct readable calls belong at component init, React signal calls belong in signal-aware React paths, streaming direct calls belong in streaming setup, and `.select`, `.effect`, `.withStore`, or React `.useValue(...)` remain the escape hatches for other contexts.
+Direct Svelte readable, React `ReadonlySignal`, and Kefir Observable outputs are cached by Store object + Store-created selector + arguments. The Store supplies its internal state stream for computation, but that raw stream is not the public binding or cache key. Prefer calling the same Store-bound selector with the same stable args where the consumer has a valid direct-call context, instead of props drilling or manually passing derived streams solely to avoid selector calls. Keep lifecycle policy: capture Svelte readables at component init for template ownership, React signal calls belong in signal-aware React paths, streaming direct calls belong in streaming setup, and `.select`, `.effect`, `.withStore`, or React `.useValue(...)` remain the alternatives for other consumers.
+
+Never-observed outputs are cached too. Concurrent live consumers share an output;
+removing one consumer keeps the entry while another remains. Removing the final
+subscriber/observer evicts that output, even if JavaScript references to it remain,
+so the next identical call creates a new object. Whole-Store disposal evicts all
+outputs for that Store. Cache counts do not measure active subscriptions.
 
 ### 1. In Svelte Components (Reactive)
 
@@ -188,7 +194,14 @@ const boundSelector = selectTodoById.withStore(store);
 const todo = boundSelector(todoId); // Returns the direct-call type for that Store family
 ```
 
-For `Store`, the bound result is a Svelte `Readable<R>`. For `ReactStore`, the bound result is a `ReadonlySignal<R>` and may bind either a `ReactStore`/signal-state source or a state signal. For `StreamingStore`, the bound result is a Kefir `Observable<R, any>`.
+For `Store`, the bound result is a Svelte `Readable<R>`. For `ReactStore`, it is a
+`ReadonlySignal<R>`; for `StreamingStore`, a Kefir `Observable<R, any>`. In each
+case pass an initialized Store of that family, not a raw state signal/observable.
+The Store object is used for both cache source identity and obtaining state for
+computation. Even two Store objects exposing the same internal stream are distinct
+cache sources. A Svelte direct call already binds to its creating Store and does
+not access component context; `.withStore` explicitly selects a Store rather than
+enabling otherwise-forbidden non-component reads. Manual consumers own cleanup.
 
 ### 6. Streaming Store selectors
 
@@ -201,7 +214,12 @@ export const selectTodoCountStream = streamStore.createSelector((state) => state
 const todoCount$ = selectTodoCountStream(); // Returns Kefir Observable<number, any>
 ```
 
-Streaming selectors emit their first available value promptly. Subsequent rapid Store state updates are coalesced by the Store-owned state observable on cadence ticks capped by `throttledSelectorFrequency`, and only changed latest-current selector results emit from that cadenced state source. Observable selector argument updates may recompute and emit immediately when the selected result changes.
+Streaming selectors emit their first available value promptly, but an observable
+argument must first supply a value; a cold argument without an initial value
+delays output. Subsequent rapid Store state updates are coalesced by the
+Store-owned state observable on cadence ticks capped by `throttledSelectorFrequency`.
+Observable selector argument updates may recompute and emit immediately when the
+selected result changes, using the latest emitted Store state.
 
 ---
 
@@ -213,7 +231,7 @@ Streaming selectors emit their first available value promptly. Subsequent rapid 
 2. **Selective re-execution** — On subsequent calls, only re-runs if an accessed path's reference changed.
 3. **Argument tracking** — Also re-runs when arguments change (shallow equality), and direct output reuse depends on stable argument identities for object/function arguments.
 4. **Collection optimization** — Stops proxying at Collection boundaries since Collections are immutable and always change reference when modified.
-5. **Output reuse** — Direct readable/signal/observable outputs are cached for the same state source + selector + arguments.
+5. **Output reuse** — Direct readable/signal/observable outputs reuse retained entries for the same Store + selector + arguments, until final-consumer cleanup or Store disposal evicts them.
 
 ```typescript
 // This selector only re-runs when:
@@ -229,6 +247,42 @@ export const selectTodoById = store.createSelector((state, todoId: string) => {
 Selector emissions are scheduled and coalesced by a shared StoreRuntime-owned Kefir state property so rapid Redux writes do not force unnecessary UI or stream consumer work. Svelte-readable `Store` selectors, React signal `ReactStore` selectors, and Kefir-based `StreamingStore` selectors derive from that same cadenced Store state source and convert only at their public boundaries; the maximum state tick rate comes from the configured `throttledSelectorFrequency` Store constructor option, defaulting to `64` FPS. Selectors then compute from the latest cadenced state value, compare with the last emitted result where the API supports distinctness, and allow readable/signal/observable selector argument changes to update immediately when only arguments change the result. Because StoreRuntime owns that Kefir property at runtime, all Store variants require the `kefir` peer dependency to be installed. Selector trace output is a separate default-off diagnostic; pass `{ traceSelectors: true }` in the same final Store options object only while diagnosing selector scheduling, and omit it or pass `false` for normal silent behavior. There is no public lock/unlock action API; model batching through ordinary action design, saga orchestration, and selectors that derive the final UI value.
 
 Because Store-created selectors already cache accessed state paths, track arguments, reuse same-source/same-selector/same-stable-args direct outputs, and coalesce emissions, do not add extra memoization, manual cache maps, debounce/throttle wrappers, `requestAnimationFrame` schedulers, or writable/signal proxies around selector callbacks or selector calls solely for performance. Use normal selector composition with `.select(state, ...args)` inside another selector, pass primitive scalar selector arguments where possible, and tune the public Store constructor options when UI/stream coalescing needs an explicit FPS.
+
+There is no separate public fast-selector API. Direct reactive outputs and React
+`.useValue` use the cadenced Store stream; `.select(store.state, ...plainArgs)` and
+saga `.effect(...plainArgs)` are uncadenced one-shot reads. Selector-channel sagas
+subscribe to Redux context rather than to the UI/stream cadence.
+
+#### Reactive arguments versus Store-state ticks
+
+For an initialized ReactStore with `counter.count = 2`, even a `1` FPS setting
+does not delay these argument-driven changes for an active consumer:
+
+```ts
+import { signal } from "@preact/signals-react";
+
+export const selectScaled = reactStore.createSelector((state, factor: number) => state.counter.count * factor);
+export const factor = signal(3);
+export const scaled = selectScaled(factor);
+// A tracked consumer sees 6 initially, then 8 and 10 immediately when
+// factor.value changes to 4 and 5. Store writes still wait for cadence ticks.
+```
+
+The corresponding StreamingStore pattern uses an externally owned argument
+stream. An initial value is optional, but without one output waits for that input:
+
+```ts
+import Kefir from "kefir";
+
+export const selectScaled = streamStore.createSelector((state, factor: number) => state.counter.count * factor);
+export const factor = Kefir.pool<number, never>();
+export const scaled = selectScaled(factor);
+// After observation starts, factor.plug(Kefir.constant(3)) produces 6.
+// Plugging 4 and 5 produces 8 and 10 immediately; the observer owns unsubscribe.
+```
+
+These are adapter subscription examples, not component-owned manual subscriptions
+or event logs. Keep production React consumers within normal signal tracking.
 
 ### Selector Tracing Diagnostics
 
@@ -471,14 +525,24 @@ export const selectAllTodos = store.createSelector((state) => {
 
 | Context | Correct Usage | Why |
 |---------|---------------|-----|
-| Component init (top-level `<script>`) | `const val = selectFoo()` | Returns Svelte readable. Uses `getContext()` — only valid at init. |
+| Component init (top-level `<script>`) | `const val = selectFoo()` | Returns a Store-bound Svelte readable; recommended placement for template subscription ownership. |
 | React component/custom hook | `const valueSignal = selectFoo(...args)` | Preferred path; returns `ReadonlySignal<R>` for direct signal `.value` or signal-aware rendering. |
 | Hook/plain-value fallback | `const value = selectFoo.useValue(...args)` | Use only when a React component/custom hook must receive plain `R` and accepting a signal is impractical. |
 | Event handlers, callbacks | `selectFoo.select(appStore.state)` | Direct read from an initialized `Store` instance captured outside the handler. No Svelte context needed. |
 | Sagas | `yield* selectFoo.effect()` | Uses redux-saga's `select` effect. |
 | Composing selectors | `selectFoo.select(state)` | Direct read within another selector. |
 
-**⚠️ CRITICAL for Svelte `Store`:** Never call `selectFoo()` (the readable form) inside event handlers, callbacks, or async functions — it calls `getContext()` which only works during component initialization. For React `ReactStore`, prefer direct selector signals in components/custom hooks and reserve `.useValue(...args)` for necessary plain-value fallbacks; non-component one-shot code should use `.select(state, ...args)`.
+**⚠️ CRITICAL for Svelte `Store`:** Capture template readables at component init;
+use `.select` for one-shot handlers, callbacks, async work, and pure tests instead
+of creating subscriptions. This is lifecycle/ownership policy: direct selectors
+bind to their Store and do not call `getContext()`. They can be consumed outside
+components after valid initialization if the subscriber owns cleanup. Fresh
+Svelte `Store.init()` does read context and must run during component initialization;
+neither it nor `useInitStore` installs the context needed by `useRunSaga`. Use the
+explicit owner `init`/`onDestroy`/`onMount(() => store.runSaga(saga))` path instead.
+For React `ReactStore`, prefer direct selector signals in components/custom hooks
+and reserve `.useValue(...args)` for necessary plain-value fallbacks;
+non-component one-shot code should use `.select(state, ...args)`.
 
 ---
 
@@ -559,14 +623,17 @@ const todos = selectTodos();
 const snapshot = selectTodos.select(appStore.state);
 ```
 
-If selector output is too chatty for UI or stream consumers, tune the owning Store's `throttledSelectorFrequency` cadence cap instead of layering custom caches, timers, or scheduler wrappers around the selector.
+For excessive Store-state-driven work, tune the owning Store's
+`throttledSelectorFrequency` cadence instead of adding custom caches, timers, or
+scheduler wrappers. Reactive-argument changes bypass that cadence; inspect the
+argument producer rather than treating the frequency option as a total output cap.
 
 ### ❌ Calling Readable Form Outside Component Init
 
 ```typescript
 import { store as appStore } from "$lib/store";
 
-// BAD — crashes with lifecycle_outside_component
+// BAD — creates a readable subscription for a one-shot read (not a context crash)
 function handleClick() {
   const val = get(selectFoo());
 }
