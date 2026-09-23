@@ -1,9 +1,9 @@
 ---
 name: svelte/migration/setup
 description: >-
-  Prepare an existing Svelte app for incremental migration with an empty
-  app-owned reducer map. Route installation, imports, and Store lifecycle to
-  their canonical owners, then add each migrated slice registration.
+  Use when preparing an existing Svelte app for incremental migration with an
+  empty reducer map. Route installation/imports/lifecycle to canonical owners;
+  add registrations as slices migrate.
 type: sub-skill
 requires:
   - svelte

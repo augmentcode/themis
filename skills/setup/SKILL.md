@@ -1,10 +1,9 @@
 ---
 name: setup
 description: >-
-  Canonical first-time themis setup entry. Start here for greenfield app
-  setup, choose exactly one concrete Store family before creating files, then
-  follow the neutral checklist and explicit core/family implementation references.
-  Installation commands remain in the canonical installation documentation.
+  Start here for first-time or greenfield Themis setup. Choose one Store family,
+  then follow the neutral checklist and core/family owners. Installation
+  commands live in the canonical installation docs.
 triggers:
   - init redux
   - setup store

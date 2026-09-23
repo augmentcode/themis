@@ -1,9 +1,8 @@
 ---
 name: svelte/migration/component-migration
 description: >-
-  Swap Svelte store imports for selectFoo() readables plus Store.dispatch at
-  component init; keep templates reactive via $selectorResult$. Covers the
-  before/after consumer conversion; selector call-mode policy remains owned by
+  Use when replacing Svelte store imports and template subscriptions with
+  Themis selector readables and dispatch. Apply call-mode policy from
   svelte/selector-lifecycle.
 type: sub-skill
 requires:

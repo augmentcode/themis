@@ -1,10 +1,9 @@
 ---
 name: svelte/migration/side-effects
 description: >-
-  Move domain-owned subscriptions, $effect blocks, async calls, fetches, timers,
-  and IPC listeners into sagas; retain DOM-local component effects. Covers
-  the fetch/localStorage/$effect to saga conversion and the "side effects in
-  reducers" pitfall.
+  Use when moving domain-owned Svelte subscriptions, $effect blocks, fetches,
+  localStorage, timers, or IPC listeners into sagas. Keep DOM-local effects in
+  components.
 type: sub-skill
 requires:
   - core/core-policy

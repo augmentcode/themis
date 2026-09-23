@@ -1,11 +1,9 @@
 ---
 name: core/sagas
 description: >-
-  Concise agent rules for typed-redux-saga work in this package. Use for saga
-  watchers/workers, canonical saga ownership, application saga startup placement,
-  cancellation-friendly debounce, retryWithTimeout,
-  wrapStreamingGenerator, and routing to saga-manager crash/restart guidance. For conceptual API
-  explanations and examples, link to @augmentcode/themis/docs/SAGAS.md instead of duplicating them.
+  Use when writing typed-redux-saga watchers/workers, assigning ownership and
+  app startup placement, debouncing, retrying with retryWithTimeout, or using
+  wrapStreamingGenerator. Route lifecycle/crash/restart mechanics to core/saga-manager.
 type: sub-skill
 requires:
   - core

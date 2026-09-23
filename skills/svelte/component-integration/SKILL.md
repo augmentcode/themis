@@ -1,9 +1,9 @@
 ---
 name: svelte/component-integration
 description: >-
-  Wire a configured Store into Svelte root layouts, templates, and handlers.
-  Apply svelte/store lifecycle contracts and svelte/selector-lifecycle call
-  modes; this leaf owns component wiring, not Store API or selector policy.
+  Use when wiring a configured Store into Svelte root layouts, templates, and
+  handlers. Apply svelte/store lifecycle and svelte/selector-lifecycle call
+  modes; this leaf owns wiring, not API policy.
 type: sub-skill
 library: themis
 requires:
