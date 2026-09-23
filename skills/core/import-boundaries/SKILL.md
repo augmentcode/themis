@@ -65,18 +65,11 @@ Sagas may import anything within the store directory (actions, selectors, other 
 
 ### 1. Public package subpaths and utility leaf imports
 
-```ts
-import { Store } from "<selected Store family package>";
-import type { StoreState } from "@augmentcode/themis/types";
-import { createAction } from "@augmentcode/themis/utils/store/create-action";
-import { retryWithTimeout } from "@augmentcode/themis/saga";
-import type { Collection } from "@augmentcode/themis/utils/collections/collection-utils";
-
-type Todo = { id: string; title: string };
-export type PublicState = StoreState & { todos?: { items: Collection<Todo, "id"> } };
-export const loadTodos = createAction("todos/load");
-export const publicApi = { Store, retryWithTimeout, loadTodos };
-```
+Use the export list above, not a package-root or implementation import:
+`createAction` comes from `@augmentcode/themis/utils/store/create-action`,
+`retryWithTimeout` from `@augmentcode/themis/saga`, and `StoreState` from
+`@augmentcode/themis/types` via `import type`. Import the concrete Store class
+from the selected family's public subpackage.
 
 ### 2. Component imports actions, selectors, types, and the initialized Store instance
 
@@ -134,26 +127,9 @@ export function* jobsSaga() {
 
 ### ❌ Importing saga files from components
 
-Pulls saga side-effect code into the component bundle and invites direct saga invocation, which breaks the saga lifecycle.
-
-```ts
-// BAD: component-adjacent code imports saga source and bypasses Store.runSaga lifecycle.
-import { fetchItemsSaga } from "./slices/items/sagas/items-saga";
-
-export function loadFromComponent() {
-  const task = fetchItemsSaga();
-  task.next();
-}
-```
-
-```ts
-import { store } from "$lib/store";
-import { fetchItems } from "./slices/items/items-slice";
-
-export function loadFromComponent() {
-  store.dispatch(fetchItems());
-}
-```
+Importing saga source bloats the component bundle; invoking or stepping its
+generator bypasses `Store.runSaga` lifecycle. Import the triggering action from
+its owning slice and call `store.dispatch(fetchItems())` instead.
 
 Source: [Components — forbidden](#components--forbidden) · **Priority: HIGH**
 
@@ -161,76 +137,20 @@ Source: [Components — forbidden](#components--forbidden) · **Priority: HIGH**
 
 Components and services should dispatch through the configured app `Store` instance or receive a dispatch function explicitly. A helper that captures a hidden module-level dispatch creates an unreviewable second boundary even when all imports type-check.
 
-```ts
-// BAD: callers cannot see which Store instance owns this side effect.
-import { store } from "$lib/store";
-import { addItem } from "$lib/store/slices/items/items-slice";
-
-export function queueItemFromAnywhere(id: string) {
-  setTimeout(() => store.dispatch(addItem(id)), 0);
-}
-```
-
-```ts
-import type { Store } from "<selected Store family package>";
-import { addItem } from "$lib/store/slices/items/items-slice";
-
-export function queueItem(store: Store, id: string) {
-  setTimeout(() => store.dispatch(addItem(id)), 0);
-}
-```
+Keep the Store or dispatch parameter explicit at the call site rather than hiding
+ownership in an operation helper. This does not permit business timers or other
+domain effects outside sagas; `core/core-policy/SKILL.md` owns that rule.
 
 Source: [Components and component-level modules — allowed](#components-and-component-level-modules--allowed), [Services and non-component TS](#services-and-non-component-ts) · **Priority: MEDIUM**
 
 ### ❌ Importing from `typed-redux-saga` in a component file
 
-`typed-redux-saga` effects (`call`, `put`, `select`, `takeEvery`, ...) only have meaning inside saga generators. Importing them in a component has no runtime benefit, bloats the client bundle, and in test environments drags the saga mock (`core/testing`) into non-saga files.
-
-```ts
-// BAD: component code creates an effect descriptor that no saga middleware will run.
-import { put } from "typed-redux-saga";
-import { triggerEffect } from "./slices/effects/effects-slice";
-
-export function handleClick() {
-  return put(triggerEffect());
-}
-```
-
-```ts
-import { store } from "$lib/store";
-import { triggerEffect } from "./slices/effects/effects-slice";
-
-export function handleClick() {
-  store.dispatch(triggerEffect());
-}
-```
+Effects (`call`, `put`, `select`, `takeEvery`, ...) only run inside saga generators.
+Calling `put(triggerEffect())` in a handler just creates an unexecuted descriptor;
+call `store.dispatch(triggerEffect())` instead. Effect imports also bloat the
+client bundle and drag saga mocks (`core/testing`) into non-saga tests.
 
 Source: [Components — forbidden](#components--forbidden) (Components must never import saga files / redux-saga effects) · **Priority: HIGH**
-
-### Examples retained/added
-
-| # | Example | Kind |
-| ---: | --- | --- |
-| 1 | Public package subpaths and utility leaf imports | Good |
-| 2 | Component imports actions/selectors/types/Store instance | Good |
-| 3 | Service one-shot selector read plus dispatch | Good |
-| 4 | Saga-layer imports and typed-redux-saga usage | Good |
-| 5 | Component importing saga source and direct generator stepping | Bad |
-| 6 | Correct action dispatch replacement for saga import | Good |
-| 7 | Hidden module-level dispatch helper in service code | Bad |
-| 8 | Explicit Store-parameter dispatch helper | Good |
-| 9 | Component importing typed-redux-saga effect descriptors | Bad |
-| 10 | Correct component Store dispatch replacement | Good |
-
-### Cases covered
-
-| Case | Examples |
-| --- | --- |
-| Current public package API | 1 |
-| Component import allowlist and Store-first dispatch/read | 2, 6, 8, 10 |
-| Service/non-component one-shot access | 3, 7, 8 |
-| Saga-only imports/effects and public saga utilities | 4, 5, 9 |
-| Realistic boundary mistakes not limited to missing APIs | 5, 7, 9 |
 
 ## See also
 

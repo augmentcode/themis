@@ -65,9 +65,8 @@ Detailed docs to consult when a task needs conceptual background:
 Before editing code or docs under this skill:
 
 - **MUST** read this skill plus every linked skill/doc that applies to the touched files.
-- **MUST** record the Svelte/SvelteKit evidence that made this route applicable.
-- **MUST** confirm the target app/package/code path has concrete Svelte or
-  SvelteKit evidence before using this route.
+- **MUST** confirm and record concrete Svelte/SvelteKit evidence for the target
+  app/package/code path before using this route.
 - **MUST** cite the applicable skills and docs in the implementation plan or completion handoff, including the rules used.
 - **MUST** include verifier-ready evidence: searches, tests, or diff checks proving the cited rules were followed.
 - **SHOULD** stop and ask when rules conflict or scope is unclear.
@@ -116,48 +115,20 @@ Before editing code or docs under this skill:
 
 ### Route shared state changes to policy plus primitives
 
-```ts
-const sharedStateRouting = {
-  request: "Add editable todos shared across routes",
-  requiredSkills: [
-    "../core/core-policy/SKILL.md",
-    "../core/state-integrity/SKILL.md",
-    "../core/actions/SKILL.md",
-    "../core/reducers/SKILL.md",
-    "./selectors/SKILL.md",
-  ],
-  evidence: ["canonical owner search", "reducer no-op tests", "selector .select tests"],
-};
-```
+For editable todos shared across routes, load Core policy, state integrity,
+actions, reducers, and Svelte selectors from the table below. Show canonical-owner
+searches, reducer no-op tests, and selector `.select(state)` tests.
 
 ### Route side effects to sagas or persistence leaves
 
-```ts
-const sideEffectRouting = {
-  request: "Persist user preferences and reload them on startup",
-  requiredSkills: [
-    "../core/core-policy/SKILL.md",
-    "../core/sagas/SKILL.md",
-    "../core/local-storage/SKILL.md",
-    "../core/testing/SKILL.md",
-  ],
-  reducerRule: "Reducers receive serializable facts only; sagas perform storage I/O.",
-};
-```
+For startup preference persistence, load Core policy, sagas, local storage, and
+testing. Reducers receive serializable facts only; sagas perform storage I/O.
 
 ### Route component wiring to lifecycle-aware skills
 
-```ts
-const componentRouting = {
-  request: "Render selected todo and dispatch rename from a Svelte component",
-  requiredSkills: [
-    "./component-integration/SKILL.md",
-    "./selector-lifecycle/SKILL.md",
-    "../core/import-boundaries/SKILL.md",
-  ],
-  componentRule: "Create selector readables during component initialization; dispatch through the configured Store.",
-};
-```
+For rendering a selected todo and dispatching rename, load Svelte component
+integration, selector lifecycle, and Core import boundaries. Create selector
+readables during component initialization; dispatch through the configured Store.
 
 ### Route Store-first dispatch and state reads
 
@@ -170,89 +141,44 @@ maintaining a second lifecycle implementation.
 
 ### Verification handoff evidence payload
 
-```ts
-const handoffEvidence = {
-  skillsRead: ["./SKILL.md", "../core/actions/SKILL.md", "../core/reducers/SKILL.md"],
-  ownerSearches: ['rg "todos/rename" src skills docs', 'rg "selectTodo" src skills docs'],
-  checks: ["npm run validate:architecture", "git diff --check"],
-  canonicalOwners: { action: "src/slices/todos/todos-actions.ts", reducer: "src/slices/todos/todos-slice.ts" },
-};
-```
+Record skills/docs read, owner-search terms and paths, canonical owner files,
+and verification commands with exit codes/key output, including architecture
+validation and `git diff --check` when applicable.
 
 ### ❌ Bad: root request bypasses shared-state routing
 
-```ts
-import { writable } from "svelte/store";
-
-// BAD: shared route data is hidden in a Svelte store and skips ownership, reducer, selector, and saga review.
-export const todos = writable([{ id: "todo-1", title: "Ship docs" }]);
-
-const incompleteRouting = {
-  request: "Share todos across routes",
-  requiredSkills: ["./component-integration/SKILL.md"],
-};
-```
+Do not put shared route data in `writable(...)` and load only component integration:
+that skips canonical ownership, reducer, selector, and saga review. Use the shared
+state route above; a Svelte API does not make shared/domain state component-local.
 
 ## Core leaf routes
 
-### State foundations
-
-| Route | Use when | Path |
-| --- | --- | --- |
-| `../core/core-policy/SKILL.md` | Applying ownership, serializability, saga-only side effects, Svelte-store deprecation, or utility reuse rules. | `../core/core-policy/SKILL.md` |
-| `../core/state-integrity/SKILL.md` | Preventing derived/duplicated Redux state and duplicate action/selector/saga ownership. | `../core/state-integrity/SKILL.md` |
-| `../core/import-boundaries/SKILL.md` | Choosing imports for components, sagas, package entry points, and Store-first public subpackages. | `../core/import-boundaries/SKILL.md` |
-| `../core/file-structure/SKILL.md` | Creating or moving slice files, type modules, selectors, sagas, or Store registration. | `../core/file-structure/SKILL.md` |
-| `../core/state-serialization/SKILL.md` | Modeling serializable, structured-clone-safe state values. | `../core/state-serialization/SKILL.md` |
-
-### API primitives
-
-| Route | Use when | Path |
-| --- | --- | --- |
-| `../core/actions/SKILL.md` | Creating custom `createAction` or `createAsyncAction` actions. | `../core/actions/SKILL.md` |
-| `../core/reducers/SKILL.md` | Building immutable chained reducers and no-op reference equality behavior. | `../core/reducers/SKILL.md` |
-| `./selectors/SKILL.md` | Authoring/composing Store-bound selectors, collection reads, cache contracts, and stable arguments. | `./selectors/SKILL.md` |
-
-### Selector system
-
-| Route | Use when | Path |
-| --- | --- | --- |
-| `./selector-lifecycle/SKILL.md` | Choosing component-init, handler, or saga selector call modes; using Store-first dispatch. | `./selector-lifecycle/SKILL.md` |
-| `../core/selector-channels/SKILL.md` | Reacting to selector value changes from sagas or creating selector-backed channels. | `../core/selector-channels/SKILL.md` |
-| `./selector-scheduling/SKILL.md` | Tuning FPS/coalescing and preventing extra scheduler layers or event-log assumptions. | `./selector-scheduling/SKILL.md` |
-| `../core/wait-for/SKILL.md` | Suspending sagas until selector predicates pass or time out. | `../core/wait-for/SKILL.md` |
-
-### Sagas and side effects
-
-| Route | Use when | Path |
-| --- | --- | --- |
-| `../core/sagas/SKILL.md` | Writing typed-redux-saga flows, watchers, batching, debounce, retry/timeout, async-generator streams, or side-effect orchestration. | `../core/sagas/SKILL.md` |
-| `../core/saga-manager/SKILL.md` | Explaining package-owned saga crash tracking, cleanup, serialized crash storage, Store `runSaga` start/stop/restart behavior, and backoff mechanics. | `../core/saga-manager/SKILL.md` |
-| `../core/local-storage/SKILL.md` | Reading, writing, removing, listing by prefix, initializing, or persisting localStorage from sagas. | `../core/local-storage/SKILL.md` |
-| `../core/channel-effects/SKILL.md` | Consuming generic EventChannels such as IPC, websocket, or DOM event channels. | `../core/channel-effects/SKILL.md` |
-
-### Data modeling
-
-| Route | Use when | Path |
-| --- | --- | --- |
-| `../core/collections/SKILL.md` | Modeling normalized entity state with `Collection<T, K>` utilities. | `../core/collections/SKILL.md` |
-| `../core/domain-scoped-state/SKILL.md` | Keying state by workspace, project, tenant, or another domain id. | `../core/domain-scoped-state/SKILL.md` |
-| `../core/boolean-preference/SKILL.md` | Creating set/toggle preference helpers and registering them with reducers. | `../core/boolean-preference/SKILL.md` |
-
-### Component integration
-
-| Route | Use when | Path |
-| --- | --- | --- |
-| `./store/SKILL.md` | Choosing/importing `Store`, initialization/disposal, `useInitStore`/`useRunSaga` helpers, and shared Store runtime behavior. | `./store/SKILL.md` |
-| `./component-integration/SKILL.md` | Applying Store and selector lifecycle contracts to root layouts, templates, and handlers. | `./component-integration/SKILL.md` |
-
-### Testing, debugging, and verification
-
-| Route | Use when | Path |
-| --- | --- | --- |
-| `../core/testing/SKILL.md` | Testing reducers, selectors, sagas, typed-redux-saga mocks, or reference equality. | `../core/testing/SKILL.md` |
-| `../core/debugging/SKILL.md` | Inspecting `window.svelteRedux` or diagnosing reducer reference-equality issues. | `../core/debugging/SKILL.md` |
-| `../core/verifier/SKILL.md` | Review-only quality gate for instruction drift, pass-through wrappers, duplicated utilities, state integrity, canonical owners, architecture evidence, automated gates, and semantic checks. | `../core/verifier/SKILL.md` |
+| Path | Use when |
+| --- | --- |
+| `../core/core-policy/SKILL.md` | Ownership, serializability, saga-only effects, shared-store deprecation, utility reuse. |
+| `../core/state-integrity/SKILL.md` | Canonical state and action/selector/saga owners; no derived/duplicated data. |
+| `../core/import-boundaries/SKILL.md` | Component/saga imports and Store-first public subpackages/entry points. |
+| `../core/file-structure/SKILL.md` | Creating/moving slices, types, selectors, sagas, or Store registration. |
+| `../core/state-serialization/SKILL.md` | Serializable, structured-clone-safe state. |
+| `../core/actions/SKILL.md` | Custom `createAction` / `createAsyncAction`. |
+| `../core/reducers/SKILL.md` | Immutable chained reducers and no-op reference equality. |
+| `./selectors/SKILL.md` | Store-bound selector authoring/composition, collection reads, cache contracts, stable arguments. |
+| `./selector-lifecycle/SKILL.md` | Component-init, handler, and saga call modes; Store-first dispatch. |
+| `../core/selector-channels/SKILL.md` | Selector-triggered saga work and selector-backed channels. |
+| `./selector-scheduling/SKILL.md` | FPS/coalescing; avoid extra schedulers and event-log assumptions. |
+| `../core/wait-for/SKILL.md` | Suspend sagas until selector predicates pass or time out. |
+| `../core/sagas/SKILL.md` | Typed saga flows/watchers, batching, debounce, retry/timeout, async-generator streams, orchestration. |
+| `../core/saga-manager/SKILL.md` | Package crash tracking, serialized crash storage, cleanup, Store `runSaga` start/stop/restart, backoff. |
+| `../core/local-storage/SKILL.md` | Saga storage reads/writes/removal, prefix listing, initialization, persistence. |
+| `../core/channel-effects/SKILL.md` | Generic EventChannels: IPC, websocket, DOM events. |
+| `../core/collections/SKILL.md` | Normalized `Collection<T, K>` entity state. |
+| `../core/domain-scoped-state/SKILL.md` | State keyed by workspace, project, tenant, or other domain id. |
+| `../core/boolean-preference/SKILL.md` | Set/toggle preference helpers and reducer registration. |
+| `./store/SKILL.md` | Store choice/import, init/dispose, `useInitStore`/`useRunSaga`, shared runtime behavior. |
+| `./component-integration/SKILL.md` | Root layout, template, and handler lifecycle wiring. |
+| `../core/testing/SKILL.md` | Reducer/selector/saga tests, typed saga mocks, reference equality. |
+| `../core/debugging/SKILL.md` | `window.svelteRedux` inspection and reducer reference-equality diagnosis. |
+| `../core/verifier/SKILL.md` | Review-only instruction, cleanup, reuse, state/owner, automated, and semantic gates. |
 
 ## Related lifecycle routes
 
