@@ -1,9 +1,8 @@
 ---
 name: react/selectors
 description: >-
-  Author Store-bound ReactStore selectors with pure callbacks, cached
-  ReadonlySignal results, and stable scalar or signal arguments. Selector
-  lifecycle owns consumer call-mode choices and React tracking boundaries.
+  Author pure ReactStore selectors with cached ReadonlySignal results and stable
+  scalar/signal arguments. Route consumption and tracking to selector-lifecycle.
 type: sub-skill
 requires:
   - react

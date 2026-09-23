@@ -1,10 +1,9 @@
 ---
 name: streaming/selector-lifecycle
 description: >-
-  Lifecycle guidance for StreamingStore selectors: selectors may be defined from
-  the configured StreamingStore, but direct observable calls require init();
-  direct calls are invalid after disposal. Owns consumer subscription timing and
-  withStore(streamStore) bindings, not Store construction or runtime teardown.
+  Choose StreamingStore selector call/subscription timing and withStore bindings.
+  Direct Kefir calls require init() and are invalid after disposal; Store
+  construction and teardown belong to streaming/store.
 type: sub-skill
 requires:
   - streaming

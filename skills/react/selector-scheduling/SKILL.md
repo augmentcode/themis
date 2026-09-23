@@ -1,11 +1,9 @@
 ---
 name: react/selector-scheduling
 description: >-
-  ReactStore selector emission scheduling guidance. Use for Store-owned
-  coalescing of preferred direct ReadonlySignal outputs and .useValue(...args)
-  fallback reads,
-  throttledSelectorFrequency tuning, package-private scheduler boundaries, and
-  avoiding manual debounce/wrapper subscriptions or audit-log misuse.
+  Tune ReactStore signal/.useValue coalescing with throttledSelectorFrequency.
+  Keep scheduling Store-owned: no private scheduler imports, debounce wrappers,
+  or audit-log use.
 type: sub-skill
 requires:
   - react

@@ -1,11 +1,9 @@
 ---
 name: react/selector-lifecycle
 description: >-
-  React selector lifecycle and call-mode guidance. Maps direct calls that return
-  Preact React signals as the preferred React consumer path, .useValue(...args) for
-  necessary hook/plain-value fallback paths, Babel transform/useSignals tracking,
-  .select(state, ...args) for handlers/tests/composition, .effect(...args) for
-  sagas, and .withStore(...) for explicit ReactStore binding.
+  Choose ReactStore selector call modes: preferred signals, necessary .useValue
+  fallbacks, Babel/useSignals tracking, .select for handlers/tests/composition,
+  .effect for sagas, and .withStore binding.
 type: sub-skill
 requires:
   - react

@@ -1,10 +1,9 @@
 ---
 name: react/store
 description: >-
-  ReactStore import, initialization, disposal, and Store-runtime guidance for the
-  React signal Store variant. Use for @augmentcode/themis/react-store,
-  inherited runSaga/dispatch/state behavior, with app wiring and selector call
-  modes delegated to their React owners.
+  Use @augmentcode/themis/react-store for ReactStore imports, init/dispose, and
+  runSaga/dispatch/state behavior. Defer app wiring and selector call modes to
+  their React owners.
 type: sub-skill
 requires:
   - react

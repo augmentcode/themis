@@ -1,10 +1,9 @@
 ---
 name: streaming/selectors
 description: >-
-  Author StreamingStore selectors whose direct calls return Kefir Observable
-  values. Covers observable selector arguments, Store-bound creation,
-  withStore(streamStore), pure .select(state) composition/testing, and saga
-  .effect() usage without importing streaming selector internals.
+  Author StreamingStore selectors returning Kefir Observable values, with
+  observable arguments, Store binding, pure .select composition/tests, and saga
+  .effect calls. Keep streaming selector internals private.
 type: sub-skill
 requires:
   - streaming

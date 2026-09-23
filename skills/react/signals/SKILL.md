@@ -1,10 +1,9 @@
 ---
 name: react/signals
 description: >-
-  Preact Signals guidance for ReactStore React apps. Use for ReadonlySignal<T>,
-  .value reads/writes, computed(), Babel transform or useSignals() tracking,
-  direct signal JSX rendering, component-local useSignal/useComputed/useSignalEffect,
-  and keeping signal consumption scoped to React components and custom hooks.
+  Use Preact signals in ReactStore components/custom hooks: ReadonlySignal,
+  .value, computed, JSX rendering, Babel/useSignals tracking, and component-local
+  signals. Selector call modes belong to selector-lifecycle.
 type: sub-skill
 requires:
   - react

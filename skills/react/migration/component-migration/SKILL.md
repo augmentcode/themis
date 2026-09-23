@@ -1,9 +1,9 @@
 ---
 name: react/migration/component-migration
 description: >-
-  Migrate React JSX/TSX components and custom hooks to ReactStore selectors and
-  Store-first dispatch. Owns before/after consumer mapping and rollout order;
-  defers call-mode decisions to React selector lifecycle.
+  Plan React JSX/TSX and custom-hook migration to ReactStore selectors and
+  Store-first dispatch. Map consumers and rollout order; defer call modes to
+  selector-lifecycle.
 type: sub-skill
 requires:
   - react/component-integration

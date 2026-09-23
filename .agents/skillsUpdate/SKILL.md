@@ -1,10 +1,9 @@
 ---
 name: skillsUpdate
 description: >-
-  Local-only maintainer skill for keeping themis observable Store skill guidance
-  consistent across Svelte readable, React ReadonlySignal, and Streaming/Kefir
-  Observable families. Use when behavior, docs, install routing, or verification
-  touchpoints must be updated for every observable-style selector output family.
+  Local-only maintenance of observable Store guidance across Svelte Readable,
+  React ReadonlySignal, and Streaming/Kefir Observable families. Use for
+  cross-family behavior, docs, install routing, or verification updates.
 type: core
 sources:
   - ../../skills/SKILL.md

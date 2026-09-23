@@ -1,12 +1,9 @@
 ---
 name: react
 description: >-
-  ReactStore routing index for React UI work in themis. Use for
-  @augmentcode/themis/react-store, Preact React signals, Babel transform or
-  useSignals() tracking, signal selector results, direct signal reads, selector
-  .useValue(...args) only when hook/plain-value fallbacks are necessary, and
-  React-specific component/lifecycle/scheduling/migration routing. Follow the
-  shared Redux/redux-saga concepts in core alongside these React-specific leaves.
+  Route React UI work to ReactStore and Preact signals: signal-first reads,
+  necessary .useValue fallbacks, tracking, lifecycle, scheduling, and migration.
+  Use core for shared Redux/saga work.
 type: core
 requires:
   - core

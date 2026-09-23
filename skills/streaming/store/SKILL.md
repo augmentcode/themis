@@ -1,10 +1,9 @@
 ---
 name: streaming/store
 description: >-
-  StreamingStore import, initialization, disposal, and Store-runtime guidance for
-  the Kefir/observable Store variant. Use for @augmentcode/themis/streaming-store,
-  process bootstrap and whole-Store ownership. Selector call validity and consumer
-  subscriptions belong to streaming/selector-lifecycle.
+  Use @augmentcode/themis/streaming-store for StreamingStore imports,
+  init/dispose, process bootstrap, and whole-Store ownership. Route selector call
+  validity and subscriptions to streaming/selector-lifecycle.
 type: sub-skill
 requires:
   - streaming

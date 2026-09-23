@@ -1,9 +1,9 @@
 ---
 name: react/migration/derived-stores
 description: >-
-  Convert shared React derivations to ReactStore selectors. React sources include
-  useMemo, derived custom-hook values, context selector logic, and duplicated
-  render calculations.
+  Move shared React useMemo, hook/context derivations, and repeated render
+  calculations to ReactStore selector definitions; route consumption to
+  selector-lifecycle.
 type: sub-skill
 requires:
   - react/selectors

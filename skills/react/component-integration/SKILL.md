@@ -1,10 +1,8 @@
 ---
 name: react/component-integration
 description: >-
-  ReactStore component integration guidance for React app/root wiring. Covers
-  where to create/configure ReactStore, init/dispose ownership, app saga startup
-  with reactStore.runSaga(sagaFn), Store-first dispatch, and React lifecycle
-  ownership. Routes selector consumption to the selector-lifecycle owner.
+  Wire ReactStore at the React app root: init/dispose ownership, runSaga startup,
+  and Store-first dispatch. Route selector consumption to selector-lifecycle.
 type: sub-skill
 requires:
   - react

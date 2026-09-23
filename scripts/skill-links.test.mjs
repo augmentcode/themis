@@ -69,6 +69,82 @@ function findUnquotedPackageSourceReferences(content) {
   return references;
 }
 
+function normalizedSkillDescription(content) {
+  const frontmatter = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1] ?? "";
+  const field = frontmatter.match(/^description:[ \t]*([^\r\n]*)((?:\r?\n(?:[ \t]+[^\r\n]*|[ \t]*))*)/m);
+  if (!field) return "";
+
+  const inline = field[1].trim();
+  const text = /^[>|][+-]?$/.test(inline) ? field[2] : `${inline}${field[2]}`;
+  return text.trim().replace(/^(['"])([\s\S]*)\1$/, "$2").replace(/\s+/g, " ").trim();
+}
+
+function skillDescriptionIssue(content) {
+  const description = normalizedSkillDescription(content);
+  if (!description) return "description is missing or empty";
+  if (description.length > 250) return `description has ${description.length} characters (maximum 250)`;
+  return undefined;
+}
+
+describe("skill descriptions", () => {
+  it.each(["\n", "\r\n"])("normalizes folded descriptions with %j line endings", (newline) => {
+    const content = [
+      "---",
+      "name: fixture",
+      "description: >-",
+      "  First line",
+      "  with   extra spacing.",
+      "",
+      "  Final line.",
+      "type: sub-skill",
+      "---",
+      "Body is not part of the description.",
+    ].join(newline);
+
+    expect(normalizedSkillDescription(content)).toBe("First line with extra spacing. Final line.");
+    expect(skillDescriptionIssue(content)).toBeUndefined();
+  });
+
+  it.each(["Plain summary.", '"Plain summary."', "'Plain summary.'"])("accepts inline descriptions: %s", (value) => {
+    expect(normalizedSkillDescription(`---\ndescription: ${value}\n---`)).toBe("Plain summary.");
+  });
+
+  it.each([
+    "description: outside frontmatter",
+    "---\nname: fixture\n---\ndescription: only in the body",
+    "---\nname: fixture\ndescription: >-\n  missing closing delimiter",
+    "---\ndescription:\n---",
+    "---\ndescription: >-\n   \n---",
+    '---\ndescription: ""\n---',
+    "---\ndescription: ''\n---",
+  ])("rejects missing or empty descriptions: %j", (content) => {
+    expect(skillDescriptionIssue(content)).toBe("description is missing or empty");
+  });
+
+  it("checks the whole folded description at the 250-character boundary", () => {
+    const content = `---\ndescription: >-\n  ${"a".repeat(124)}\n  ${"b".repeat(125)}\n---`;
+    expect(normalizedSkillDescription(content)).toHaveLength(250);
+    expect(skillDescriptionIssue(content)).toBeUndefined();
+    expect(skillDescriptionIssue(content.replace("b\n---", "bb\n---"))).toBe(
+      "description has 251 characters (maximum 250)"
+    );
+  });
+
+  it("keeps every packaged and local maintainer skill description nonempty and at most 250 characters", async () => {
+    const packagedSkills = await collectSkillFiles(skillsRoot);
+    expect(packagedSkills.length).toBeGreaterThan(0);
+    const skillFiles = [...packagedSkills, new URL("../.agents/skillsUpdate/SKILL.md", import.meta.url)];
+    const issues = [];
+
+    for (const file of skillFiles) {
+      const issue = skillDescriptionIssue(await readFile(file, "utf8"));
+      if (issue) issues.push(`${file.pathname}: ${issue}`);
+    }
+
+    expect(issues).toEqual([]);
+  });
+});
+
 describe("skill documentation references", () => {
   it("ignores sibling skill links and external documentation URLs", () => {
     expect(
