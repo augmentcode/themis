@@ -148,6 +148,13 @@ describe("selectCompletedTodos", () => {
     expect(result[0].id).toBe("1");
   });
 });
+```
+
+## Testing Sagas
+
+Keep the real `typed-redux-saga` effects in the worker: `yield*` delegates to a generator that yields raw effect descriptors. Manual assertions and static providers use `redux-saga/effects`, **not** generator objects from `typed-redux-saga` or `selector.effect()`. For selector providers, use `select(selectFoo.select, ...args)` with the same arguments as the worker's `.effect(...args)` call. `runSaga` also executes these typed workers directly.
+
+`redux-saga-test-plan` is optional in consuming apps. When available, use `expectSaga` for behavior and `testSaga` for effect order; see the executable provider and optional generator-wrapper mock patterns in `skills/core/testing/SKILL.md`. Do not map a typed effect directly to a raw function in a mock: that breaks `yield*`. If using `vi.doMock`, register it before dynamically importing the saga, not after a static saga import. Async request tests must verify instance promise settlement and cancellation as well as dispatched stages; constructing the expected action must not invoke the instance success/failure callback prematurely.
 
 ### Manual Generator Stepping
 
@@ -155,8 +162,9 @@ For more control, step through the generator manually:
 
 ```typescript
 import { describe, it, expect } from "vitest";
-import { call, put } from "typed-redux-saga";
+import { call, put } from "redux-saga/effects";
 import { handleFetch } from "./my-saga";
+import { fetchItems, setItems, fetchFailed } from "./my-slice";
 import * as api from "../api";
 
 describe("handleFetch (manual)", () => {
@@ -190,33 +198,38 @@ describe("handleFetch (manual)", () => {
 
 ## Mock Store Setup
 
-For integration-style tests that need a real store:
+For framework-neutral action/reducer integration, use `StreamingStore` and pure `.select(state, ...)` assertions. A pure selector-output test alone needs only mock state, not a Store. This example tests dispatch and reducer wiring, not a Svelte component or Kefir subscription:
 
 ```typescript
 import { describe, it, expect } from "vitest";
-import { Store } from "@augmentcode/themis/svelte-store";
+import { StreamingStore } from "@augmentcode/themis/streaming-store";
+import { todosReducer, addTodo } from "./todos-slice";
+import { selectTodoById } from "./todos-selectors";
 
 function createTestStore(overrides = {}) {
-  const store = new Store({
+  return new StreamingStore({
     todos: todosReducer,
     ...overrides,
   });
-  store.init();
-  return store;
 }
 
 describe("integration test", () => {
   it("should handle full action flow", () => {
     const store = createTestStore();
-    store.dispatch(addTodo({ id: "1", title: "Test", completed: false }));
-
-    const state = store.state;
-    expect(selectTodoById.select(state, "1")?.title).toBe("Test");
+    const dispose = store.init();
+    try {
+      store.dispatch(addTodo({ id: "1", title: "Test", completed: false }));
+      expect(selectTodoById.select(store.state, "1")?.title).toBe("Test");
+    } finally {
+      dispose();
+    }
   });
 });
 ```
 
-Use `Store` from `@augmentcode/themis/svelte-store` when a test needs Svelte-readable selector behavior. Use `StreamingStore` from `@augmentcode/themis/streaming-store` when asserting Kefir stream emissions from `store.createSelector(...)` calls; continue to use `.select(mockState, ...args)` for pure selector assertions. For direct streaming emission tests, use controlled timers or a mocked `requestAnimationFrame` to advance the selector throttle and assert that rapid Store or observable argument updates coalesce to the latest value.
+Adapter/lifecycle tests are separate: Svelte `Store.init()` needs real component initialization; fresh standalone init is not supported, and mocked `getContext` tests do not establish that it is. Direct Svelte selectors are Store-bound (not context-hook lookups); own readable unsubscribes and Store disposal. React integration must exercise signal shapes and render tracking. Streaming integration must subscribe to actual Kefir selector output and unsubscribe/dispose afterward.
+
+For reactive-output timing tests, use controlled timers or a mocked `requestAnimationFrame` to advance Store-write cadence. Store writes coalesce to the latest snapshot; reactive argument changes can emit immediately downstream using the current emitted Store snapshot, rather than waiting for another cadence tick. A cold Streaming argument must supply its first value before the combined selector can emit. Do not infer these reactive contracts from pure `.select` tests.
 
 ---
 
@@ -226,7 +239,7 @@ Use `Store` from `@augmentcode/themis/svelte-store` when a test needs Svelte-rea
 
 2. **Test selector composition** — If `selectB` depends on `selectA`, test both independently AND together.
 
-3. **Use `.select()` in tests** — Never call `selector()` (the readable form) in tests, as it requires Svelte component context.
+3. **Use `.select()` in pure output tests** — Do not pass mock state to `selector()` (the reactive form). Test adapter subscriptions/lifecycle separately with the selected Store family's setup, scheduler, and cleanup.
 
 4. **Assert immutability** — Verify that the original state is never mutated:
 
@@ -250,7 +263,7 @@ Use `Store` from `@augmentcode/themis/svelte-store` when a test needs Svelte-rea
    });
    ```
 
-6. **Use `silentRun()` in saga tests** — Suppresses timeout warnings for faster tests.
+6. **Use bounded saga tests** — `silentRun()` suppresses test-plan timeout warnings, not timers or unfinished work. Prefer controlled effects/fake timers and explicit cancellation/cleanup; use `runSaga` or manual stepping when test-plan is not installed.
 
 7. **Review refactor cleanup** — When a change moves, renames, or splits modules,
    inspect the old paths from the diff. Remove old modules that are now only
@@ -268,6 +281,6 @@ Use `Store` from `@augmentcode/themis/svelte-store` when a test needs Svelte-rea
    points at the source test file or Markdown fence and includes `Why:` plus
    `How to fix:` guidance. Fix selector-test failures by using
    `selectFoo.select(mockState, ...args)`; fix `typed-redux-saga` mock failures
-   by preserving the `Array.isArray(fnOrDescriptor)` branch for tuple call
+   by preserving generator wrappers and the `Array.isArray(fnOrDescriptor)` branch for tuple call
    descriptors. Mark intentionally bad Markdown teaching examples as wrong/bad
    rather than leaving them indistinguishable from recommended snippets.

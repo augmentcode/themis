@@ -45,6 +45,7 @@ Use this skill when editing saga code or writing instructions for saga changes. 
 - Choose an explicit owner for app saga startup; follow [Application saga startup](#application-saga-startup) and the linked lifecycle contract.
 - Close manually-created channels in `finally`.
 - Handle async action failures with `.failure(error)` and normalize non-`Error` throws.
+- Settle promise-bearing requests through their instance callbacks on success, failure, and cancellation; see the explicit rejection policy in `core/actions`.
 - Keep retried work idempotent when using `retryWithTimeout`.
 - Keep stream handlers passed to `wrapStreamingGenerator` package-generic; do not add app-specific logging/reporting dependencies to the utility.
 - Configure optional saga monitoring through the third Store/ReactStore/StreamingStore constructor options object as `{ sagaMonitor: true }`; omitted or `false` monitors stay disabled.
@@ -58,12 +59,13 @@ Use this skill when editing saga code or writing instructions for saga changes. 
 - Do not add a parallel watcher for an action already owned by another saga.
 - Do not treat initialization or manager internals as app saga registration; follow [Store saga lifecycle](../saga-manager/SKILL.md#store-saga-lifecycle) for startup and the public/internal boundary.
 - Do not leave channels, retries, or long-running loops without cancellation/error paths.
+- Do not assume `wrapStreamingGenerator` aborts/finalizes its source, or that `iterator.return()` interrupts a pending `next()`.
 - Do not introduce detached `spawn`; use attached `fork` so child work is cancelled when the parent fails or is cancelled.
 - Do not monkey-patch redux-saga globally or replace Store-owned saga middleware to observe effects; pass `{ sagaMonitor: true }` in Store options instead.
 
 ## Implementation cues
 
-- Default user-triggered fetch/search flows to `takeLatest`; use `takeEvery` only when every action must be processed and `takeLeading` when in-flight work should block newer triggers.
+- Default user-triggered fetch/search flows to `takeLatest`; use `takeEvery` when every action must be processed and `takeLeading` when in-flight work should ignore newer triggers. For promise-bearing requests, cancelled workers need a `finally` settlement policy. Ignored `takeLeading` requests never enter a worker: use non-promise `createAction` triggers or an explicit admission/rejection owner instead.
 - Compose root sagas from focused watcher/worker functions rather than mixing unrelated concerns in one worker.
 - For debounce, watch the real action with `takeLatest` and call `delay(ms)` inside the worker before the effect; use `takeLeading` plus trailing `delay(ms)` only for leading/windowed behavior.
 - Do not add new wrapper-action debounce flows or recommend `debounceSaga`/`debounceWithKeySaga` for new work; those exports remain for compatibility only.
@@ -86,6 +88,8 @@ Follow [Store saga lifecycle](../saga-manager/SKILL.md#store-saga-lifecycle) for
 initialization order, `store.runSaga(sagaFn)`, matching cancel functions, and the
 whole-Store disposal boundary. For slice modules and registration placement, use
 [Register a normal slice](../file-structure/SKILL.md#register-a-normal-slice).
+
+The [bootstrap/lifetime-owner exception](../import-boundaries/SKILL.md#bootstrap-and-lifetime-owner-exception) permits only startup/cleanup imports; ordinary component/service handlers still dispatch actions rather than import or call business sagas.
 
 ## Examples
 
@@ -121,6 +125,8 @@ function* watchSearchInput() {
 
 ### 3. Debounce leading/windowed behavior with takeLeading + delay
 
+Here `refreshRequested` is an ordinary `createAction` event, not a promise-bearing `createAsyncAction`: ignored triggers have no result to await.
+
 ```ts
 import { call, delay, takeLeading } from "typed-redux-saga";
 
@@ -155,17 +161,32 @@ function* syncRemoteState() {
 ### 5. Consume an async generator through wrapStreamingGenerator
 
 ```ts
-import { put } from "typed-redux-saga";
+import { call, put } from "typed-redux-saga";
 import { wrapStreamingGenerator } from "@augmentcode/themis/saga";
 
-function* streamMessages(stream: AsyncGenerator<MessageChunk, MessageChunk | null, unknown>) {
-  yield* wrapStreamingGenerator(
-    stream,
-    function* (chunk) { yield* put(messageChunkReceived(chunk)); },
-    { timeoutMs: 30_000, onError: (error) => reportStreamError(error) }
-  );
+function* streamMessages(
+  openStream: (signal: AbortSignal) => AsyncGenerator<MessageChunk, MessageChunk | null | undefined, unknown>
+) {
+  const controller = new AbortController();
+  const stream = openStream(controller.signal);
+  try {
+    yield* wrapStreamingGenerator(
+      stream,
+      function* (chunk) { yield* put(messageChunkReceived(chunk)); },
+      { timeoutMs: 30_000, onError: (error) => reportStreamError(error) }
+    );
+  } finally {
+    controller.abort(); // source must use this to unblock any pending next()
+    try {
+      yield* call([stream, stream.return], undefined);
+    } catch (error) {
+      reportStreamError(error); // cleanup failure must not replace the original error
+    }
+  }
 }
 ```
+
+`openStream` is app-provided and must honor abort, settle outstanding reads promptly, and release its resource in its own `finally`; `reportStreamError` must be non-throwing. The helper itself neither aborts nor calls `return()` on timeout/cancellation. Abort first: an async generator queues `return()` behind a pending `next()`, so `return()` alone cannot unblock I/O. Without a source abort/cancel contract this example cannot guarantee prompt cleanup. Cancellation is non-blocking; if another owner must wait for finalization, expose and await a separate source-completion signal rather than treating `task.cancel()`/`toPromise()` as a cleanup barrier.
 
 ## Verification cues
 

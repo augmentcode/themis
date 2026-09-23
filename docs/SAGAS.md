@@ -297,6 +297,8 @@ export function* searchSaga() {
 
 Use `takeLeading` plus a trailing `delay` only when the first action should run immediately and newer actions should be ignored for a window:
 
+Use an ordinary `createAction` event for `refreshRequested` here, not a promise-bearing async request: ignored events have no result to await. `takeLatest` cancellation likewise does not settle an async request automatically; the worker must reject through its instance `action.failure(...)` in a `finally` branch guarded by `yield* cancelled()`. Cancellation bypasses `catch`. See `skills/core/actions/SKILL.md` for the complete instance success/failure/cancellation policy. If ignored requests need a response, implement explicit admission/rejection rather than relying on `takeLeading` to settle them. Never dispatch a promise-bearing request to an absent/stopped owner and expect automatic settlement.
+
 ```typescript
 import { call, delay, takeLeading } from "typed-redux-saga";
 
@@ -342,19 +344,32 @@ Outcomes are `"success"`, `"retries-exhausted"`, and `"timeout"`. Keep the retri
 Use `wrapStreamingGenerator` to consume an `AsyncGenerator` from saga code. It forwards yielded chunks, forwards a non-null final return value, supports an optional timeout, and rethrows stream errors after calling an optional package-local `onError` callback. It intentionally has no Sentry or Electron dependency.
 
 ```typescript
-import { put } from "typed-redux-saga";
+import { call, put } from "typed-redux-saga";
 import { wrapStreamingGenerator } from "@augmentcode/themis/saga";
 
-function* consumeStream(stream: AsyncGenerator<MessageChunk, void, unknown>) {
-  yield* wrapStreamingGenerator(
-    stream,
-    function* (chunk) {
-      yield* put(messageChunkReceived(chunk));
-    },
-    { timeoutMs: 30_000, onError: (error) => reportStreamError(error) }
-  );
+function* consumeStream(
+  openStream: (signal: AbortSignal) => AsyncGenerator<MessageChunk, MessageChunk | null | undefined, unknown>
+) {
+  const controller = new AbortController();
+  const stream = openStream(controller.signal);
+  try {
+    yield* wrapStreamingGenerator(
+      stream,
+      function* (chunk) { yield* put(messageChunkReceived(chunk)); },
+      { timeoutMs: 30_000, onError: (error) => reportStreamError(error) }
+    );
+  } finally {
+    controller.abort(); // the source must unblock pending next() on abort
+    try {
+      yield* call([stream, stream.return], undefined);
+    } catch (error) {
+      reportStreamError(error); // non-throwing reporting preserves the original error
+    }
+  }
 }
 ```
+
+The helper does **not** call `iterator.return()` or abort the source on timeout/cancellation. This caller-owned example requires an app-provided `openStream` that honors the signal, settles outstanding reads promptly, and releases its resource in its own `finally`; reporting must not throw. An async generator queues `return()` behind a pending `next()`, so `return()` alone is not an I/O cancellation mechanism. Abort first, then request finalization. Without a source abort/cancel contract, prompt cleanup is not guaranteed. Cancellation is non-blocking: if an outside owner must wait for finalization, expose a separate source-completion signal; `task.cancel()`/`toPromise()` is not a cleanup barrier. Test normal completion, timeout, error and cancellation while `next()` is pending.
 
 ## Saga Manager
 
