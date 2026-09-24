@@ -126,8 +126,30 @@ These examples assume no pending taker. `eventChannel` is different: it defaults
 
 Use `race` when the first completion wins; losing effects are automatically cancelled. Use `all` to run effects in parallel and wait for all successes, or throw when any effect rejects.
 
-`throttle(ms, patternOrChannel, saga, ...args)` uses a sliding buffer of one recent
-message while suppressing new starts during the window. Upstream's native
+`throttle(ms, patternOrChannel, saga, ...args)` suppresses new starts during the window.
+Its pattern overload creates an action channel with `buffers.sliding(1)`;
+a supplied channel retains its caller-chosen buffering/overflow policy.
+For latest-pending external messages, explicitly use `buffers.sliding(1)` when
+creating the supplied `channel` or `eventChannel`, rather than assuming throttle adds it.
+
+Here a producer puts progress messages into `latestMessages`; the owner joins its
+attached watcher and closes its channel. `handleMessage` is the app's worker.
+
+```typescript
+import { buffers, channel } from "redux-saga";
+import { join, throttle } from "redux-saga/effects";
+
+const latestMessages = channel<{ value: number }>(buffers.sliding(1));
+function* watchLatestMessages() {
+  try {
+    yield join(yield throttle(100, latestMessages, handleMessage));
+  } finally {
+    latestMessages.close();
+  }
+}
+```
+
+Upstream's native
 `debounce(ms, patternOrChannel, saga, ...args)` waits until messages settle before
 forking the worker; Themis restrictions are in [Common mistakes](#common-mistakes).
 

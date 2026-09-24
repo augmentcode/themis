@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { transpileModule, ModuleKind, ScriptTarget } from 'typescript';
-import { buffers, channel } from 'redux-saga';
+import { buffers, channel, END, runSaga, stdChannel, type Channel, type Task } from 'redux-saga';
+import * as effects from 'redux-saga/effects';
 import { take } from 'typed-redux-saga';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StreamingStore } from './streaming-store';
@@ -56,6 +57,82 @@ describe('Core guidance executable examples', () => {
     } finally {
       Object.values(queues).forEach((queue: any) => queue.close());
     }
+  });
+
+  it('distinguishes throttle overloads in the guidance', () => {
+    const markdown = readFileSync(new URL('../skills/core/redux-saga/SKILL.md', import.meta.url), 'utf8');
+    const guidance = markdown.split('### 5. Concurrency combinators and helpers')[1].split('## Interface quick reference')[0];
+    expect(guidance).toMatch(/pattern overload creates an action channel with `buffers\.sliding\(1\)`/);
+    expect(guidance).toMatch(/supplied channel retains its caller-chosen buffering\/overflow policy/);
+  });
+
+  it.each([
+    ['pattern', [1, 3]],
+    ['expanding', [1, 2, 3]],
+    ['documented sliding', [1, 3]],
+    ['unbuffered', [1]],
+  ] as const)('throttle preserves %s message policy and cleans up on cancellation', async (mode, expected) => {
+    vi.useFakeTimers();
+    type Message = { type: string; value: number };
+    const started: number[] = [], cancelled: number[] = [];
+    function* handleMessage(message: Message): Generator<effects.CallEffect | effects.CancelledEffect, void, boolean> {
+      try {
+        started.push(message.value);
+        yield effects.delay(1000);
+      } finally {
+        if (yield effects.cancelled()) cancelled.push(message.value);
+      }
+    }
+    const documented = mode === 'documented sliding'
+      ? example('redux-saga', '### 5. Concurrency combinators and helpers', '({ latestMessages, watchLatestMessages })',
+        { handleMessage }, { 'redux-saga': { buffers, channel }, 'redux-saga/effects': effects })
+      : undefined;
+    const input = mode === 'pattern' ? stdChannel<Message>()
+      : (documented?.latestMessages as Channel<Message> | undefined)
+        ?? channel<Message>(mode === 'expanding' ? buffers.expanding() : buffers.none());
+    const close = vi.spyOn(input, 'close');
+    const task = runSaga({ channel: input }, documented?.watchLatestMessages ?? function* (): Generator<effects.ForkEffect | effects.JoinEffect, void, Task> {
+      try {
+        const watcher: Task = yield mode === 'pattern'
+          ? effects.throttle(100, 'progress', handleMessage)
+          : effects.throttle(100, input, handleMessage);
+        yield effects.join(watcher);
+      } finally { input.close(); }
+    });
+    try {
+      for (const value of [1, 2, 3]) input.put({ type: 'progress', value });
+      expect(started).toEqual([1]);
+      expect(close).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(99);
+      expect(started).toEqual([1]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(started).toEqual(expected.slice(0, 2));
+      await vi.advanceTimersByTimeAsync(100);
+      expect(started).toEqual(expected);
+      expect(task.isRunning()).toBe(true);
+      expect(cancelled).toEqual([]);
+      expect(vi.getTimerCount()).toBeGreaterThan(0);
+    } finally {
+      try {
+        task.cancel();
+        await task.toPromise();
+        expect(close).toHaveBeenCalledTimes(1);
+      } finally {
+        // Release the input even if the owner's cleanup assertion fails.
+        if (close.mock.calls.length === 0) input.close();
+      }
+    }
+    expect(task.isCancelled()).toBe(true);
+    expect(task.isRunning()).toBe(false);
+    expect(cancelled).toEqual(expected);
+    expect(vi.getTimerCount()).toBe(0);
+    input.put({ type: 'progress', value: 4 });
+    const afterClose = vi.fn();
+    input.take(afterClose);
+    expect(afterClose).toHaveBeenCalledExactlyOnceWith(END);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(started).toEqual(expected);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('starts the imported saga only at its owner boundary and stops it before disposing its Store', () => {
