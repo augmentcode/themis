@@ -15,6 +15,7 @@ import { StreamingStore } from "../src/streaming-store";
 import { useInitStore } from "../src/components-svelte/use-init-store";
 import { useRunSaga } from "../src/components-svelte/use-run-saga";
 import { createCollection, getItems } from "../src/utils/collections/collection-utils";
+import { createReducer } from "../src/utils/store/create-reducer";
 
 const root = resolve(import.meta.dirname, "..");
 const skill = (path) => readFileSync(resolve(root, path), "utf8");
@@ -78,14 +79,17 @@ const observe = (output, listener) => {
 };
 
 // Type-check the actual snippet against source/public dependency signatures, not fake APIs.
-// Report snippet diagnostics only: this is not a claim of a whole-repository tsc gate.
+// Report snippet/fixture diagnostics only: this is not a claim of a whole-repository tsc gate.
 const diagnostics = (source) => {
   const file = resolve(root, "scripts/family-example.tsx");
   const fixture = resolve(root, "scripts/family-example-store.ts");
   const files = new Map([
     [file, source.replaceAll('"$lib/store"', '"./family-example-store"')],
     [fixture, `import { Store } from "@augmentcode/themis/svelte-store";
-      export const store = new Store({ projects: (state = { items: {} as Record<string, {id: string; title: string}> }) => state });`],
+      import { createReducer } from "@augmentcode/themis/utils/store/create-reducer";
+      type Project = { id: string; title: string };
+      const initialState: { items: Record<string, Project> } = { items: {} };
+      export const store = new Store({ projects: createReducer(initialState) });`],
   ]);
   const options = {
     target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext,
@@ -102,11 +106,20 @@ const diagnostics = (source) => {
     const text = host.readFile(path);
     return text === undefined ? undefined : ts.createSourceFile(path, text, version, true);
   };
-  const program = ts.createProgram([file], options, host);
+  const program = ts.createProgram([file, fixture], options, host);
   return ts.getPreEmitDiagnostics(program)
-    .filter((d) => d.file?.fileName === file)
+    .filter((d) => files.has(d.file?.fileName))
     .map((d) => `TS${d.code}: ${ts.flattenDiagnosticMessageText(d.messageText, " ")}`);
 };
+
+const projectSelectorAssertions = `
+  type Project = { id: string; title: string };
+  type Same<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
+  type Assert<T extends true> = T;
+  type SelectedProject = ReturnType<ReturnType<typeof createProjectSelectors>["selectProject"]["select"]>;
+  type ExactProject = Assert<Same<SelectedProject, Project>>;
+  type NotAny = Assert<0 extends (1 & SelectedProject) ? false : true>;
+`;
 
 describe("family skill executable and type examples", () => {
   it("F1: renders the actual root owner example with real SSR init/destroy and no mount", () => {
@@ -175,13 +188,33 @@ describe("family skill executable and type examples", () => {
 
   it("F4: preserves configured Store state in the shared Svelte selector helper", () => {
     const source = block("skills/svelte/selectors/SKILL.md", "### 5. Pass a configured Store");
-    expect(diagnostics(source)).toEqual([]);
+    expect(diagnostics(source + projectSelectorAssertions)).toEqual([]);
     const { createProjectSelectors } = execute(source);
-    const store = new Store({ projects: (state = { items: {} }) => state });
+    const store = new Store({ projects: createReducer({ items: {} }) });
     const { selectProject } = createProjectSelectors(store);
     const project = { id: "a", title: "First" };
     expect(selectProject.select({ projects: { items: { a: project } } }, "a")).toBe(project);
     expect(selectProject.select({ projects: { items: {} } }, "missing")).toBeUndefined();
+  });
+
+  it("F4: rejects the original bare Store annotation in the actual helper", () => {
+    const source = block("skills/svelte/selectors/SKILL.md", "### 5. Pass a configured Store");
+    const bareStore = source
+      .replace('import type { store as appStore } from "$lib/store";', 'import type { Store } from "@augmentcode/themis/svelte-store";')
+      .replace("store: typeof appStore", "store: Store");
+    expect(bareStore).not.toBe(source);
+    expect(diagnostics(bareStore)).toEqual([expect.stringMatching(/^TS2339: Property 'projects' does not exist/)]);
+  });
+
+  it("F4: exact output assertions reject any even when the helper compiles", () => {
+    const source = block("skills/svelte/selectors/SKILL.md", "### 5. Pass a configured Store");
+    const anyOutput = source.replace("selectProjects.select(state)[id]", "(selectProjects.select(state)[id] as any)");
+    expect(anyOutput).not.toBe(source);
+    expect(diagnostics(anyOutput)).toEqual([]);
+    expect(diagnostics(anyOutput + projectSelectorAssertions)).toEqual([
+      expect.stringMatching(/^TS2344: Type 'false' does not satisfy the constraint 'true'/),
+      expect.stringMatching(/^TS2344: Type 'false' does not satisfy the constraint 'true'/),
+    ]);
   });
 
   it("F5: type-checks the actual local signal effect callback", () => {
