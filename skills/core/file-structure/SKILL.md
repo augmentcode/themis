@@ -1,15 +1,9 @@
 ---
 name: core/file-structure
 description: >-
-  Per-slice directory layout ({name}-types.ts, {name}-slice.ts,
-  {name}-selectors.ts, sagas/{name}-saga.ts plus tests). Saga-only slices skip
-  reducer registration. Owns app reducer registration and explicit saga startup
-  placement; delegates Store init/run/cancel/dispose mechanics to
-  ../saga-manager/SKILL.md (Store saga lifecycle).
-  Ownership: exactly one {name}-slice.ts and one {name}-selectors.ts module per
-  slice directory; split multiple slices into separate directories. Naming:
-  {Feature}State, {feature}Reducer, camelCase slice identity keys/namespaces,
-  verb-phrase actions, select* prefix, "sliceName/actionName" action types.
+  Use when organizing Themis slices, types, selectors, sagas, and tests,
+  including naming, reducer registration, and app saga startup placement.
+  Store lifecycle mechanics belong to core/saga-manager.
 type: sub-skill
 requires:
   - core

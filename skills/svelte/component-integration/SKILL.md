@@ -1,9 +1,9 @@
 ---
 name: svelte/component-integration
 description: >-
-  Wire a configured Store into Svelte root layouts, templates, and handlers.
-  Apply svelte/store lifecycle contracts and svelte/selector-lifecycle call
-  modes; this leaf owns component wiring, not Store API or selector policy.
+  Use when wiring a configured Store into Svelte root layouts, templates, and
+  handlers. Apply svelte/store lifecycle and svelte/selector-lifecycle call
+  modes; this leaf owns wiring, not API policy.
 type: sub-skill
 library: themis
 requires:
@@ -57,6 +57,7 @@ Bootstrap in `+layout.svelte` by initializing the configured Store instance and 
   import { store } from "$lib/store/store";
   import { counterSaga } from "$lib/store/slices/counter/sagas/counter-saga";
 
+  let { children } = $props();
   const dispose = store.init();
   onDestroy(dispose);
   onMount(() => store.runSaga(counterSaga));
@@ -70,6 +71,15 @@ needed, and keep teardown next to initialization. The saga above is mount-scoped
 not once-per-Store: see `../store/SKILL.md` → **App saga lifetime** for remount,
 imperative cancellation, and whole-Store teardown semantics.
 
+This explicit bootstrap/lifetime owner may import the saga it starts and cancels;
+ordinary component handlers still dispatch actions. Follow the narrow
+[bootstrap/lifetime-owner exception](../../core/import-boundaries/SKILL.md#bootstrap-and-lifetime-owner-exception).
+`init()` must run during
+component initialization and does not install the Svelte context that
+`useRunSaga` expects. Do not replace the explicit mount callback with that helper
+under ordinary setup. SSR initializes and disposes the Store but does not run
+`onMount`; browser mount/remount behavior needs component integration testing.
+
 ## Template and handler wiring
 
 At the top of a component script block (component init), create selector readables and import the configured Store for event-handler dispatch/state reads:
@@ -80,7 +90,7 @@ At the top of a component script block (component init), create selector readabl
   import { selectItems, selectIsLoading } from "./slices/my-slice/my-slice-selectors";
   import { fetchItems, removeItem } from "./slices/my-slice/my-slice-slice";
 
-  // ✅ At component init — selector readable calls use getContext() internally.
+  // ✅ At component init — capture Store-bound readables for template ownership.
   const items$     = selectItems();
   const isLoading$ = selectIsLoading();
 
@@ -135,8 +145,9 @@ store.dispatch(addItem(i));
 
 ### Reading state with `selector()` in a template
 
-This violates the component-init/context contract, not a cache-miss guarantee.
-Identical Store + selector + arguments reuse the readable; see
+This violates the component-init placement policy, not a `getContext()` check
+or a guaranteed cache miss. Direct selectors bind to their creating Store;
+identical Store + selector + arguments reuse the retained readable; see
 `../selectors/SKILL.md` → **Selector caching** and
 `../selector-lifecycle/SKILL.md` → **Pitfalls**. Render the captured `$count$`,
 not `selectCount()` in markup.

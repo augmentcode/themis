@@ -1,9 +1,9 @@
 ---
 name: svelte/migration/setup
 description: >-
-  Prepare an existing Svelte app for incremental migration with an empty
-  app-owned reducer map. Route installation, imports, and Store lifecycle to
-  their canonical owners, then add each migrated slice registration.
+  Use when preparing an existing Svelte app for incremental migration with an
+  empty reducer map. Route installation/imports/lifecycle to canonical owners;
+  add registrations as slices migrate.
 type: sub-skill
 requires:
   - svelte
@@ -90,22 +90,26 @@ export type AppState = StoreState<typeof store>;
 ```
 
 Layout startup/cleanup examples are in `../../component-integration/SKILL.md` →
-**Root layout wiring**; service/test startup and cancellation examples are in
-`../../store/SKILL.md` → **App saga lifetime**. Keep init-before-run and reserved-name
+**Root layout wiring**; cancellation for services/tests receiving an already
+component-initialized Store is in `../../store/SKILL.md` → **App saga lifetime**.
+Fresh standalone Svelte `Store.init()` is not supported. Keep init-before-run and reserved-name
 checks in that owner rather than duplicating lifecycle examples in the migration adapter.
 
-### 5. Prove empty bootstrap has app reducers only
+### 5. Prove empty bootstrap has no app-owned registrations
 
 ```typescript
 import { Store } from "@augmentcode/themis/svelte-store";
 
 const store = new Store({});
-const appReducers = store.getReducers();
+const composedReducers = store.getReducers();
 
 export const emptyBootstrapEvidence = {
-  reducerDomainsVisibleToApp: Object.keys(appReducers),
+  reducerDomainsVisibleToApp: Object.keys(composedReducers).filter((key) => !key.startsWith("@internal_")),
 };
 ```
+
+`getReducers()` includes package-owned internal reducers even for `new Store({})`.
+Only the constructor input is app-owned; never register reserved keys manually.
 
 ## Verification cues
 

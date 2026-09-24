@@ -24,7 +24,7 @@
 Selectors are pure functions that extract and derive data from the Redux store. In production app code, create app-local selectors from the configured `Store` instance with `store.createSelector(...)`. The Store-bound helper delegates to the lower-level selector utility while typing the callback `state` as `StoreInstanceState<typeof store>` (`StoreState<typeof store>` remains supported). That concrete state resolves reducer domains to app state types (for example, `counter: CounterState` and `todos: TodosState`) instead of exposing reducer call signatures or helper members. Selectors provide:
 
 - **Automatic memoization** — Proxy-based tracking of accessed state paths; only recomputes when those paths change.
-- **Cached direct outputs** — Repeated direct calls with the same state source, Store-created selector, and arguments reuse the same Svelte readable, React `ReadonlySignal`, or Kefir Observable output.
+- **Cached direct outputs** — Repeated direct calls with the same Store object, Store-created selector, and arguments reuse the retained Svelte readable, React `ReadonlySignal`, or Kefir Observable output. Final-consumer cleanup and Store disposal are identity boundaries, not permanent cache guarantees.
 - **Multiple usage modes** — Svelte reactive stores, React signals/component reads, Kefir streams, saga effects, and direct state reads.
 - **Type safety** — Full TypeScript inference for arguments and return types.
 - **Composability** — Selectors can call other selectors via `.select()`.
@@ -114,7 +114,13 @@ export const selectCompletedCount = store.createSelector((state) => {
 
 Selectors provide multiple methods for different contexts. `Store.createSelector` uses the package's Svelte-readable selector model; `ReactStore.createSelector` uses the React signal selector model and returns Preact React signals from direct calls; `StreamingStore.createSelector` uses the streaming selector model and returns Kefir streams from direct calls. Choose the Store class instead of constructor injection for selector behavior.
 
-Direct Svelte readable, React `ReadonlySignal`, and Kefir Observable outputs are cached by source + Store-created selector + arguments. For StreamingStore, the source is the Kefir state observable. Prefer calling the same Store-bound selector with the same stable args where the consumer has a valid direct-call context, instead of props drilling or manually passing derived streams solely to avoid selector calls. Keep lifecycle rules: Svelte direct readable calls belong at component init, React signal calls belong in signal-aware React paths, streaming direct calls belong in streaming setup, and `.select`, `.effect`, `.withStore`, or React `.useValue(...)` remain the escape hatches for other contexts.
+Direct Svelte readable, React `ReadonlySignal`, and Kefir Observable outputs are cached by Store object + Store-created selector + arguments. The Store supplies its internal state stream for computation, but that raw stream is not the public binding or cache key. Prefer calling the same Store-bound selector with the same stable args where the consumer has a valid direct-call context, instead of props drilling or manually passing derived streams solely to avoid selector calls. Keep lifecycle policy: capture Svelte readables at component init for template ownership, React signal calls belong in signal-aware React paths, streaming direct calls belong in streaming setup, and `.select`, `.effect`, `.withStore`, or React `.useValue(...)` remain the alternatives for other consumers.
+
+Never-observed outputs are cached too. Concurrent live consumers share an output;
+removing one consumer keeps the entry while another remains. Removing the final
+subscriber/observer evicts that output, even if JavaScript references to it remain,
+so the next identical call creates a new object. Whole-Store disposal evicts all
+outputs for that Store. Cache counts do not measure active subscriptions.
 
 ### 1. In Svelte Components (Reactive)
 
@@ -133,10 +139,17 @@ const todo = selectTodoById(todoId);
 
 `ReactStore` direct selector calls return `ReadonlySignal<R>` values and are the preferred React consumer integration path when components, custom hooks, or helper APIs can accept signals. Use `.useValue(...args)` only when a hook/plain value is required and adapting the consumer to accept signals is impractical.
 
+In a signal-aware React application, the application bootstrap owns this shared
+Store. Initialize it before any direct selector calls, and call `disposeReactStore()`
+only at application teardown, after its components unmount and manual signal
+subscriptions stop—not when an individual consuming component unmounts.
+
 ```tsx
 import { ReactStore } from "@augmentcode/themis/react-store";
+import { todosReducer } from "./todos-slice";
 
 export const reactStore = new ReactStore({ todos: todosReducer });
+export const disposeReactStore = reactStore.init();
 export const selectTodoById = reactStore.createSelector((state, todoId: string) => {
   return state.todos.collection.map[todoId];
 });
@@ -144,7 +157,7 @@ export const selectTodoById = reactStore.createSelector((state, todoId: string) 
 const todoSignal = selectTodoById("todo-1");
 console.log(todoSignal.value);
 
-function TodoTitle({ id }: { id: string }) {
+export function TodoTitle({ id }: { id: string }) {
   const todo = selectTodoById(id);
   return <span>{todo.value?.title}</span>;
 }
@@ -188,20 +201,44 @@ const boundSelector = selectTodoById.withStore(store);
 const todo = boundSelector(todoId); // Returns the direct-call type for that Store family
 ```
 
-For `Store`, the bound result is a Svelte `Readable<R>`. For `ReactStore`, the bound result is a `ReadonlySignal<R>` and may bind either a `ReactStore`/signal-state source or a state signal. For `StreamingStore`, the bound result is a Kefir `Observable<R, any>`.
+For `Store`, the bound result is a Svelte `Readable<R>`. For `ReactStore`, it is a
+`ReadonlySignal<R>`; for `StreamingStore`, a Kefir `Observable<R, any>`. In each
+case pass an initialized Store of that family, not a raw state signal/observable.
+The Store object is used for both cache source identity and obtaining state for
+computation. Even two Store objects exposing the same internal stream are distinct
+cache sources. A Svelte direct call already binds to its creating Store and does
+not access component context; `.withStore` explicitly selects a Store rather than
+enabling otherwise-forbidden non-component reads. Manual consumers own cleanup.
 
 ### 6. Streaming Store selectors
 
+The streaming setup owns initialization and its manual subscription. Keep them
+live while needed; the owner calls `disposeStreamingExample()` on shutdown to
+unsubscribe before disposing the Store. Stop any other consumers first too.
+
 ```typescript
 import { StreamingStore } from "@augmentcode/themis/streaming-store";
+import { todosReducer } from "./todos-slice";
 
 export const streamStore = new StreamingStore({ todos: todosReducer });
+const disposeStore = streamStore.init();
 export const selectTodoCountStream = streamStore.createSelector((state) => state.todos.collection.ids.length);
 
 const todoCount$ = selectTodoCountStream(); // Returns Kefir Observable<number, any>
+const subscription = todoCount$.observe((count) => console.log(count));
+
+export function disposeStreamingExample() {
+  subscription.unsubscribe();
+  disposeStore();
+}
 ```
 
-Streaming selectors emit their first available value promptly. Subsequent rapid Store state updates are coalesced by the Store-owned state observable on cadence ticks capped by `throttledSelectorFrequency`, and only changed latest-current selector results emit from that cadenced state source. Observable selector argument updates may recompute and emit immediately when the selected result changes.
+Streaming selectors emit their first available value promptly, but an observable
+argument must first supply a value; a cold argument without an initial value
+delays output. Subsequent rapid Store state updates are coalesced by the
+Store-owned state observable on cadence ticks capped by `throttledSelectorFrequency`.
+Observable selector argument updates may recompute and emit immediately when the
+selected result changes, using the latest emitted Store state.
 
 ---
 
@@ -213,7 +250,7 @@ Streaming selectors emit their first available value promptly. Subsequent rapid 
 2. **Selective re-execution** — On subsequent calls, only re-runs if an accessed path's reference changed.
 3. **Argument tracking** — Also re-runs when arguments change (shallow equality), and direct output reuse depends on stable argument identities for object/function arguments.
 4. **Collection optimization** — Stops proxying at Collection boundaries since Collections are immutable and always change reference when modified.
-5. **Output reuse** — Direct readable/signal/observable outputs are cached for the same state source + selector + arguments.
+5. **Output reuse** — Direct readable/signal/observable outputs reuse retained entries for the same Store + selector + arguments, until final-consumer cleanup or Store disposal evicts them.
 
 ```typescript
 // This selector only re-runs when:
@@ -229,6 +266,42 @@ export const selectTodoById = store.createSelector((state, todoId: string) => {
 Selector emissions are scheduled and coalesced by a shared StoreRuntime-owned Kefir state property so rapid Redux writes do not force unnecessary UI or stream consumer work. Svelte-readable `Store` selectors, React signal `ReactStore` selectors, and Kefir-based `StreamingStore` selectors derive from that same cadenced Store state source and convert only at their public boundaries; the maximum state tick rate comes from the configured `throttledSelectorFrequency` Store constructor option, defaulting to `64` FPS. Selectors then compute from the latest cadenced state value, compare with the last emitted result where the API supports distinctness, and allow readable/signal/observable selector argument changes to update immediately when only arguments change the result. Because StoreRuntime owns that Kefir property at runtime, all Store variants require the `kefir` peer dependency to be installed. Selector trace output is a separate default-off diagnostic; pass `{ traceSelectors: true }` in the same final Store options object only while diagnosing selector scheduling, and omit it or pass `false` for normal silent behavior. There is no public lock/unlock action API; model batching through ordinary action design, saga orchestration, and selectors that derive the final UI value.
 
 Because Store-created selectors already cache accessed state paths, track arguments, reuse same-source/same-selector/same-stable-args direct outputs, and coalesce emissions, do not add extra memoization, manual cache maps, debounce/throttle wrappers, `requestAnimationFrame` schedulers, or writable/signal proxies around selector callbacks or selector calls solely for performance. Use normal selector composition with `.select(state, ...args)` inside another selector, pass primitive scalar selector arguments where possible, and tune the public Store constructor options when UI/stream coalescing needs an explicit FPS.
+
+There is no separate public fast-selector API. Direct reactive outputs and React
+`.useValue` use the cadenced Store stream; `.select(store.state, ...plainArgs)` and
+saga `.effect(...plainArgs)` are uncadenced one-shot reads. Selector-channel sagas
+subscribe to Redux context rather than to the UI/stream cadence.
+
+#### Reactive arguments versus Store-state ticks
+
+For an initialized ReactStore with `counter.count = 2`, even a `1` FPS setting
+does not delay these argument-driven changes for an active consumer:
+
+```ts
+import { signal } from "@preact/signals-react";
+
+export const selectScaled = reactStore.createSelector((state, factor: number) => state.counter.count * factor);
+export const factor = signal(3);
+export const scaled = selectScaled(factor);
+// A tracked consumer sees 6 initially, then 8 and 10 immediately when
+// factor.value changes to 4 and 5. Store writes still wait for cadence ticks.
+```
+
+The corresponding StreamingStore pattern uses an externally owned argument
+stream. An initial value is optional, but without one output waits for that input:
+
+```ts
+import Kefir from "kefir";
+
+export const selectScaled = streamStore.createSelector((state, factor: number) => state.counter.count * factor);
+export const factor = Kefir.pool<number, never>();
+export const scaled = selectScaled(factor);
+// After observation starts, factor.plug(Kefir.constant(3)) produces 6.
+// Plugging 4 and 5 produces 8 and 10 immediately; the observer owns unsubscribe.
+```
+
+These are adapter subscription examples, not component-owned manual subscriptions
+or event logs. Keep production React consumers within normal signal tracking.
 
 ### Selector Tracing Diagnostics
 
@@ -249,21 +322,28 @@ The public contract is flat: `traceSelectors` accepts `undefined`, `false`, `tru
 
 | Field | Default | Controls |
 | --- | --- | --- |
-| `traceExecution` | `false` | Selector execution counts, recomputation counts, and duration aggregates in period rows. |
-| `traceCache` | `false` | Direct readable/signal/observable output-cache request, hit, miss, and ratio metrics in period rows. |
-| `traceInvalidation` | `false` | Counts for each selector invalidation reason in period rows. |
-| `traceArguments` | `false` | Selector argument-computation and changed-argument counts in period rows. |
-| `traceResults` | `false` | Counts for initial, changed, and retained-reference outcomes in period rows. |
+| `traceExecution` | `false` | Execution detail metadata, including duration and accessed-path metadata. |
+| `traceCache` | `false` | Direct readable/signal/observable output-cache detail metadata. |
+| `traceInvalidation` | `false` | Invalidation reason and changed-path metadata. |
+| `traceArguments` | `false` | Changed-argument metadata, never argument values. |
+| `traceResults` | `false` | `initial`, `changed`, and `retained-reference` outcome metadata. |
 | `traceCadence` | `false` | Store scheduling subscription and cadence-tick messages. |
-| `minDurationMs` | `0` | Inclusive minimum period maximum duration for an execution row. |
+| `minDurationMs` | `0` | Inclusive minimum duration for execution details and period maximum duration for execution-row eligibility. |
 | `minRecomputationCount` | `0` | Inclusive minimum period recomputation count for an execution row. |
 | `minCacheMissCount` | `0` | Inclusive minimum period cache-miss count for a cache row. |
-| `summaryEnabled` | `false` | Retains the lifetime, non-resetting `getSelectorTraceSummary()` snapshot. Period aggregates are automatic whenever tracing is enabled. |
-| `summaryIntervalMs` | `1000` | Milliseconds between automatic period aggregate records whenever tracing is enabled. |
+| `summaryEnabled` | `false` | Allocates aggregation for lifetime snapshots and periodic console aggregates. |
+| `summaryIntervalMs` | `1000` | Summary interval in milliseconds; used only when `summaryEnabled` is true. |
 
-`traceSelectors: true` is the compatibility preset: it enables all six event categories with all three thresholds at `0`, automatic period aggregates, and no lifetime snapshot. `traceSelectors: false` and an omitted option disable every category and aggregate timer. In object form, each category is independent, so enabling `traceInvalidation` does not implicitly enable execution, argument, result, cache, or cadence output. The three threshold fields and `summaryIntervalMs` must be finite numbers greater than or equal to zero; the category and `summaryEnabled` fields must be booleans.
+`traceSelectors: true` is the compatibility preset: it enables all six event
+categories with all three thresholds at `0`, but no summary collector, interval,
+or lifetime snapshot. `false` and omission disable every category and aggregate
+timer. Object categories are independent; invalidation does not enable execution,
+arguments, results, cache, or cadence. The thresholds and `summaryIntervalMs` must
+be finite non-negative numbers; category and `summaryEnabled` fields are booleans.
 
-For example, this enables only invalidation and result metadata, filters execution records shorter than 2 ms, and starts one-second aggregate reporting:
+For example, this enables invalidation/result detail events and one-second
+summary reporting. Summary collection also captures execution/cache data;
+`minDurationMs` sets the execution-row threshold, not a global collection filter:
 
 ```typescript
 const store = new Store(
@@ -284,11 +364,13 @@ The same options object and defaults apply to all three Store families. `Store` 
 
 #### Console aggregate records
 
-Selector trace metadata is collected without per-call console noise. On each
-non-empty interval, one `console.info` call uses the
-`[themis] selector trace summary` prefix and has the exact aggregate shape
-`{ intervalMs, selectors }`. Each selector row has the exact
-`SelectorTracePeriodSummary` shape:
+Configured detail categories publish immediate `selectorDetail` events, rendered
+by the default logger as `[themis] selector trace`. Separately, with
+`summaryEnabled: true`, each eligible non-empty period produces one runtime-owned
+`console.info('[themis] selectors fired: N, recalculated: M', aggregate)` call.
+`N` and `M` total the emitted rows' execution and recomputation counts. This call
+still occurs with a custom `loggerFactory`. Its aggregate is exactly
+`{ intervalMs, selectors }`; rows have the `SelectorTracePeriodSummary` shape:
 
 | Field | Meaning |
 | --- | --- |
@@ -301,19 +383,19 @@ non-empty interval, one `console.info` call uses the
 | `duration` | `{ count, totalMs, averageMs, maximumMs }` for this interval. |
 | `cache` | `{ requestCount, hitCount, missCount, hitRatio }` for this interval; `hitRatio` is `null` when there are no requests. |
 
-Rows are emitted when at least one enabled category qualifies. `minDurationMs`
-and `minRecomputationCount` use inclusive comparisons against the interval's
-maximum duration and recomputation count for execution eligibility.
-`minCacheMissCount` uses an inclusive comparison against the interval miss count
-for cache eligibility. Thresholds filter emitted rows, not collected samples;
-invalidation, argument, and result categories are represented by their counts,
-not individual metadata records. No accessed paths, changed-path metadata,
-argument types, output-cache status, or cumulative cache counters are present in
-the aggregate payload.
+Rows are emitted when at least one category qualifies. Execution needs duration
+samples and inclusive comparisons against both `minDurationMs` (period maximum)
+and `minRecomputationCount`. Cache needs requests and an inclusive comparison
+against `minCacheMissCount`. `summaryEnabled` also makes invalidation/result
+counts eligible, so those counts can qualify a row below the execution/cache
+thresholds; argument-only eligibility requires `traceArguments`. These thresholds
+do not discard collected samples or lifetime data. `minDurationMs` also filters
+execution detail events. Period aggregates contain counts, not individual detail
+records: no paths, changed-path metadata, argument types, output-cache status, or
+cumulative cache counters.
 
-Cache miss styling is selector-specific: a selector label is bold when its
-interval `cache.missCount` is greater than zero, while hit-only labels remain
-ordinary. Cache `requestCount`, `hitCount`, and `missCount` are interval deltas.
+The console aggregate has no per-selector labels or bold styling. Cache
+`requestCount`, `hitCount`, and `missCount` are interval deltas.
 
 Cadence diagnostics are separate scheduling messages: `SUBSCRIBE SELECTOR CADENCE` reports subscriber count and `SELECTOR CADENCE TICK` reports the tick timestamp and listener count. They describe Store scheduling, not selector payloads.
 
@@ -328,7 +410,10 @@ period aggregate or lifetime summary.
 
 #### Aggregate summaries
 
-Period aggregation is automatic for every explicitly enabled selector-tracing category, including `traceSelectors: true`; it does not require `summaryEnabled`. Set `summaryEnabled: true` when you also need privacy-preserving, per-selector lifetime summaries. Read that non-resetting snapshot at any time with the inherited, read-only Store API:
+`summaryEnabled: true` is the sole switch that allocates the summary collector
+and enables the periodic interval after initialization. Category flags alone,
+including the `traceSelectors: true` preset, enable neither period aggregation
+nor lifetime summaries. Read the non-resetting lifetime snapshot with:
 
 ```typescript
 const summaries = store.getSelectorTraceSummary();
@@ -348,7 +433,13 @@ The result is a deep-frozen lifetime snapshot and calling it does not reset or m
 
 Duration `count`, total, average, and maximum are lifetime aggregates. The p95 calculation retains at most 64 duration samples in a bounded ring buffer, so `p95Ms` is a bounded-window percentile rather than storage of every duration. Cache, invalidation, and result aggregates likewise retain metadata only; they never retain argument, result, or state values. Period aggregate rows contain resettable interval deltas (`executionCount`, `recomputationCount`, duration metrics, invalidation/result counts, and cache request/hit/miss metrics); after each interval they reset, while the lifetime snapshot continues accumulating.
 
-After `store.init()`, enabled tracing starts one interval using `summaryIntervalMs` and writes exactly one `[themis] selector trace summary` record for each non-empty period. Empty or idle periods are silent. Repeated `init()` calls do not create duplicate intervals. The initializer disposer and `store.dispose()` stop the interval, clear pending period data, and dispose normal selector cadence resources. Cadence subscribe and tick diagnostics remain immediate and are not aggregated.
+After `store.init()`, `summaryEnabled: true` starts one `summaryIntervalMs` timer.
+Every tick publishes a lifetime snapshot to `traceStreams.selectorSummary`, even
+when idle, then consumes/resets period deltas. Console output occurs only when
+period rows qualify, so idle console periods are silent. Repeated `init()` calls
+do not duplicate timers. The initializer disposer and `store.dispose()` stop the
+timer, clear pending period data, and dispose normal selector cadence resources;
+re-init can start a fresh interval. Cadence remains immediate, not aggregated.
 
 #### Default-off and production behavior
 
@@ -357,9 +448,14 @@ Tracing is disabled by default in every build. For compatibility, calling the le
 #### Performance diagnosis workflow
 
 1. Enable the smallest useful set of categories in a development or production build, initialize the Store, and reproduce the slow interaction through the real selector call path.
-2. Filter the console for `[themis] selector trace summary`. Start with aggregate selector rows that have high period maximum duration or unexpectedly increasing recomputation counts; inspect `selectorSource` and the category counts.
+2. Enable `summaryEnabled` for aggregates and filter for `[themis] selectors fired:`.
+   Start with high period maximum duration or unexpected recomputation counts;
+   inspect `selectorSource` and category counts, not underlying values.
 3. Use invalidation, argument, and result counts to distinguish recomputation reasons, argument churn, and retained references. Compare interval cache hit/miss metrics for direct output reuse.
-4. Use `getSelectorTraceSummary()` or periodic summary records to compare aggregate duration, p95, invalidation, result, and cache statistics before and after a selector change. Remove `traceSelectors` (or set it to `false`) after the investigation.
+4. Compare lifetime `getSelectorTraceSummary()` snapshots (also published on the
+   summary stream) for duration, bounded p95, invalidation, result, and cache data.
+   Console aggregates instead contain period deltas and no p95. Remove
+   `traceSelectors` (or set it to `false`) after the investigation.
 
 ---
 
@@ -406,8 +502,9 @@ represented by one `console.groupCollapsed` group:
 The logger's diff can contain application state values. Redact secrets, tokens,
 personal data, and other sensitive values before copying a group into an issue or
 diagnostic report. Do not use Redux action groups to infer selector performance:
-selector tracing emits one privacy-safe `[themis] selector trace summary` aggregate
-per non-empty interval, while Redux logging emits one grouped record per dispatch.
+selector summaries emit a privacy-safe `[themis] selectors fired:` aggregate per
+eligible non-empty interval when `summaryEnabled` is true, while Redux logging
+emits one grouped record per dispatch.
 
 For a dispatch investigation, enable the logger on a focused Store instance,
 initialize it, reproduce the real action, expand only the relevant lazy diff paths,
@@ -447,14 +544,24 @@ export const selectAllTodos = store.createSelector((state) => {
 
 | Context | Correct Usage | Why |
 |---------|---------------|-----|
-| Component init (top-level `<script>`) | `const val = selectFoo()` | Returns Svelte readable. Uses `getContext()` — only valid at init. |
+| Component init (top-level `<script>`) | `const val = selectFoo()` | Returns a Store-bound Svelte readable; recommended placement for template subscription ownership. |
 | React component/custom hook | `const valueSignal = selectFoo(...args)` | Preferred path; returns `ReadonlySignal<R>` for direct signal `.value` or signal-aware rendering. |
 | Hook/plain-value fallback | `const value = selectFoo.useValue(...args)` | Use only when a React component/custom hook must receive plain `R` and accepting a signal is impractical. |
 | Event handlers, callbacks | `selectFoo.select(appStore.state)` | Direct read from an initialized `Store` instance captured outside the handler. No Svelte context needed. |
 | Sagas | `yield* selectFoo.effect()` | Uses redux-saga's `select` effect. |
 | Composing selectors | `selectFoo.select(state)` | Direct read within another selector. |
 
-**⚠️ CRITICAL for Svelte `Store`:** Never call `selectFoo()` (the readable form) inside event handlers, callbacks, or async functions — it calls `getContext()` which only works during component initialization. For React `ReactStore`, prefer direct selector signals in components/custom hooks and reserve `.useValue(...args)` for necessary plain-value fallbacks; non-component one-shot code should use `.select(state, ...args)`.
+**⚠️ CRITICAL for Svelte `Store`:** Capture template readables at component init;
+use `.select` for one-shot handlers, callbacks, async work, and pure tests instead
+of creating subscriptions. This is lifecycle/ownership policy: direct selectors
+bind to their Store and do not call `getContext()`. They can be consumed outside
+components after valid initialization if the subscriber owns cleanup. Fresh
+Svelte `Store.init()` does read context and must run during component initialization;
+neither it nor `useInitStore` installs the context needed by `useRunSaga`. Use the
+explicit owner `init`/`onDestroy`/`onMount(() => store.runSaga(saga))` path instead.
+For React `ReactStore`, prefer direct selector signals in components/custom hooks
+and reserve `.useValue(...args)` for necessary plain-value fallbacks;
+non-component one-shot code should use `.select(state, ...args)`.
 
 ---
 
@@ -535,14 +642,17 @@ const todos = selectTodos();
 const snapshot = selectTodos.select(appStore.state);
 ```
 
-If selector output is too chatty for UI or stream consumers, tune the owning Store's `throttledSelectorFrequency` cadence cap instead of layering custom caches, timers, or scheduler wrappers around the selector.
+For excessive Store-state-driven work, tune the owning Store's
+`throttledSelectorFrequency` cadence instead of adding custom caches, timers, or
+scheduler wrappers. Reactive-argument changes bypass that cadence; inspect the
+argument producer rather than treating the frequency option as a total output cap.
 
 ### ❌ Calling Readable Form Outside Component Init
 
 ```typescript
 import { store as appStore } from "$lib/store";
 
-// BAD — crashes with lifecycle_outside_component
+// BAD — creates a readable subscription for a one-shot read (not a context crash)
 function handleClick() {
   const val = get(selectFoo());
 }

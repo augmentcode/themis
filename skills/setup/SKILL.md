@@ -1,10 +1,9 @@
 ---
 name: setup
 description: >-
-  Canonical first-time themis setup entry. Start here for greenfield app
-  setup, choose exactly one concrete Store family before creating files, then
-  follow the neutral checklist and explicit core/family implementation references.
-  Installation commands remain in the canonical installation documentation.
+  Start here for first-time or greenfield Themis setup. Choose one Store family,
+  then follow the neutral checklist and core/family owners. Installation
+  commands live in the canonical installation docs.
 triggers:
   - init redux
   - setup store
@@ -53,7 +52,7 @@ Make this decision before creating `store.ts`, selectors, root lifecycle wiring,
 Choose a bundle using `../SKILL.md` — **Consumer skill install routing**. Follow `@augmentcode/themis/docs/INSTALLATION.md`, the sole owner of installation operations:
 
 - **Consumer package installation** — package/runtime dependencies, the selected family's peers, and the optional saga-test helper.
-- **Explicit skill installation** and **Consumer CLI and bundle selection** — explicit commands, bundle contents, destinations, compatibility links, collision handling, and refresh behavior.
+- **Explicit skill installation** and **Consumer CLI and bundle selection** — explicit commands, bundle contents, destinations, compatibility links, collision handling, and refresh behavior. Narrowing a bundle removes previously manifest-owned family files; it does not add Core alongside every earlier family.
 - **Verify, refresh, cleanup, and uninstall** — verification and cleanup-before-uninstall ordering, including preservation of unrelated files/dependencies.
 - **Maintainer source-checkout validation** — the separate repository workflow, not a substitute for consumer installation.
 
@@ -65,7 +64,7 @@ Complete this sequence using the linked owners rather than adapting an example f
 2. Design one small canonical slice using **Shared implementation references** below: define types, actions, and reducer before registering it.
 3. Construct the chosen Store and wire its initialization/disposal at the app's lifetime boundary using **Family implementation references**. Preserve inferred app state and package-owned internal boundaries from that Store skill.
 4. Define Store-bound selectors and consume them using only the chosen family's call-mode and lifecycle skills. Use its composition/test and saga read forms where direct reactive calls do not apply.
-5. Register the reducer and start app sagas through the selected family's bootstrap owner. Follow `../core/sagas/SKILL.md` — **Application saga startup** and `../core/saga-manager/SKILL.md` — **Store saga lifecycle** for startup and cancellation; Store initialization is not app-saga registration.
+5. Register the reducer and start app sagas through the selected family's bootstrap owner. Follow `../core/sagas/SKILL.md` — **Application saga startup** and `../core/saga-manager/SKILL.md` — **Store saga lifecycle** for startup and cancellation; Store initialization is not app-saga registration. Only the explicit lifetime owner has the saga-function import exception in `../core/import-boundaries/SKILL.md` — **Bootstrap and lifetime-owner exception**; ordinary handlers dispatch actions.
 6. Verify an action changes the expected slice, the chosen selector consumer sees the update, the saga handles its trigger, and teardown releases subscriptions/tasks and the Store. Complete **Verification and handoff**.
 
 ## Family implementation references

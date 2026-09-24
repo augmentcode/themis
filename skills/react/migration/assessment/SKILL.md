@@ -1,10 +1,9 @@
 ---
 name: react/migration/assessment
 description: >-
-  Assess React state before ReactStore adoption. Inventory useState/useReducer,
-  context providers, custom hooks, external stores, derivations, effects, and
-  consumers; classify shared/persistent/async-driven state vs component-local UI
-  state.
+  Assess ReactStore adoption: inventory React state, context/hooks, external stores,
+  derivations, effects, and consumers; distinguish shared/persistent/async state
+  from component-local UI.
 type: sub-skill
 requires:
   - react

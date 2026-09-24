@@ -1,13 +1,9 @@
 ---
 name: svelte/selectors
 description: >-
-  store.createSelector((state, ...args) => value) is the public app-local
-  selector creation tied to a configured Store. Generic/shared selector helpers
-  should accept a configured Store rather than importing standalone creation utilities.
-  Use collection utilities such as getItem/getItems inside Store-bound selectors
-  for O(1) collection lookups; proxy tracking is internal to Store selectors.
-  Owns selector authoring, composition, cache behavior, and stable arguments.
-  Call-site mode selection belongs to svelte/selector-lifecycle.
+  Use when authoring or composing Svelte Store-bound selectors with
+  store.createSelector, including collection lookups, cache behavior, and
+  stable arguments. Call modes belong to svelte/selector-lifecycle.
 type: sub-skill
 requires:
   - svelte
@@ -49,7 +45,7 @@ compatibility. Channel helper choice and args tuples live in
 ## Selector caching
 
 - Store-created selectors have internal selector-result caching/memoization.
-- Direct readable outputs are cached per Store instance + selector + arguments; repeated `selectFoo(args)` calls for the same store reuse the same Svelte readable.
+- Direct readable outputs are cached per Store instance + selector + arguments. Never-subscribed outputs and concurrent live consumers reuse the same Svelte readable. Removing one of several consumers retains it; removing the final subscriber evicts that output even if JavaScript references remain. The next identical call creates a new readable. Store disposal evicts all its outputs; cache counts are not active-subscriber counts.
 - Do not wrap selector callbacks or selector calls in extra `memoize`, `cache`, manual cache maps, debounce, or throttle layers solely for performance.
 - Prefer the same Store-bound selector + same arguments over props drilling when the consumer can use it directly; choose its call mode through `../selector-lifecycle/SKILL.md` → **Call-mode map**.
 
@@ -139,14 +135,18 @@ export const selectTodos = store.createSelector((state) => getItems(selectTodosC
 ### 5. Pass a configured Store into shared selector helpers
 
 ```ts
-import type { Store } from "@augmentcode/themis/svelte-store";
+import type { store as appStore } from "$lib/store";
 
-export function createProjectSelectors(store: Store) {
+export function createProjectSelectors(store: typeof appStore) {
   const selectProjects = store.createSelector((state) => state.projects.items);
   const selectProject = store.createSelector((state, id: string) => selectProjects.select(state)[id]);
   return { selectProjects, selectProject };
 }
 ```
+
+The configured app Store has a `projects` reducer whose `items` is a record
+keyed by project id. Its concrete type preserves that state shape; a bare
+`Store` defaults to an empty app state map and cannot type this helper.
 
 ### Explicit readable binding
 

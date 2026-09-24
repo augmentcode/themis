@@ -1,10 +1,9 @@
 ---
 name: core/redux-action-logging
 description: >-
-  Opt-in Redux action logging for Store, ReactStore, and StreamingStore. Covers
-  the construction-time logReduxActions option, grouped console records,
-  presentation styles, immutable `reduxAction` stream events, unchanged-state
-  output, lazy path-keyed changes, and shared traceStreams/loggerFactory lifecycle.
+  Use when configuring logReduxActions or inspecting dispatch logs, state
+  diffs, and reduxAction stream events across Store families. Owns shared
+  traceStreams/loggerFactory lifecycle.
 type: sub-skill
 requires:
   - core
@@ -126,20 +125,33 @@ With no `loggerFactory`, StoreRuntime attaches its default console logger,
 preserving severity and `[themis]` diagnostic prefixes; enabled action logging
 uses the legend/groups described in **Read one action's group** above.
 
-Pass a typed `loggerFactory` to replace default console rendering. It receives
-only this Store instance's six read-only streams and may return one disposer;
-it does not also attach the built-in legend or default console output.
+Pass a typed `loggerFactory` to replace the default stream-subscriber logger. It
+receives only this Store instance's six read-only streams and may return one
+disposer; the built-in legend and default subscriber rendering do not attach.
+This is **not a global console-silencing or privacy boundary**: with
+`traceSelectors.summaryEnabled: true`, the runtime still prints an eligible,
+non-empty period aggregate directly, independently of the custom logger. See
+[Aggregate summaries](../selector-tracing/SKILL.md#aggregate-summaries).
 
 ```ts
-import type { StoreLoggerFactory } from '@augmentcode/themis/types';
+import type { StoreLoggerFactory, StoreOptions } from '@augmentcode/themis/types';
 
 const loggerFactory: StoreLoggerFactory = (streams) => {
   const subscription = streams.runtimeError.observe(reportRuntimeError);
   return () => subscription.unsubscribe();
 };
+
+const options: StoreOptions = {
+  loggerFactory,
+  logReduxActions: true, // events still publish; default action groups do not
+  traceSelectors: { summaryEnabled: true, summaryIntervalMs: 1000 },
+}; // non-empty selector period aggregates still reach console.info
 ```
 
-Pass the factory in the third Store constructor options object. The factory
+Pass `options` as the third Store constructor argument. `reportRuntimeError` is
+your app-owned reporter; redact sensitive data there. Omit `summaryEnabled` or
+set it to `false` at construction if these runtime-owned aggregates are unwanted;
+redacting in the custom logger does not redact that separate console path. The factory
 attaches during initialization; its disposer runs during `store.dispose()` and
 before a later successful initialization attaches it again. Dispose custom stream
 subscriptions in that callback and retain the Store initializer's disposer for
@@ -155,6 +167,8 @@ the end of the owning Store lifetime.
   answers the question; expand only the relevant lazy diff entries.
 - Do not use `traceSelectors` to enable action logging. Selector tracing has a
   separate contract and option.
+- Do not assume a custom logger silences selector aggregates; `summaryEnabled`
+  controls that separate runtime-owned output.
 
 ## See also
 

@@ -1,8 +1,8 @@
 ---
 name: react/migration/side-effects
 description: >-
-  Move shared React side effects to sagas. React sources include useEffect
-  subscriptions, fetches, timers, debounces, storage sync, and persistence flows.
+  Move shared React useEffect fetches, subscriptions, timers, and persistence to
+  sagas; keep permitted DOM-local effects local.
 type: sub-skill
 requires:
   - core/sagas

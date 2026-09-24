@@ -1,10 +1,9 @@
 ---
 name: svelte/migration/side-effects
 description: >-
-  Move domain-owned subscriptions, $effect blocks, async calls, fetches, timers,
-  and IPC listeners into sagas; retain DOM-local component effects. Covers
-  the fetch/localStorage/$effect to saga conversion and the "side effects in
-  reducers" pitfall.
+  Use when moving domain-owned Svelte subscriptions, $effect blocks, fetches,
+  localStorage, timers, or IPC listeners into sagas. Keep DOM-local effects in
+  components.
 type: sub-skill
 requires:
   - core/core-policy
@@ -36,28 +35,7 @@ saga cancels on unmount and starts again on remount.
 
 ## Examples
 
-### 1. Before: component/store side effects that need saga ownership
-
-```typescript
-// migration/components/CounterPersistence.before.ts
-declare const count: number;
-declare const userId: string;
-declare function $effect(effect: () => void): void;
-declare function setUsername(name: string): void;
-
-$effect(() => {
-  // eslint-disable-next-line no-restricted-globals, no-restricted-syntax -- migration source before safe saga helper conversion
-  localStorage.setItem("count", String(count));
-});
-
-export async function loadUserFromComponent() {
-  const res = await fetch(`/api/users/${userId}`);
-  const data = (await res.json()) as { name: string };
-  setUsername(data.name);
-}
-```
-
-### 2. After: user-triggered fetch becomes a `takeLatest` worker
+### User-triggered fetch becomes a `takeLatest` worker
 
 ```typescript
 // src/lib/store/slices/users/sagas/users-saga.ts
@@ -78,7 +56,7 @@ export function* usersSaga() {
 }
 ```
 
-### 3. Timers/debounce migrate to saga cancellation semantics
+### Timers/debounce migrate to saga cancellation semantics
 
 ```typescript
 // src/lib/store/slices/search/sagas/search-saga.ts
@@ -96,7 +74,7 @@ export function* searchSaga() {
 }
 ```
 
-### 4. Store subscriptions migrate to selector-channel helpers
+### Store subscriptions migrate to selector-channel helpers
 
 ```typescript
 // src/lib/store/slices/session/sagas/session-saga.ts
@@ -115,7 +93,7 @@ export function* sessionSaga() {
 }
 ```
 
-### 5. Persistence uses safe saga helpers instead of direct browser calls
+### Persistence uses safe saga helpers instead of direct browser calls
 
 ```typescript
 // src/lib/store/slices/settings/sagas/settings-saga.ts
@@ -132,7 +110,7 @@ export function* settingsSaga() {
 }
 ```
 
-### 6. Async action success/failure flow stays in the worker, not the component
+### Async action success/failure flow stays in the worker, not the component
 
 ```typescript
 // src/lib/store/slices/profile/sagas/profile-saga.ts
@@ -159,35 +137,18 @@ export function* profileSaga() {
 }
 ```
 
-### 7. ❌ Bad: reducer side effect hides cancellation and ordering bugs
-
-```typescript
-// ❌ BAD: reducers must not persist, fetch, or read clocks while updating state.
-type Settings = { theme: "light" | "dark" };
-type SettingsState = { settings: Settings; persistedAt: number | null };
-
-declare const saveSettings: { type: "settings/save" };
-declare function reducerWith(action: unknown, handler: (state: SettingsState, action: { payload: [Settings] }) => SettingsState): void;
-
-reducerWith(saveSettings, (state, { payload: [settings] }) => {
-  localStorage.setItem("settings", JSON.stringify(settings));
-  return { ...state, settings, persistedAt: Date.now() };
-});
-```
-
 ## Conversion Recipes
 
 These recipes apply only to domain-owned work classified above.
 
 | Source pattern | Saga equivalent |
 | --- | --- |
-| $effect(() => { localStorage.setItem(...) }) | takeEvery(action, function* () { yield* call(appLocalSetLocalStorageItem, key, value) }) |
-| store.subscribe((v) => ...) that reacts to state | takeEveryFromSelector(selectFoo, args, function* ({ payload, prevPayload }) { ... }) (see core/selector-channels) |
-| fetch(url).then(r => r.json()).then(setX) | const res = yield* call(fetch, url); const data = yield* call([res, "json"]); yield* put(setX(data)) |
-| component debounce with setTimeout | takeLatest(action, function* () { yield* delay(ms); ... }) |
-| setTimeout(..., ms) | yield* delay(ms) |
-| setInterval(..., ms) | while (true) { yield* delay(ms); ... } (with saga cancellation) |
-| window.addEventListener(...) / IPC | createChannelFrom... + redux-saga takeEvery(channel, worker) (see core/channel-effects) |
+| `$effect` persistence | Action watcher + app-local safe storage helper; see persistence example. |
+| Store subscription reacting to state | Selector-channel helper with plain args and `payload` / `prevPayload`; see subscription example. |
+| Fetch + state update | `call(fetch, ...)`, bound `call([response, "json"])`, then `put`; see fetch example. |
+| Debounce / timeout | `takeLatest` + `delay` / one `yield* delay(ms)`. |
+| Interval | Cancellation-owned loop: `while (true) { yield* delay(ms); ... }`. |
+| DOM listener / IPC | `createChannelFrom...` + redux-saga `takeEvery(channel, worker)`; see core/channel-effects. |
 | Domain startup formerly in onMount | Explicit mount-scoped `onMount(() => store.runSaga(sagaFn))`; see `../../store/SKILL.md` → **App saga lifetime** |
 
 ## Common Pitfalls

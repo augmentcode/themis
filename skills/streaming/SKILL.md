@@ -1,12 +1,9 @@
 ---
 name: streaming
 description: >-
-  Root routing index for StreamingStore and Kefir/observable selector guidance in
-  themis. Use by default for Node/server environments, background
-  workers, CLIs, test harnesses, apps or code paths without concrete UI evidence,
-  and cases where selector direct calls should return Kefir streams. Route shared
-  Redux/redux-saga work to core and keep this concrete Streaming Store family
-  separate from alternate Store integration patterns.
+  Route StreamingStore/Kefir work for Node, servers, workers, CLIs, tests, and
+  paths without concrete UI evidence. Default to this no-UI family; keep other
+  Store families separate and shared Redux/saga work in core.
 type: core
 requires:
   - core

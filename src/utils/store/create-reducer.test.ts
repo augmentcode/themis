@@ -63,6 +63,8 @@ describe("createBooleanPreference", () => {
       enabled: false,
       label: "beta",
     });
+    expect(reducer(initialState, preference.setAction(false))).toBe(initialState);
+    expect(reducer.initialState).toBe(initialState);
   });
 });
 
@@ -99,5 +101,40 @@ describe("createDomainScopedHelpers", () => {
     expect(helpers.setDomainState(state, "a", { count: 2, label: "two" })).toEqual({
       byDomainId: { a: { count: 2, label: "two" } },
     });
+  });
+
+  it("compares domain values shallowly and preserves unrelated references", () => {
+    const nested = { count: 1 };
+    const helpers = createDomainScopedHelpers({ nested });
+    const domain = { nested };
+    const otherDomain = { nested: { count: 2 } };
+    const state = { byDomainId: { a: domain, b: otherDomain }, label: "domains" };
+
+    const unchanged = helpers.setDomainState(state, "a", { nested });
+    expect(unchanged).toBe(state);
+    expect(unchanged.byDomainId).toBe(state.byDomainId);
+    expect(unchanged.byDomainId.a).toBe(domain);
+
+    const replacement = { nested: { count: 1 } };
+    const changed = helpers.setDomainState(state, "a", replacement);
+    expect(changed).not.toBe(state);
+    expect(changed.byDomainId).not.toBe(state.byDomainId);
+    expect(changed.byDomainId.a).toBe(replacement);
+    expect(changed.byDomainId.b).toBe(otherDomain);
+    expect(changed.label).toBe(state.label);
+    expect(state.byDomainId.a).toBe(domain);
+  });
+
+  it("stores a missing domain even when its value matches the read fallback", () => {
+    const emptyDomain = { count: 0 };
+    const helpers = createDomainScopedHelpers(emptyDomain);
+    const state = { byDomainId: {} };
+
+    expect(helpers.getDomainState(state, "new")).toBe(emptyDomain);
+    const next = helpers.setDomainState(state, "new", emptyDomain);
+    expect(next).not.toBe(state);
+    expect(next.byDomainId).not.toBe(state.byDomainId);
+    expect(helpers.getDomainState(next, "new")).toBe(emptyDomain);
+    expect(state.byDomainId).toEqual({});
   });
 });

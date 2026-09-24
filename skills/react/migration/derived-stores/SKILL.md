@@ -1,9 +1,9 @@
 ---
 name: react/migration/derived-stores
 description: >-
-  Convert shared React derivations to ReactStore selectors. React sources include
-  useMemo, derived custom-hook values, context selector logic, and duplicated
-  render calculations.
+  Move shared React useMemo, hook/context derivations, and repeated render
+  calculations to ReactStore selector definitions; route consumption to
+  selector-lifecycle.
 type: sub-skill
 requires:
   - react/selectors
@@ -38,10 +38,16 @@ export function CartSummary() {
 
 ## After: Store-bound selectors
 
+Migrate cart entity records to a `Collection<CartItem, "id">` in the `cart`
+reducer's `collection` field. Materialize an array only as derived output with
+`getItems`; do not preserve the legacy object array as canonical Redux state.
+The shared Collection policy applies to React too; primitive arrays remain valid.
+
 ```ts
 import { reactStore } from "../react-store";
+import { getItems } from "@augmentcode/themis/utils/collections/collection-utils";
 
-export const selectCartItems = reactStore.createSelector((state) => state.cart.items);
+export const selectCartItems = reactStore.createSelector((state) => getItems(state.cart.collection));
 export const selectDiscountCode = reactStore.createSelector((state) => state.cart.discountCode);
 export const selectCartSubtotal = reactStore.createSelector((state) => {
   return selectCartItems.select(state).reduce((sum, item) => sum + item.price, 0);
@@ -69,8 +75,15 @@ export function CartSummary() {
 
 ```ts
 import { selectCartTotal } from "../store/cart/cart-selectors";
+import { reactStore } from "../react-store";
+import { createCollection } from "@augmentcode/themis/utils/collections/collection-utils";
 
-export const total = selectCartTotal.select({ cart: { items: [{ price: 10 }], discountCode: null } });
+// This example receives an initialized Store; retain its other state domains.
+const mockState = {
+  ...reactStore.state,
+  cart: { collection: createCollection("id", [{ id: "a", price: 10 }]), discountCode: null },
+};
+export const total = selectCartTotal.select(mockState); // 10
 ```
 
 ## Parameterized selectors
@@ -93,6 +106,8 @@ export const selectTodoTitle = reactStore.createSelector((state, id: string) => 
   [Verification cues](../../selector-lifecycle/SKILL.md#verification-cues), not a
   migration-specific call-mode policy.
 - Do not store selector outputs in reducers; reducers own base state only.
+- Store entity records in Collections and derive arrays at the selector boundary;
+  follow `../../../core/collections/SKILL.md`, not the legacy context shape.
 
 ## Bad: direct signal form inside selector composition
 

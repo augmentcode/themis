@@ -1,9 +1,9 @@
 ---
 name: react/migration/setup
 description: >-
-  ReactStore adoption checkpoint before migrating existing React state owners.
-  Confirms installation, the selected family, and the app lifecycle owner by
-  following setup and React component-integration, without repeating bootstrap.
+  Check readiness before migrating existing React state owners to ReactStore:
+  installation, family choice, and app lifecycle owner. Defer bootstrap to
+  setup/component-integration.
 type: sub-skill
 requires:
   - react

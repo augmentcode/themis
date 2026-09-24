@@ -1,9 +1,9 @@
 ---
 name: react/migration
 description: >-
-  React migration/adoption playbook for moving shared React state, context/hooks,
-  external store subscriptions, useMemo derivations, and useEffect side effects
-  to ReactStore, selectors, actions, reducers, and sagas.
+  Adopt ReactStore by migrating shared React state/context/hooks, external stores,
+  useMemo derivations, and useEffect side effects to selectors, actions, reducers,
+  and sagas.
 type: lifecycle
 requires:
   - react

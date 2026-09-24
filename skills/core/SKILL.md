@@ -1,13 +1,9 @@
 ---
 name: core
 description: >-
-  Root routing index for framework-independent Redux and redux-saga guidance in
-  themis. Use for canonical Redux state policy, action/reducer
-  primitives, normalized state helpers, typed-redux-saga patterns, saga manager
-  behavior, saga channel/effect helpers, Redux action logging, explicit store
-  pruning, serialization, testing, debugging, and verifier handoff. Use the selected Store family skill
-  for framework-specific Store selector/component behavior, choosing only one
-  concrete Store family per app.
+  Route shared Redux state, actions, reducers, collections, sagas, channels,
+  logging, serialization, testing, debugging, review, and explicit store pruning.
+  Pair Core with one Store family per app for framework-specific behavior.
 type: core
 triggers:
   - redux core

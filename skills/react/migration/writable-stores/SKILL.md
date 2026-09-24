@@ -1,9 +1,8 @@
 ---
 name: react/migration/writable-stores
 description: >-
-  Convert shared mutable React state to actions and reducers. React sources
-  include useState/useReducer, context providers, custom hooks, or external
-  mutable stores.
+  Move shared React useState/useReducer, context, custom-hook, or external-store
+  state to actions and reducers; preserve local-state verdicts.
 type: sub-skill
 requires:
   - core/actions

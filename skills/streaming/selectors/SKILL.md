@@ -1,10 +1,9 @@
 ---
 name: streaming/selectors
 description: >-
-  Author StreamingStore selectors whose direct calls return Kefir Observable
-  values. Covers observable selector arguments, Store-bound creation,
-  withStore(streamStore), pure .select(state) composition/testing, and saga
-  .effect() usage without importing streaming selector internals.
+  Author StreamingStore selectors returning Kefir Observable values, with
+  observable arguments, Store binding, pure .select composition/tests, and saga
+  .effect calls. Keep streaming selector internals private.
 type: sub-skill
 requires:
   - streaming
@@ -70,11 +69,15 @@ and cleanup examples use **Consumer subscription ownership** in that same skill.
 
 Selector arguments may be plain values or Kefir observables. Plain values are
 lifted to constant streams before combining with the Store state stream.
-Streaming selector outputs are throttled by the owning Store's
-`throttledSelectorFrequency` option, defaulting to `64` FPS. The first selector
-value remains prompt; subsequent rapid Store updates or observable argument
-updates within a throttle interval are omitted/coalesced, and the latest pending
-value emits at the scheduled moment. For opt-in diagnostics and constructor
+The owning Store's `throttledSelectorFrequency` option (default `64` FPS)
+cadences Store-state changes, not the combined selector output. Plain-argument
+selectors have a prompt initial value; an observable argument must first emit
+before the selector can emit. Later rapid Store writes coalesce to the latest
+state at a scheduled tick. Observable-argument changes can recompute and emit
+changed results immediately using the latest emitted Store state, even within
+that interval. The option is not an overall output-rate cap. There is no separate
+public fast-selector API; `.select(store.state, ...plainArgs)` and saga `.effect`
+are uncadenced one-shot reads. For opt-in diagnostics and constructor
 options, read `../../core/selector-tracing/SKILL.md` — **Scope and safety rules**
 and **Configure the Store** rather than adding a Streaming-specific trace policy.
 
@@ -87,7 +90,8 @@ tuples are owned by `../../core/selector-channels/SKILL.md` — **Do** and
 ## Selector caching
 
 - Store-created selectors have internal selector-result caching/memoization.
-- Direct Kefir `Observable` outputs are cached per StreamingStore instance + selector + arguments; repeated `selectFoo(args)` calls for the same store reuse the same Kefir Observable.
+- Direct Kefir `Observable` outputs are cached per StreamingStore instance + selector + arguments. Never-observed outputs and concurrent live consumers reuse the same observable. Removing one of several consumers retains it; removing the final observer evicts that output even if JavaScript references remain. The next identical call creates a new observable. Store disposal evicts all its outputs; cache counts are not active-observer counts.
+- `.withStore(streamStore)` accepts an initialized StreamingStore object, not its raw Kefir stream. That Store is the cache source key and supplies state for computation. Two Store objects have separate cache entries even if they expose the same internal state stream.
 - Do not wrap selector callbacks or selector calls in extra `memoize`, `cache`, manual cache maps, debounce, or throttle layers solely for performance.
 - Prefer the same Store-bound selector + same arguments over props drilling/manual stream passing when the receiving consumer can reasonably call the selector in valid streaming setup; otherwise use `.select`, `.effect`, or `.withStore` as the context requires.
 

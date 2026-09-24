@@ -1,10 +1,9 @@
 ---
 name: skillsUpdate
 description: >-
-  Local-only maintainer skill for keeping themis observable Store skill guidance
-  consistent across Svelte readable, React ReadonlySignal, and Streaming/Kefir
-  Observable families. Use when behavior, docs, install routing, or verification
-  touchpoints must be updated for every observable-style selector output family.
+  Local-only maintenance of observable Store guidance across Svelte Readable,
+  React ReadonlySignal, and Streaming/Kefir Observable families. Use for
+  cross-family behavior, docs, install routing, or verification updates.
 type: core
 sources:
   - ../../skills/SKILL.md
@@ -43,11 +42,17 @@ Use this skill before changing observable Store guidance that affects direct sel
 
 When one observable behavior changes, update the root router and every affected family leaf in the same review pass. Do not let one family describe behavior as unique when the implementation applies to all three families.
 
-For selector-output caching, every observable family must say the direct output is reused for the same state source, Store-created selector, and selector arguments:
+For selector-output caching, every observable family must say the direct output is reused for the same Store object, Store-created selector, and selector arguments while the cache entry is retained. Never-observed outputs are cached too; concurrent consumers share an output, removing only one retains it, and final-consumer cleanup evicts that output. A retained JavaScript reference does not prevent eviction. Whole-Store disposal evicts its entries; cache counts are not active-subscription counts.
 
-- Svelte: direct calls return cached Svelte readables; keep component-init lifecycle rules and `.select()` / `.effect()` escape hatches.
+- Svelte: direct calls return cached Store-bound readables, not context-helper reads; keep component-init placement policy, subscription ownership, and `.select()` / `.effect()` escape hatches. Fresh Svelte `init()` requires component initialization; it does not provide the context needed by `useRunSaga`. Teach explicit owner `init`/`onMount`/`runSaga` startup, not an invented provider.
 - React: direct calls return cached `ReadonlySignal` values; direct signal consumption stays preferred, with `.useValue(...args)` only for necessary hook/plain-value fallbacks.
-- Streaming: direct calls return cached Kefir Observables; the state source is the Kefir state observable, and `.withStore(streamSource)` must use the same stream for keying and computation.
+- Streaming: direct calls return cached Kefir Observables; `.withStore(streamStore)` accepts an initialized StreamingStore. The Store object is the source/cache key and supplies the internal Kefir state stream for computation; the raw observable is not the public binding argument. Distinct Store objects remain distinct cache sources even if they expose the same stream.
+
+Keep scheduling qualifications consistent: initial snapshots are prompt when all
+inputs are available; Store-state writes coalesce on the Store cadence, while
+reactive-argument changes may emit immediately downstream. A cold Streaming
+argument with no value delays initial output. No public fast-selector API exists;
+one-shot `.select`/`.effect` and Redux selector-channel reads are distinct paths.
 
 Also update any anti-pattern language so agents do not add manual memoization, debounce/throttle wrappers, extra cache maps, props drilling, signal proxies, or stream passing solely to avoid valid repeated selector calls.
 

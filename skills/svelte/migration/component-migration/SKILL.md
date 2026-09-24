@@ -1,9 +1,8 @@
 ---
 name: svelte/migration/component-migration
 description: >-
-  Swap Svelte store imports for selectFoo() readables plus Store.dispatch at
-  component init; keep templates reactive via $selectorResult$. Covers the
-  before/after consumer conversion; selector call-mode policy remains owned by
+  Use when replacing Svelte store imports and template subscriptions with
+  Themis selector readables and dispatch. Apply call-mode policy from
   svelte/selector-lifecycle.
 type: sub-skill
 requires:
@@ -106,7 +105,9 @@ export function handleLogout() {
 
 Do not move the readable call into a callback while converting a consumer.
 Use `../../selector-lifecycle/SKILL.md` → **Call-mode map** and **Pitfalls** for
-the one-shot replacement and the `lifecycle_outside_component` explanation.
+the one-shot replacement and subscription-ownership policy. Store-bound direct
+selectors do not call `getContext()`; context helpers and `Store.init()` have
+separate component-initialization requirements.
 
 ### 7. ❌ Bad: duplicate old-store ownership after Redux dispatch
 
@@ -151,5 +152,5 @@ export function goodSingleOwnerWrite() {
   Store dispatch and `$selectorResult$` templates
 - `../../store/SKILL.md` → **Lifecycle rules** — Store initialization/disposal
 - `../../selector-lifecycle/SKILL.md` — three call modes
-  and the init-time rule that causes the crash above
+  and component-init placement versus actual context-helper restrictions
 

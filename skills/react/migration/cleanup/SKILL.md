@@ -1,9 +1,8 @@
 ---
 name: react/migration/cleanup
 description: >-
-  React migration cleanup and rollback. Remove old React state owner paths,
-  providers, hooks, wrappers, and external-store adapters; verify no stale imports
-  or pass-through wrappers remain; document shims.
+  Clean up or roll back React migrations: remove old state owners, providers,
+  hooks, adapters, wrappers, and stale imports; document temporary shims.
 type: sub-skill
 requires:
   - react/migration

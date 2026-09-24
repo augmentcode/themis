@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1 - 2026-09-24
+
+- Shortened all 60 skill descriptions and condensed long skill bodies while retaining explicit guardrails and canonical references.
+- Aligned guidance and examples with implemented saga, selector, lifecycle, installation, and migration contracts, documenting current runtime limitations without changing runtime behavior.
+- Added executable example, type-safety, and skill-reference regression coverage, including strict selector typing checks.
+
 ## 0.3.0 - 2026-09-18
 
 - Observed ignored async-action rejections internally while preserving the original promise and rejection for explicit awaiters.

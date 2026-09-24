@@ -1,13 +1,9 @@
 ---
 name: svelte/selector-lifecycle
 description: >-
-  The three selector call modes and Store-first dispatch rule — the #1
-  source of runtime crashes in themis. Covers selectFoo() at
-  component init (Svelte readable via getContext), selectFoo.select(state) for
-  one-shot reads in event handlers / callbacks / async, yield* selectFoo.effect()
-  inside sagas, and selectFoo.select(state) when composing selectors. Documents
-  Store.dispatch usage, the lifecycle_outside_component crash, and
-  the wrong-shape trap when passing the selector object to yield* select().
+  Use when choosing selector call modes in Svelte components, handlers,
+  callbacks, composition, or sagas, dispatching through Store, or fixing
+  lifecycle_outside_component and selector-shape errors.
 type: sub-skill
 requires:
   - svelte
@@ -33,12 +29,20 @@ Use this lifecycle for apps that chose the Svelte Store family.
 
 | Context | Correct call | Why |
 | --- | --- | --- |
-| Component init/top-level `<script>` | `const value$ = selectFoo(args)` | Uses Svelte context and returns a readable. |
-| Template | Use the captured readable as `$value$` | Keeps context-dependent calls at component init and renders the value, not the readable object. |
+| Component init/top-level `<script>` | `const value$ = selectFoo(args)` | Returns a Store-bound readable; recommended placement for subscription ownership. |
+| Template | Use the captured readable as `$value$` | Captures once at component init and renders the value, not the readable object. |
 | Event handler/callback/async/test | `selectFoo.select(state, args)` | No Svelte context required. |
 | Saga | `yield* selectFoo.effect(args)` | Emits the package's typed saga select effect. |
 | Selector composition | `otherSelector.select(state, args)` | Reuses state already in scope. |
 | Non-context readable | `selectFoo.withStore(store)(args)` | Binds explicitly to an initialized Store; the subscriber owns unsubscribe cleanup. |
+
+Direct `selectFoo()` already binds to the creating Store and does not call
+`getContext()`. Component-init placement is app policy, not an enforced runtime
+restriction on these reads. Services may consume an already-initialized Store's
+readable if they own unsubscribe cleanup; `.withStore(store)` selects an explicit
+Store, not a context workaround. Fresh Svelte `store.init()` and context helpers
+have different restrictions; see `../store/SKILL.md` → **Lifecycle rules** and
+**Svelte component lifecycle helpers**.
 
 ## Do
 
@@ -49,8 +53,8 @@ Use this lifecycle for apps that chose the Svelte Store family.
 
 ## Don't
 
-- Do not call `selectFoo()` after `await`, inside handlers, inside callbacks, in tests, or inside another selector.
-- Do not call `get(selectFoo())` outside component initialization.
+- Do not use `selectFoo()` after `await`, in handlers/callbacks or pure selector tests for one-shot reads; use `.select(state)` instead. Deliberate adapter subscription tests/services need an initialized Store and explicit cleanup. Never call the readable form inside another selector.
+- Do not use `get(selectFoo())` for a one-shot handler read; prefer `.select(store.state)` without creating a subscription.
 - Do not import standalone dispatch helpers; use `store.dispatch(action)` on the configured Store instance.
 - Do not pass the selector object itself to saga `select`; use `.effect()` or `.select` intentionally.
 - Do not make selector-channel effects call or subscribe to direct Svelte readables;
@@ -114,9 +118,9 @@ do not create a readable subscription inside a selector callback.
 ### Bind explicitly with .withStore when no Svelte context is available
 
 ```ts
-import type { Store } from "@augmentcode/themis/svelte-store";
+import type { store as appStore } from "$lib/store";
 
-export function createItemReadable(store: Store, itemId: string) {
+export function createItemReadable(store: typeof appStore, itemId: string) {
   return selectItem.withStore(store)(itemId);
 }
 ```
@@ -128,7 +132,7 @@ bindings handle their own subscription cleanup.
 ### 7. ❌ Bad: creating readables after component initialization
 
 ```ts
-// BAD: selector readable calls after events/await need Svelte context at the wrong time.
+// BAD: creates an unowned subscription for what should be a one-shot read.
 async function onSaveLater(itemId: string) {
   await queueMicrotaskPromise();
   const item$ = selectItem(itemId);
@@ -144,14 +148,14 @@ async function onSaveLaterSafely(itemId: string) {
 
 ## Pitfalls
 
-- `selectFoo()` depends on `getContext()`, so create selector readables during component initialization. Dispatch does not need a context helper; use the configured Store instance.
+- Direct selectors require a live initialized Store, not Svelte `getContext()`. Keep readables at component init for clear ownership, and use `.select` for one-shot work. A `lifecycle_outside_component` error points to context helpers or Svelte Store initialization, not the Store-bound selector itself. Dispatch also uses the configured Store without a context helper.
 - A selector readable call in a template expression still violates lifecycle guidance even though the same Store + selector + args reuse the cached readable; capture it once at component init and render the captured `$value$`. Cache behavior is owned by `../selectors/SKILL.md` → **Selector caching**.
 - `.select(state)` returns a value; `selectFoo()` returns a readable. Mixing them often produces wrong-shape bugs before it crashes.
 
 ## Verification cues
 
 - Component changes show selector readables captured at top-level initialization and Store dispatch used in handlers.
-- Tests use `.select(mockState, ...)`, not the readable call form.
+- Pure selector tests use `.select(mockState, ...)`; adapter lifecycle tests may subscribe deliberately with valid initialization and teardown.
 - Saga tests cover `.effect()` paths or named selector calls rather than inline `select((state) => ...)` lambdas.
 
 ## See also
