@@ -139,10 +139,17 @@ const todo = selectTodoById(todoId);
 
 `ReactStore` direct selector calls return `ReadonlySignal<R>` values and are the preferred React consumer integration path when components, custom hooks, or helper APIs can accept signals. Use `.useValue(...args)` only when a hook/plain value is required and adapting the consumer to accept signals is impractical.
 
+In a signal-aware React application, the application bootstrap owns this shared
+Store. Initialize it before any direct selector calls, and call `disposeReactStore()`
+only at application teardown, after its components unmount and manual signal
+subscriptions stop—not when an individual consuming component unmounts.
+
 ```tsx
 import { ReactStore } from "@augmentcode/themis/react-store";
+import { todosReducer } from "./todos-slice";
 
 export const reactStore = new ReactStore({ todos: todosReducer });
+export const disposeReactStore = reactStore.init();
 export const selectTodoById = reactStore.createSelector((state, todoId: string) => {
   return state.todos.collection.map[todoId];
 });
@@ -150,7 +157,7 @@ export const selectTodoById = reactStore.createSelector((state, todoId: string) 
 const todoSignal = selectTodoById("todo-1");
 console.log(todoSignal.value);
 
-function TodoTitle({ id }: { id: string }) {
+export function TodoTitle({ id }: { id: string }) {
   const todo = selectTodoById(id);
   return <span>{todo.value?.title}</span>;
 }
@@ -205,13 +212,25 @@ enabling otherwise-forbidden non-component reads. Manual consumers own cleanup.
 
 ### 6. Streaming Store selectors
 
+The streaming setup owns initialization and its manual subscription. Keep them
+live while needed; the owner calls `disposeStreamingExample()` on shutdown to
+unsubscribe before disposing the Store. Stop any other consumers first too.
+
 ```typescript
 import { StreamingStore } from "@augmentcode/themis/streaming-store";
+import { todosReducer } from "./todos-slice";
 
 export const streamStore = new StreamingStore({ todos: todosReducer });
+const disposeStore = streamStore.init();
 export const selectTodoCountStream = streamStore.createSelector((state) => state.todos.collection.ids.length);
 
 const todoCount$ = selectTodoCountStream(); // Returns Kefir Observable<number, any>
+const subscription = todoCount$.observe((count) => console.log(count));
+
+export function disposeStreamingExample() {
+  subscription.unsubscribe();
+  disposeStore();
+}
 ```
 
 Streaming selectors emit their first available value promptly, but an observable

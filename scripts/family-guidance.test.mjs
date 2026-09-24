@@ -16,6 +16,7 @@ import { useInitStore } from "../src/components-svelte/use-init-store";
 import { useRunSaga } from "../src/components-svelte/use-run-saga";
 import { createCollection, getItems } from "../src/utils/collections/collection-utils";
 import { createReducer } from "../src/utils/store/create-reducer";
+import { createAction } from "../src/utils/store/create-action";
 
 const root = resolve(import.meta.dirname, "..");
 const skill = (path) => readFileSync(resolve(root, path), "utf8");
@@ -58,6 +59,10 @@ const counterReducer = Object.assign(
   (state = { count: 2 }, action) => action.type === "set" ? { count: action.payload } : state,
   { initialState: { count: 2 } },
 );
+const firstTodo = { id: "todo-1", title: "First" };
+const setTodos = createAction("test/setTodos");
+const todosReducer = createReducer({ collection: createCollection("id", [firstTodo]) })
+  .with(setTodos, (_state, { payload: [todos] }) => ({ collection: createCollection("id", todos) }));
 const cleanup = [];
 afterEach(() => {
   for (const stop of cleanup.splice(0).reverse()) stop();
@@ -253,6 +258,73 @@ describe("family skill executable and type examples", () => {
     expect(execute(source, { Store }).emptyBootstrapEvidence.reducerDomainsVisibleToApp).toEqual([]);
     const migratedSource = source.replace("new Store({})", "new Store({ counter: counterReducer })");
     expect(execute(migratedSource, { Store, counterReducer }).emptyBootstrapEvidence.reducerDomainsVisibleToApp).toEqual(["counter"]);
+  });
+
+  it("FAM-1: the React direct-selector fence initializes a live signal until app-owned teardown", () => {
+    vi.useFakeTimers();
+    const init = vi.spyOn(ReactStore.prototype, "init");
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const source = block("docs/SELECTORS.md", "### 2. In React components and signal-aware code");
+    // Execute the exact fence except its unrelated JSX return. No React render/typecheck claim.
+    // The harness supplies a real reducer, never an initialized Store or an injected init().
+    const { reactStore, selectTodoById, todoSignal, disposeReactStore, TodoTitle } = execute(
+      source.replace(/^  return <span.*$/m, "") + "\nexport { todoSignal };",
+      { ReactStore, todosReducer },
+    );
+    cleanup.push(() => reactStore.dispose());
+    const dispose = vi.spyOn(reactStore, "dispose");
+    expect(init).toHaveBeenCalledTimes(1);
+    expect(typeof TodoTitle).toBe("function");
+    expect(reactStore.state.todos.collection.map["todo-1"]).toEqual(firstTodo);
+    expect(todoSignal.value).toEqual(firstTodo);
+    expect(selectTodoById("todo-1")).toBe(todoSignal);
+    expect(log.mock.calls).toEqual([[firstTodo]]);
+
+    const values = [];
+    const unsubscribe = todoSignal.subscribe((todo) => values.push(todo.title));
+    cleanup.push(unsubscribe);
+    reactStore.dispatch(setTodos([{ ...firstTodo, title: "Updated" }]));
+    vi.advanceTimersByTime(0);
+    expect(todoSignal.value.title).toBe("Updated");
+    expect(values).toEqual(["First", "Updated"]);
+    expect(dispose).not.toHaveBeenCalled();
+
+    reactStore.dispatch(setTodos([{ ...firstTodo, title: "Pending" }]));
+    unsubscribe(); // Manual consumer stops before the application disposes its shared Store.
+    disposeReactStore();
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(() => selectTodoById("todo-1")).toThrow(/before Store.init/);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(values).toEqual(["First", "Updated"]);
+  });
+
+  it("FAM-1: the Streaming direct-selector fence emits values and unsubscribes before disposal", () => {
+    vi.useFakeTimers();
+    const init = vi.spyOn(StreamingStore.prototype, "init");
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const source = block("docs/SELECTORS.md", "### 6. Streaming Store selectors");
+    const { streamStore, selectTodoCountStream, todoCount$, subscription, disposeStreamingExample } = execute(
+      source + "\nexport { todoCount$, subscription };", { StreamingStore, todosReducer },
+    );
+    cleanup.push(disposeStreamingExample);
+    const dispose = vi.spyOn(streamStore, "dispose");
+    const unsubscribe = vi.spyOn(subscription, "unsubscribe");
+    expect(init).toHaveBeenCalledTimes(1);
+    expect(selectTodoCountStream()).toBe(todoCount$);
+    expect(log.mock.calls).toEqual([[1]]);
+
+    streamStore.dispatch(setTodos([firstTodo, { id: "todo-2", title: "Second" }]));
+    vi.advanceTimersByTime(0);
+    expect(log.mock.calls).toEqual([[1], [2]]);
+    expect(dispose).not.toHaveBeenCalled();
+    streamStore.dispatch(setTodos([]));
+    disposeStreamingExample();
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(unsubscribe.mock.invocationCallOrder[0]).toBeLessThan(dispose.mock.invocationCallOrder[0]);
+    expect(() => selectTodoCountStream()).toThrow(/before Store.init/);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(log.mock.calls).toEqual([[1], [2]]);
   });
 
   it.each(["React", "Streaming"])("F3: %s documentation separates argument emissions from state cadence", (family) => {
