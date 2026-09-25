@@ -70,13 +70,41 @@ export function* usersSaga() {
 
 ## Start the saga from ReactStore setup
 
-Attach each migrated app saga to the existing React bootstrap/root owner, not
-to a replacement business-effect hook. Follow
-[Start app sagas explicitly](../../component-integration/SKILL.md#start-app-sagas-explicitly)
-for post-init startup and cancellation, and
-[Dispose at the same owner boundary](../../component-integration/SKILL.md#dispose-at-the-same-owner-boundary)
-for teardown. Core [Application saga startup](../../../core/sagas/SKILL.md#application-saga-startup)
-supplies the framework-neutral contract; React integration owns its lifecycle placement.
+Choose the lifetime before wiring a migrated saga; moving business logic to a
+saga does not make it app-wide. Core
+[Application saga startup](../../../core/sagas/SKILL.md#application-saga-startup)
+supplies the framework-neutral contract:
+
+- **App-wide work:** start from the existing React bootstrap/root or service
+  owner after Store initialization. Retain the matching cancel function and call
+  it when that owner ends, before whole-Store disposal. Follow
+  [Start app sagas explicitly](../../component-integration/SKILL.md#start-app-sagas-explicitly)
+  and [Dispose at the same owner boundary](../../component-integration/SKILL.md#dispose-at-the-same-owner-boundary).
+- **Component/layout-scoped work:** start when that component/layout mounts and
+  return the matching cancel function from its lifecycle effect. The parent app
+  must already have initialized the shared Store; the scoped owner must not
+  initialize or dispose the parent's Store. Unmount scoped owners before the app
+  disposes it.
+
+For example, if `usersSaga` should run only while one users layout is mounted,
+mount this lifetime owner in that layout, not at the app root:
+
+```tsx
+import { useEffect } from "react";
+import { reactStore } from "../react-store";
+import { usersSaga } from "./sagas/users-saga";
+
+export function UsersRuntime() {
+  useEffect(() => reactStore.runSaga(usersSaga), []);
+  return null;
+}
+```
+
+This effect only wires startup and cleanup under the
+[bootstrap/lifetime-owner exception](../../../core/import-boundaries/SKILL.md#bootstrap-and-lifetime-owner-exception);
+fetching and other business work remain in the saga. Do not also start the same
+saga at the root or in another concurrent owner. Ordinary component handlers
+still dispatch actions instead of importing or invoking business sagas.
 
 ## Conversion recipes
 
