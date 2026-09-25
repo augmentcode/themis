@@ -80,22 +80,26 @@ bootstrap or test harness, or an embedded/micro-frontend mount adapter.
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { reactStore } from "./store/react-store";
+import { todosSaga } from "./store/todos/sagas/todos-saga";
 
 export function mountReactApp(container: HTMLElement) {
   const root = createRoot(container);
   const disposeStore = reactStore.init();
+  const cancelTodosSaga = reactStore.runSaga(todosSaga);
 
   root.render(<App />);
 
   return () => {
     root.unmount();
+    cancelTodosSaga();
     disposeStore();
   };
 }
 ```
 
 The browser bootstrap can call this adapter and register its returned cleanup
-with `import.meta.hot.dispose(...)` for HMR. Unmount React before disposing the store.
+with `import.meta.hot.dispose(...)` for HMR. Unmount React and cancel the app saga
+before disposing the store.
 
 Do not hide `init()` in a child component `useEffect` if descendants render
 selectors immediately; effects run after render, too late for direct signal
@@ -104,20 +108,17 @@ selectors or `.useValue(...args)` fallbacks that need the initialized store.
 ## Start app sagas explicitly
 
 `reactStore.init()` starts package-owned runtime work but does not auto-start app
-sagas. Start each app saga explicitly after initialization and keep the returned
-cancel function when the saga has a shorter lifetime than the whole store.
+sagas. The `mountReactApp` example above starts its app-wide saga inside the
+owner function, immediately after `init()`, and retains its cancel function in
+the same cleanup closure. Importing the module does not start the runtime or
+the saga. Do not move `runSaga` to module scope when initialization happens only
+at mount time.
 
-```ts
-import { todosSaga } from "./store/todos/sagas/todos-saga";
-
-// After the owner's init(), not a second initialization:
-const cancelTodosSaga = reactStore.runSaga(todosSaga);
-
-// Call at this saga's owner boundary, before whole-store disposal.
-export function stopTodosRuntime() {
-  cancelTodosSaga();
-}
-```
+Choose the saga's lifetime using core
+[Application saga startup](../../core/sagas/SKILL.md#application-saga-startup).
+App-wide sagas use the root owner above; component/layout-scoped sagas use that
+component/layout's lifecycle and matching cancellation, as shown in
+[React side-effect migration](../migration/side-effects/SKILL.md#start-the-saga-from-reactstore-setup).
 
 `reactStore.runSaga(sagaFn)` throws if `init()` has not been called or the saga name is reserved for package internals. Do not start `@internal_sagaManager` directly.
 
@@ -155,7 +156,8 @@ rather than creating a render subscription.
 For React business effects versus DOM-local hooks, apply
 [Setup — core rules](../../core/core-policy/SKILL.md#setup--core-rules).
 Use [React side-effect migration](../migration/side-effects/SKILL.md) when moving
-an existing effect; startup stays at the app owner described above.
+an existing effect; saga startup and cancellation stay at its selected lifetime
+owner, while Store initialization/disposal stay at the app owner described above.
 
 ## Common mistakes
 

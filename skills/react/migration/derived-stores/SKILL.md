@@ -74,17 +74,31 @@ export function CartSummary() {
 ```
 
 ```ts
+import { expect, it } from "vitest";
 import { selectCartTotal } from "../store/cart/cart-selectors";
 import { reactStore } from "../react-store";
 import { createCollection } from "@augmentcode/themis/utils/collections/collection-utils";
 
-// This example receives an initialized Store; retain its other state domains.
-const mockState = {
-  ...reactStore.state,
-  cart: { collection: createCollection("id", [{ id: "a", price: 10 }]), discountCode: null },
-};
-export const total = selectCartTotal.select(mockState); // 10
+it("selects the cart total from explicit state", () => {
+  const disposeStore = reactStore.init();
+  try {
+    // Read state only after this test initializes its runtime; retain other domains.
+    const mockState = {
+      ...reactStore.state,
+      cart: { collection: createCollection("id", [{ id: "a", price: 10 }]), discountCode: null },
+    };
+    expect(selectCartTotal.select(mockState)).toBe(10);
+  } finally {
+    disposeStore();
+  }
+});
 ```
+
+Importing the test only registers it; initialization, state reads, and cleanup
+happen inside the test callback. This test owns the configured Store runtime for
+its duration, so do not run it concurrently with other tests using that instance.
+The `.select(mockState)` call itself is pure and needs no live runtime if a test
+supplies a complete state fixture instead of reading `reactStore.state`.
 
 ## Parameterized selectors
 

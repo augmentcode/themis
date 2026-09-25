@@ -7,6 +7,7 @@ import * as svelteServer from "svelte/internal/server";
 import { compile } from "svelte/compiler";
 import { render } from "svelte/server";
 import { signal } from "@preact/signals-react";
+import * as React from "react";
 import Kefir from "kefir";
 import { take } from "redux-saga/effects";
 import { Store } from "../src/svelte-store";
@@ -31,7 +32,8 @@ const block = (path, heading, index = 0) => {
 const execute = (source, dependencies = {}) => {
   const withoutImports = source.replace(/^import[^;]+;\n/gm, "");
   const js = ts.transpileModule(withoutImports, {
-    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+    fileName: "family-example.tsx",
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React },
   }).outputText;
   const exports = {};
   new Function("exports", ...Object.keys(dependencies), js)(exports, ...Object.values(dependencies));
@@ -231,25 +233,152 @@ describe("family skill executable and type examples", () => {
 
   it("F6: executes migrated cart selectors against canonical Collections", () => {
     const path = "skills/react/migration/derived-stores/SKILL.md";
-    const reactStore = new ReactStore({ cart: (state = { collection: createCollection("id"), discountCode: null }) => state });
-    const dispose = reactStore.init();
-    try {
-      const selectors = execute(block(path, "## After: Store-bound selectors"), { reactStore, getItems });
-      for (const [items, discountCode, expected] of [
-        [[], null, 0], [[{ id: "a", price: 10 }], null, 10],
-        [[{ id: "a", price: 10 }, { id: "b", price: 20 }], "SAVE", 27],
-      ]) {
-        const state = { ...reactStore.state, cart: { collection: createCollection("id", items), discountCode } };
-        expect(selectors.selectCartItems.select(state)).toEqual(items);
-        expect(selectors.selectCartTotal.select(state)).toBe(expected);
-      }
-      const example = execute(block(path, "## Component and test consumption", 1), {
-        ...selectors, reactStore, createCollection,
-      });
-      expect(example.total).toBe(10);
-    } finally {
-      dispose();
+    const reactStore = new ReactStore({ cart: createReducer({ collection: createCollection("id"), discountCode: null }) });
+    cleanup.push(() => reactStore.dispose());
+    const selectors = execute(block(path, "## After: Store-bound selectors"), { reactStore, getItems });
+    for (const [items, discountCode, expected] of [
+      [[], null, 0], [[{ id: "a", price: 10 }], null, 10],
+      [[{ id: "a", price: 10 }, { id: "b", price: 20 }], "SAVE", 27],
+    ]) {
+      const state = { cart: { collection: createCollection("id", items), discountCode } };
+      expect(selectors.selectCartItems.select(state)).toEqual(items);
+      expect(selectors.selectCartTotal.select(state)).toBe(expected);
     }
+    expect(() => reactStore.state).toThrow(/before Store.init/);
+  });
+
+  it.each([false, true])("F6: the documented test owns init/read/dispose, including assertion failure=%s", (failAssertion) => {
+    const path = "skills/react/migration/derived-stores/SKILL.md";
+    const reactStore = new ReactStore({
+      cart: createReducer({ collection: createCollection("id"), discountCode: null }),
+      counter: counterReducer,
+    });
+    cleanup.push(() => reactStore.dispose());
+    const init = vi.spyOn(reactStore, "init"), dispose = vi.spyOn(reactStore, "dispose");
+    const state = vi.spyOn(reactStore, "state", "get");
+    const selectors = execute(block(path, "## After: Store-bound selectors"), { reactStore, getItems });
+    const selectTotal = vi.spyOn(selectors.selectCartTotal, "select");
+    const register = vi.fn();
+    const failure = new Error("forced documented assertion failure");
+    const documentedExpect = vi.fn(failAssertion ? () => { throw failure; } : expect);
+    execute(block(path, "## Component and test consumption", 1), {
+      ...selectors, reactStore, createCollection, it: register, expect: documentedExpect,
+    });
+    expect(register).toHaveBeenCalledTimes(1);
+    expect(init).not.toHaveBeenCalled();
+    expect(state).not.toHaveBeenCalled();
+    expect(selectTotal).not.toHaveBeenCalled();
+    expect(dispose).not.toHaveBeenCalled();
+
+    const [, test] = register.mock.calls[0];
+    if (failAssertion) expect(test).toThrow(failure);
+    else test();
+    expect(documentedExpect).toHaveBeenCalledExactlyOnceWith(10);
+    expect(init).toHaveBeenCalledTimes(1);
+    expect(state).toHaveBeenCalledTimes(1);
+    expect(selectTotal).toHaveBeenCalledTimes(1);
+    expect(selectTotal.mock.calls[0][0].counter).toEqual({ count: 2 });
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(init.mock.invocationCallOrder[0]).toBeLessThan(state.mock.invocationCallOrder[0]);
+    expect(selectTotal.mock.invocationCallOrder[0]).toBeLessThan(dispose.mock.invocationCallOrder[0]);
+    expect(() => reactStore.state).toThrow(/before Store.init/);
+  });
+
+  it("React lifecycle: the root adapter initializes before saga/render and cancels before disposal", () => {
+    const reactStore = new ReactStore({ counter: counterReducer });
+    cleanup.push(() => reactStore.dispose());
+    const init = vi.spyOn(reactStore, "init"), dispose = vi.spyOn(reactStore, "dispose");
+    const started = vi.fn(), stopped = vi.fn();
+    function* todosSaga() {
+      started(reactStore.state.counter.count);
+      try { yield take("never"); } finally { stopped(reactStore.state.counter.count); }
+    }
+    let cancel;
+    const run = reactStore.runSaga.bind(reactStore);
+    const runSaga = vi.spyOn(reactStore, "runSaga").mockImplementation((saga) => {
+      cancel = vi.fn(run(saga));
+      return cancel;
+    });
+    // Stub React's root boundary only; the Store, JSX element, and saga are real.
+    const render = vi.fn(() => expect(reactStore.state.counter.count).toBe(2));
+    const unmount = vi.fn(() => expect(reactStore.state.counter.count).toBe(2));
+    const createRoot = vi.fn(() => ({ render, unmount }));
+    const App = () => null;
+    const { mountReactApp } = execute(block("skills/react/component-integration/SKILL.md", "## Dispose at the same owner boundary"), {
+      React, createRoot, App, reactStore, todosSaga,
+    });
+    expect(createRoot).not.toHaveBeenCalled();
+    expect(init).not.toHaveBeenCalled();
+    expect(runSaga).not.toHaveBeenCalled();
+    expect(() => reactStore.state).toThrow(/before Store.init/);
+
+    const container = {};
+    const teardown = mountReactApp(container);
+    expect(createRoot).toHaveBeenCalledExactlyOnceWith(container);
+    expect(init).toHaveBeenCalledTimes(1);
+    expect(runSaga).toHaveBeenCalledExactlyOnceWith(todosSaga);
+    expect(started).toHaveBeenCalledExactlyOnceWith(2);
+    expect(render).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ type: App }));
+    expect(init.mock.invocationCallOrder[0]).toBeLessThan(runSaga.mock.invocationCallOrder[0]);
+    expect(runSaga.mock.invocationCallOrder[0]).toBeLessThan(render.mock.invocationCallOrder[0]);
+    expect(cancel).not.toHaveBeenCalled();
+    expect(dispose).not.toHaveBeenCalled();
+
+    teardown();
+    expect(unmount).toHaveBeenCalledTimes(1);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(stopped).toHaveBeenCalledExactlyOnceWith(2);
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(unmount.mock.invocationCallOrder[0]).toBeLessThan(cancel.mock.invocationCallOrder[0]);
+    expect(cancel.mock.invocationCallOrder[0]).toBeLessThan(dispose.mock.invocationCallOrder[0]);
+    expect(stopped.mock.invocationCallOrder[0]).toBeLessThan(dispose.mock.invocationCallOrder[0]);
+    expect(() => reactStore.state).toThrow(/before Store.init/);
+  });
+
+  it("React lifecycle: a component/layout owner cancels on unmount and remounts without disposing the parent Store", () => {
+    const path = "skills/react/migration/side-effects/SKILL.md";
+    const guidance = skill(path).replace(/\s+/g, " ");
+    expect(guidance).toContain("**App-wide work:** start from the existing React bootstrap/root or service owner after Store initialization");
+    expect(guidance).toContain("**Component/layout-scoped work:** start when that component/layout mounts");
+    expect(guidance).toContain("the scoped owner must not initialize or dispose the parent's Store");
+    expect(guidance).toContain("Do not also start the same saga at the root or in another concurrent owner");
+    const reactStore = new ReactStore({ counter: counterReducer });
+    cleanup.push(() => reactStore.dispose());
+    const init = vi.spyOn(reactStore, "init"), dispose = vi.spyOn(reactStore, "dispose");
+    const runSaga = vi.spyOn(reactStore, "runSaga");
+    const started = vi.fn(), stopped = vi.fn();
+    function* usersSaga() {
+      started(reactStore.state.counter.count);
+      try { yield take("never"); } finally { stopped(reactStore.state.counter.count); }
+    }
+    // Capture the documented effect without pretending to exercise React scheduling.
+    const useEffect = vi.fn();
+    const { UsersRuntime } = execute(block(path, "## Start the saga from ReactStore setup"), { useEffect, reactStore, usersSaga });
+    expect(init).not.toHaveBeenCalled();
+    expect(runSaga).not.toHaveBeenCalled();
+    expect(useEffect).not.toHaveBeenCalled();
+    const disposeParent = reactStore.init();
+    for (let mount = 1; mount <= 2; mount++) {
+      UsersRuntime();
+      expect(useEffect).toHaveBeenCalledTimes(mount);
+      expect(runSaga).toHaveBeenCalledTimes(mount - 1);
+      const [effect, dependencies] = useEffect.mock.calls.at(-1);
+      expect(dependencies).toEqual([]);
+      const cancel = effect();
+      expect(runSaga).toHaveBeenLastCalledWith(usersSaga);
+      expect(cancel).toBe(runSaga.mock.results.at(-1).value);
+      expect(started).toHaveBeenCalledTimes(mount);
+      expect(init).toHaveBeenCalledTimes(1);
+      cancel();
+      expect(stopped).toHaveBeenCalledTimes(mount);
+      expect(stopped).toHaveBeenLastCalledWith(2);
+      expect(dispose).not.toHaveBeenCalled();
+      expect(reactStore.state.counter.count).toBe(2);
+    }
+    disposeParent();
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(stopped).toHaveBeenCalledTimes(2);
+    expect(() => reactStore.state).toThrow(/before Store.init/);
   });
 
   it("F7: empty bootstrap evidence excludes reserved composed reducers", () => {
