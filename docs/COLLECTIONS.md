@@ -31,6 +31,10 @@ type Collection<ITEM extends object, K extends string & keyof ITEM> = {
 
 All Collection operations are **immutable** — they return new Collection objects, never mutate the original.
 
+`__proto__` is not a supported collection ID. Collection maps are ordinary objects,
+and operations do not validate IDs at runtime. Callers handling untrusted IDs must
+enforce this boundary before using collection operations.
+
 **Public imports:** Use the explicit utility leaf `@augmentcode/themis/utils/collections/collection-utils`.
 
 ---

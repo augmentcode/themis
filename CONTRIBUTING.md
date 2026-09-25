@@ -33,6 +33,11 @@ node scripts/validate-architecture.mjs
 node scripts/validate-release.mjs
 ```
 
+For a logic change, run a small relevant workload against the before and after
+versions using the same runtime, inputs, and repetitions. Check correctness
+separately and record the timings and any observed noise in the change notes.
+Keep the check temporary and scoped to the changed logic, not a benchmark framework.
+
 ## Skills
 
 The `skills/` directory contains agent skill files. Pull requests that touch `skills/` are checked by the **Validate Skills** GitHub Actions workflow (`.github/workflows/validate-skills.yml`), which verifies frontmatter, that skill names match their paths, and that files stay under the 500-line limit.

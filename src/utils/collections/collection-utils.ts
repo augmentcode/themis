@@ -25,18 +25,16 @@ export function createCollection<ITEM extends object, K extends keyof ITEM & str
 
   const ids = Array.from(new Set(items.map((item) => item[idFieldName])));
 
-  const map = items.reduce((acc, item) => {
+  const map: Record<string, ITEM> = {};
+  items.forEach((item) => {
     const id = item[idFieldName] as string;
-    return {
-      ...acc,
-      [id]: item,
-    };
-  }, {});
+    map[id] = item;
+  });
 
   return {
     idField: idFieldName,
     ids,
-    map,
+    map: { ...map },
     refsCount: {},
   } as Collection<ITEM, K>;
 }
@@ -274,13 +272,23 @@ export function replaceItems<ITEM extends object, K extends keyof ITEM & string>
   collection: Collection<ITEM, K>,
   replaceTuples: Array<[originalItemId: ITEM[K] & string, updatedItem: ITEM]>
 ): Collection<ITEM, K> {
-  const idsIndexMap: Record<number, ITEM[K]> = {};
+  if (replaceTuples.length === 0) {
+    return collection;
+  }
+
+  const originalIndices = new Map<ITEM[K], number>();
+  collection.ids.forEach((id, index) => {
+    // Match indexOf: first occurrence, skipping holes and non-matching NaN.
+    if (id === id && !originalIndices.has(id)) {
+      originalIndices.set(id, index);
+    }
+  });
+  const idsIndexMap = new Map<number, ITEM[K] & string>();
   const newItemsMap: Record<string, ITEM> = {};
 
-  for (const tuple of replaceTuples) {
-    const [originalItemId, updatedItem] = tuple;
-    const originalIndex = collection.ids.indexOf(originalItemId);
-    if (originalIndex < 0) {
+  for (const [originalItemId, updatedItem] of replaceTuples) {
+    const originalIndex = originalIndices.get(originalItemId);
+    if (originalIndex === undefined) {
       continue;
     }
 
@@ -289,51 +297,62 @@ export function replaceItems<ITEM extends object, K extends keyof ITEM & string>
       continue;
     }
 
-    idsIndexMap[originalIndex] = newId;
+    idsIndexMap.set(originalIndex, newId);
     newItemsMap[newId] = updatedItem;
   }
 
-  if (Object.keys(idsIndexMap).length === 0) {
+  if (idsIndexMap.size === 0) {
     return collection;
   }
 
-  const newIds = [...collection.ids];
-  const newMap: Record<ITEM[K] & string, ITEM> = { ...collection.map, ...newItemsMap };
-  const newRefCounts = { ...collection.refsCount };
-
-  // Track which IDs are being replaced to avoid duplicates
-  const idsToRemove = new Set<string>();
-
-  for (let index = 0; index < collection.ids.length; index++) {
-    const newId = idsIndexMap[index];
-    const oldId = collection.ids[index];
+  const destinations = new Set<ITEM[K]>();
+  const collisionIds = new Set<ITEM[K]>();
+  for (const [index, newId] of idsIndexMap) {
+    // Empty destinations historically update only the map, not IDs/counts.
     if (!newId) {
       continue;
     }
-    if (oldId !== newId) {
-      delete newMap[oldId];
-      // If the new ID already exists elsewhere in the collection, mark it for removal
-      const existingIndex = collection.ids.indexOf(newId as ITEM[K]);
-      if (existingIndex >= 0 && existingIndex !== index) {
-        idsToRemove.add(newId as string);
-      }
+    destinations.add(newId);
+    if (collection.ids[index] !== newId && originalIndices.has(newId)) {
+      collisionIds.add(newId);
     }
-    newIds[index] = newId;
-    newRefCounts[newId] = newRefCounts[oldId];
-    if (oldId !== newId) {
+  }
+
+  const newIds: Array<ITEM[K]> = [];
+  const newMap: Record<ITEM[K] & string, ITEM> = { ...collection.map, ...newItemsMap };
+  const newRefCounts = { ...collection.refsCount };
+  const seenCollisions = new Set<ITEM[K]>();
+
+  for (let index = 0; index < collection.ids.length; index++) {
+    const newId = idsIndexMap.get(index);
+    const oldId = collection.ids[index];
+    const id = newId || oldId;
+    // Only pre-existing destinations are deduplicated; fresh duplicates remain.
+    if (!collisionIds.has(id)) {
+      newIds.push(id);
+    } else if (!seenCollisions.has(id)) {
+      newIds.push(id);
+      seenCollisions.add(id);
+    }
+    if (!newId) {
+      continue;
+    }
+
+    if (oldId !== newId && !destinations.has(oldId)) {
+      delete newMap[oldId];
+    }
+    // Read original source counts, never counts written by an earlier rename.
+    // Original position order (not tuple order) still breaks count collisions.
+    newRefCounts[newId] = collection.refsCount[oldId];
+    if (oldId !== newId && !destinations.has(oldId)) {
       delete newRefCounts[oldId];
     }
   }
 
-  // Remove duplicate IDs (keep only the first occurrence, which is the replacement)
-  const finalIds = newIds.filter((id, index, list) => {
-    return !(idsToRemove.has(id as string) && list.indexOf(id) !== index);
-  });
-
   return {
     ...collection,
-    ids: finalIds,
-    map: { ...newMap },
+    ids: newIds,
+    map: newMap,
     refsCount: newRefCounts,
   };
 }
@@ -434,8 +453,14 @@ export function filterCollection<ITEM extends object, K extends keyof ITEM & str
 export function deduplicateCollection<ITEM extends object, K extends keyof ITEM & string>(
   collection: Collection<ITEM, K>
 ) {
-  const ids = collection.ids.filter((id, index, list) => {
-    return list.indexOf(id) === index;
+  const seen = new Set<ITEM[K]>();
+  const ids = collection.ids.filter((id) => {
+    // Preserve indexOf's strict equality: NaN never matched, even itself.
+    if (id !== id || seen.has(id)) {
+      return false;
+    }
+    seen.add(id);
+    return true;
   });
 
   if (ids.length === collection.ids.length) {
@@ -502,17 +527,17 @@ export function findLastItem<ITEM extends object, K extends keyof ITEM & string>
   collection: Collection<ITEM, K>,
   findFunction: (item: ITEM) => boolean
 ): ITEM | undefined {
-  const foundId = [...collection.ids].reverse().find((id) => {
+  // Keep eager forward iteration (including accessors), then scan the snapshot.
+  const ids = [...collection.ids];
+  for (let index = ids.length - 1; index >= 0; index--) {
+    const id = ids[index];
     const collectionItem = getItem(collection, id);
-    if (!collectionItem) {
-      return false;
+    if (collectionItem && findFunction(collectionItem)) {
+      // Preserve empty-ID behavior and reread the successful entry from the live map.
+      return id ? getItem(collection, id) : undefined;
     }
-    return findFunction(collectionItem);
-  });
-  if (!foundId) {
-    return undefined;
   }
-  return getItem(collection, foundId);
+  return undefined;
 }
 
 export function filterItems<T extends ITEM, ITEM extends object, K extends keyof ITEM & string>(
